@@ -1,15 +1,12 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import type { Dashboard, DashboardWidget, PrismaClient } from '@prisma/client';
-import { Permission, type DashboardDefinition } from '@kobrax/shared';
+import { DASHBOARD_SAMPLES, type DashboardDefinition } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { CreateDashboardDto, UpdateDashboardDto, WidgetDto } from './dto/dashboard.dto';
-import { AuthorizationService } from '../../common/authz/authorization.service';
 
 const notFound = () => new NotFoundException({ code: 'RESOURCE_NOT_FOUND', message: 'Tablero no encontrado' });
-const notYours = () =>
-  new ForbiddenException({ code: 'AUTH_002', message: 'Sólo quien creó el tablero puede modificarlo' });
 
 type WithWidgets = Dashboard & { widgets: DashboardWidget[] };
 
@@ -31,12 +28,14 @@ function serialize(d: WithWidgets): DashboardDefinition {
 }
 
 /**
- * Los tableros del tenant.
+ * Los tableros **de cada persona**.
  *
- * 🔴 **Un tablero se edita por quien lo creó**, o por el admin de la cuenta (`account:write`). Sin
- * esto, cualquiera con `report:read` —y eso incluye a VIEWER y AUDITOR, que son roles de sólo
- * lectura— podría borrar el tablero que abre toda la empresa. Leerlo lo puede leer todo el mundo
- * que entra al dashboard: es información de la cuenta, no de una persona.
+ * 🔴 **Un tablero es de quien lo creó y sólo esa persona lo ve y lo edita.** Cada cobrador o gerente arma sus pestañas con los
+ * indicadores que le sirven; lo que es importante para uno no lo es para otro. Por eso todas las consultas filtran por dueño
+ * (`ownerUserId`) y el tablero de otra persona responde 404, no 403: ni siquiera se confirma que existe.
+ *
+ * La primera vez que alguien abre el dashboard se le crean tres tableros de ejemplo (Indicadores, Gráficos, Agenda) que desde
+ * ahí son suyos. «Predeterminado» también es por persona: el que abre primero.
  */
 @Injectable()
 export class DashboardsService {
@@ -44,34 +43,15 @@ export class DashboardsService {
     private readonly prisma: PrismaService,
     private readonly tenant: TenantContextService,
     private readonly audit: AuditService,
-    private readonly authz: AuthorizationService = new AuthorizationService(tenant),
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
     return this.prisma.withTenant(this.tenant.accountId, fn);
   }
 
-  private assertCanWrite(d: Dashboard): void {
-    const mine = d.createdBy && d.createdBy === this.tenant.userId;
-    if (!mine && !this.authz.can(Permission.ACCOUNT_WRITE)) throw notYours();
-  }
-
-  /**
-   * 🔴 **Marcar un tablero como predeterminado le cambia la pantalla de entrada a TODA la empresa.**
-   *
-   * Crear un tablero propio lo puede hacer cualquiera que entre al dashboard —para eso está—, pero
-   * `isDefault` no es una preferencia personal: apaga el anterior y todo el mundo aterriza en el
-   * nuevo. Sin esta guarda, un VIEWER —un rol de sólo lectura— creaba uno con `isDefault: true` y se
-   * quedaba con la portada del tenant.
-   *
-   * La excepción es el arranque: mientras **no haya ninguno**, el primero que se guarde puede serlo.
-   * Es el camino normal del panel, donde el tablero por defecto vive en el código hasta que alguien
-   * mueve algo.
-   */
-  private async assertCanSetDefault(tx: PrismaClient): Promise<void> {
-    if (this.authz.can(Permission.ACCOUNT_WRITE)) return;
-    const existing = await tx.dashboard.findFirst({ where: { isDefault: true, deletedAt: null } });
-    if (existing) throw notYours();
+  /** El filtro de dueño: toda consulta de tableros lo lleva. */
+  private get mine() {
+    return { ownerUserId: this.tenant.userId ?? '__nadie__' };
   }
 
   /**
@@ -101,29 +81,61 @@ export class DashboardsService {
   }
 
   async list(): Promise<DashboardDefinition[]> {
-    const rows = await this.tx((tx) =>
-      tx.dashboard.findMany({
-        where: { deletedAt: null },
+    const rows = await this.tx(async (tx) => {
+      await this.ensureSamples(tx);
+      return tx.dashboard.findMany({
+        where: { deletedAt: null, ...this.mine },
         include: { widgets: true },
-        // El predeterminado primero: es el que abre, y en una lista corta se busca con la vista.
-        orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
-      }),
-    );
+        // El orden de las pestañas es el de creación: no se reordenan solas al renombrar o marcar el predeterminado.
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      });
+    });
     return rows.map(serialize);
   }
 
+  /**
+   * La primera vez que una persona abre el dashboard se le crean los tres tableros de ejemplo.
+   *
+   * «Primera vez» = no tiene NINGUNO, **contando los que borró**: quien eliminó todos sus tableros no los ve reaparecer. La
+   * traba por persona evita que dos pedidos simultáneos (la pantalla pide la lista dos veces al montar) los creen por duplicado.
+   */
+  private async ensureSamples(tx: PrismaClient): Promise<void> {
+    const userId = this.tenant.userId;
+    if (!userId) return;
+    // `$executeRaw` y no `$queryRaw`: `pg_advisory_xact_lock` devuelve `void` y Prisma no sabe leer esa columna.
+    await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${`dashboards:${this.tenant.accountId}:${userId}`}))`;
+    if ((await tx.dashboard.count({ where: this.mine })) > 0) return;
+
+    const base = Date.now();
+    for (const [i, sample] of DASHBOARD_SAMPLES.entries()) {
+      const dashboard = await tx.dashboard.create({
+        data: {
+          accountId: this.tenant.accountId,
+          name: sample.name,
+          isDefault: i === 0,
+          createdBy: userId,
+          ownerUserId: userId,
+          // Ms de diferencia a propósito: el orden de las pestañas es el de creación.
+          createdAt: new Date(base + i),
+        },
+      });
+      await tx.dashboardWidget.createMany({
+        data: this.widgetRows(dashboard.id, sample.widgets.map((w) => ({ ...w, title: '' }))),
+      });
+    }
+  }
+
   async findOne(id: string): Promise<DashboardDefinition> {
-    const row = await this.tx((tx) => tx.dashboard.findFirst({ where: { id, deletedAt: null }, include: { widgets: true } }));
+    const row = await this.tx((tx) =>
+      tx.dashboard.findFirst({ where: { id, deletedAt: null, ...this.mine }, include: { widgets: true } }),
+    );
     if (!row) throw notFound();
     return serialize(row);
   }
 
   async create(dto: CreateDashboardDto): Promise<DashboardDefinition> {
     const row = await this.tx(async (tx) => {
-      if (dto.isDefault) {
-        await this.assertCanSetDefault(tx);
-        await this.clearDefault(tx);
-      }
+      if (dto.isDefault) await this.clearDefault(tx);
       const dashboard = await tx.dashboard.create({
         data: {
           accountId: this.tenant.accountId,
@@ -131,6 +143,7 @@ export class DashboardsService {
           description: dto.description,
           isDefault: dto.isDefault ?? false,
           createdBy: this.tenant.userId,
+          ownerUserId: this.tenant.userId,
         },
       });
       await tx.dashboardWidget.createMany({ data: this.widgetRows(dashboard.id, dto.widgets) });
@@ -157,14 +170,10 @@ export class DashboardsService {
       // `id` es `text` en el esquema, no `uuid`: castear el parámetro tira «operator does not exist».
       await tx.$queryRaw`select id from dashboards where id = ${id} for update`;
 
-      const current = await tx.dashboard.findFirst({ where: { id, deletedAt: null } });
+      const current = await tx.dashboard.findFirst({ where: { id, deletedAt: null, ...this.mine } });
       if (!current) throw notFound();
-      this.assertCanWrite(current);
 
-      if (dto.isDefault) {
-        await this.assertCanSetDefault(tx);
-        await this.clearDefault(tx, id);
-      }
+      if (dto.isDefault) await this.clearDefault(tx, id);
       await tx.dashboard.update({
         where: { id },
         data: {
@@ -204,9 +213,8 @@ export class DashboardsService {
 
   async remove(id: string): Promise<{ id: string }> {
     await this.tx(async (tx) => {
-      const current = await tx.dashboard.findFirst({ where: { id, deletedAt: null } });
+      const current = await tx.dashboard.findFirst({ where: { id, deletedAt: null, ...this.mine } });
       if (!current) throw notFound();
-      this.assertCanWrite(current);
       // Borrado suave: los widgets quedan colgando del tablero y vuelven con él si se restaura.
       await tx.dashboard.update({ where: { id }, data: { deletedAt: new Date(), isDefault: false } });
     });
@@ -218,7 +226,7 @@ export class DashboardsService {
   /** Duplicar: la forma barata de partir de uno que ya sirve en vez de armar otro desde cero. */
   async duplicate(id: string): Promise<DashboardDefinition> {
     const row = await this.tx(async (tx) => {
-      const source = await tx.dashboard.findFirst({ where: { id, deletedAt: null }, include: { widgets: true } });
+      const source = await tx.dashboard.findFirst({ where: { id, deletedAt: null, ...this.mine }, include: { widgets: true } });
       if (!source) throw notFound();
 
       const copy = await tx.dashboard.create({
@@ -229,6 +237,7 @@ export class DashboardsService {
           // La copia **nunca** nace como predeterminada: duplicar no es cambiarle el tablero a todos.
           isDefault: false,
           createdBy: this.tenant.userId,
+          ownerUserId: this.tenant.userId,
         },
       });
       await tx.dashboardWidget.createMany({
@@ -251,10 +260,10 @@ export class DashboardsService {
     return serialize(row);
   }
 
-  /** Uno solo predeterminado por cuenta: marcar uno apaga al anterior, en la misma transacción. */
+  /** Uno solo predeterminado POR PERSONA: marcar uno apaga al anterior de esa persona, en la misma transacción. */
   private clearDefault(tx: PrismaClient, except?: string): Promise<unknown> {
     return tx.dashboard.updateMany({
-      where: { isDefault: true, ...(except ? { id: { not: except } } : {}) },
+      where: { isDefault: true, ...this.mine, ...(except ? { id: { not: except } } : {}) },
       data: { isDefault: false },
     });
   }

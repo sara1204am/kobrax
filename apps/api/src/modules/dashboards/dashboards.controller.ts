@@ -7,9 +7,8 @@ import { CreateDashboardDto, UpdateDashboardDto } from './dto/dashboard.dto';
 /**
  * Los tableros configurables (W8).
  *
- * Todo pide `report:read` —la misma audiencia que ve el dashboard— y **quién puede modificar cuál
- * lo decide el service**: el que lo creó, o el admin de la cuenta. Un permiso nuevo para esto
- * sería otro concepto que administrar por una regla que se explica en una línea.
+ * Todo pide `report:read` —la misma audiencia que ve el dashboard—. Los tableros son **de cada persona**: el service
+ * filtra por dueño, así que cada quien sólo ve, crea y edita los suyos. Sin permiso nuevo: es una vista personal.
  */
 @Controller('dashboards')
 @Roles(Permission.REPORT_READ)

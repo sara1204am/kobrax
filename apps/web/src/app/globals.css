@@ -33,3 +33,7 @@ body {
 .k-scroll-dark::-webkit-scrollbar-track { background: transparent; }
 .k-scroll-dark::-webkit-scrollbar-thumb { background: rgb(255 255 255 / 0.18); border-radius: 9999px; }
 .k-scroll-dark::-webkit-scrollbar-thumb:hover { background: rgb(255 255 255 / 0.35); }
+
+/* Pestañas del dashboard: se deslizan de lado sin barra visible (en celular nunca se parten en dos renglones). */
+.k-scroll-x { scrollbar-width: none; }
+.k-scroll-x::-webkit-scrollbar { display: none; }

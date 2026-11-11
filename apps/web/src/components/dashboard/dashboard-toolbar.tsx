@@ -99,20 +99,6 @@ export function DashboardToolbar({
     // Sin margen ni `justify-between`: ya no es una fila propia, va dentro de la tarjeta de filtros (ver `DashboardFilters`).
     <div className="flex flex-wrap items-center justify-end gap-2">
       <div className="flex flex-wrap items-center gap-2">
-        {dashboards.length > 1 && (
-          <select
-            value={current?.id ?? ''}
-            onChange={(e) => go({ view: e.target.value })}
-            className="h-10 rounded-xl border border-k-border bg-white px-2.5 text-[13px] text-k-text"
-          >
-            {dashboards.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-                {d.isDefault ? ' ★' : ''}
-              </option>
-            ))}
-          </select>
-        )}
         {editable && current && (
           <button
             type="button"

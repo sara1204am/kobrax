@@ -52,7 +52,7 @@ export interface DashboardDefinition {
   id: string;
   name: string;
   description?: string;
-  /** El que abre por defecto. Uno solo por cuenta; ponerlo en otro apaga el anterior. */
+  /** El que abre primero. Uno solo por persona; ponerlo en otro apaga el anterior. */
   isDefault: boolean;
   createdBy?: string;
   widgets: DashboardWidget[];

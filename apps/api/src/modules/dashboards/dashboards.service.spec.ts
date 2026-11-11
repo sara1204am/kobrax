@@ -4,7 +4,7 @@ import { DashboardsService } from './dashboards.service';
 import { rejectsWithCode } from '../auth/auth-test-utils';
 
 function makeService(
-  opts: { current?: Record<string, unknown>; userId?: string; permissions?: string[]; widgetIds?: string[] } = {},
+  opts: { current?: Record<string, unknown>; userId?: string; permissions?: string[]; widgetIds?: string[]; existing?: number } = {},
 ) {
   const calls = {
     updateMany: [] as Record<string, unknown>[],
@@ -12,6 +12,8 @@ function makeService(
     createWidgets: [] as Record<string, unknown>[][],
     update: [] as Record<string, unknown>[],
     lock: [] as unknown[],
+    creates: [] as Record<string, unknown>[],
+    sampleLock: [] as unknown[],
   };
   const dashboard = {
     id: 'd1',
@@ -19,6 +21,7 @@ function makeService(
     description: null,
     isDefault: false,
     createdBy: 'u1',
+    ownerUserId: 'u1',
     deletedAt: null,
     widgets: [],
     ...opts.current,
@@ -33,16 +36,23 @@ function makeService(
       calls.lock.push(args);
       return [];
     },
+    // La traba por persona de los tableros de ejemplo (`pg_advisory_xact_lock`): va por `$executeRaw`.
+    $executeRaw: async (...args: unknown[]) => {
+      calls.sampleLock.push(args);
+      return 0;
+    },
     dashboard: {
-      findFirst: async (args?: { where?: { isDefault?: boolean } }) => {
-        // La búsqueda de «¿ya hay un predeterminado?» es distinta de «traeme este tablero»: un doble
-        // que devolviera lo mismo a las dos haría pasar la guarda de la portada sin probarla.
-        if (args?.where?.isDefault) return dashboard.isDefault ? dashboard : null;
-        return opts.current === null ? null : dashboard;
+      // Honra el filtro de dueño igual que la base: el tablero de otra persona NO aparece.
+      findFirst: async (args?: { where?: { ownerUserId?: string } }) => {
+        if (opts.current === null) return null;
+        if (args?.where?.ownerUserId !== dashboard.ownerUserId) return null;
+        return dashboard;
       },
+      count: async () => opts.existing ?? 1,
       findFirstOrThrow: async () => created ?? dashboard,
       findMany: async () => [dashboard],
       create: async (args: { data: Record<string, unknown> }) => {
+        calls.creates.push(args.data);
         created = { ...dashboard, ...args.data, id: 'nuevo', widgets: [] };
         return created;
       },
@@ -74,28 +84,54 @@ function makeService(
     userId: opts.userId ?? 'u1',
     can: (p: string) => (opts.permissions ?? []).includes(p),
   };
+  void opts.permissions;
   const audit = { record: async () => undefined };
   return { service: new DashboardsService(prisma as never, tenant as never, audit as never), calls };
 }
 
-describe('quién puede modificar un tablero', () => {
-  it('🔴 el que NO lo creó no lo toca, aunque pueda verlo', async () => {
-    // `report:read` lo tienen VIEWER y AUDITOR, que son roles de sólo lectura: sin esta regla
-    // podrían borrar el tablero que abre toda la empresa.
-    const { service } = makeService({ userId: 'otro' });
-    await rejectsWithCode(() => service.update('d1', { name: 'mío ahora' }), 'AUTH_002');
-    await rejectsWithCode(() => service.remove('d1'), 'AUTH_002');
-  });
-
-  it('el admin de la cuenta sí, aunque no lo haya creado', async () => {
+describe('los tableros son de cada persona', () => {
+  it('🔴 el tablero de otra persona no existe para ti: 404, no 403, y ni el admin lo toca', async () => {
+    // Cada quien arma sus pestañas con sus indicadores. Confirmar con un 403 que el tablero existe ya es contar de más.
     const { service } = makeService({ userId: 'otro', permissions: ['account:write'] });
-    await service.update('d1', { name: 'ordenado' });
+    await rejectsWithCode(() => service.findOne('d1'), 'RESOURCE_NOT_FOUND');
+    await rejectsWithCode(() => service.update('d1', { name: 'mío ahora' }), 'RESOURCE_NOT_FOUND');
+    await rejectsWithCode(() => service.remove('d1'), 'RESOURCE_NOT_FOUND');
+    await rejectsWithCode(() => service.duplicate('d1'), 'RESOURCE_NOT_FOUND');
   });
 
-  it('quien lo creó, siempre', async () => {
+  it('quien es el dueño, sí', async () => {
     const { service, calls } = makeService({ userId: 'u1' });
     await service.update('d1', { name: 'mi tablero' });
     assert.equal(calls.update[0]!.name, 'mi tablero');
+  });
+
+  it('lo que se crea nace con su dueño', async () => {
+    const { service, calls } = makeService({ userId: 'u1' });
+    await service.create({ name: 'Cobranza' });
+    assert.equal(calls.creates[0]!.ownerUserId, 'u1');
+    await service.duplicate('d1');
+    assert.equal(calls.creates[1]!.ownerUserId, 'u1');
+  });
+});
+
+describe('los tres tableros de ejemplo', () => {
+  it('quien no tiene ninguno recibe Indicadores, Gráficos y Agenda, suyos y con widgets', async () => {
+    const { service, calls } = makeService({ existing: 0 });
+    await service.list();
+    assert.deepEqual(calls.creates.map((c) => c.name), ['Indicadores', 'Gráficos', 'Agenda']);
+    assert.ok(calls.creates.every((c) => c.ownerUserId === 'u1'));
+    // El primero es el predeterminado; los demás no.
+    assert.deepEqual(calls.creates.map((c) => c.isDefault), [true, false, false]);
+    assert.equal(calls.createWidgets.length, 3);
+    assert.ok(calls.createWidgets.every((w) => w.length > 0 && w.every((x) => x.accountId === 'acc-1')));
+    // Con traba por persona: dos pedidos a la vez no los duplican.
+    assert.equal(calls.sampleLock.length, 1);
+  });
+
+  it('quien ya tiene (o borró los suyos) no los ve reaparecer', async () => {
+    const { service, calls } = makeService({ existing: 2 });
+    await service.list();
+    assert.equal(calls.creates.length, 0);
   });
 });
 
@@ -137,37 +173,14 @@ describe('el layout se reemplaza entero', () => {
   });
 });
 
-describe('quién puede cambiar el tablero de entrada de la empresa', () => {
-  it('🔴 un rol de sólo lectura NO se queda con la portada del tenant', async () => {
-    // `report:read` lo tienen VIEWER y AUDITOR. Sin esta guarda, creaban un tablero con
-    // `isDefault: true`, eso apagaba el anterior, y toda la empresa aterrizaba en el suyo.
-    const { service } = makeService({ current: { isDefault: true } });
-    await rejectsWithCode(
-      () => service.create({ name: 'el mío', isDefault: true }),
-      'AUTH_002',
-    );
-  });
-
-  it('el admin de la cuenta sí puede', async () => {
-    const { service } = makeService({ current: { isDefault: true }, permissions: ['account:write'] });
-    await service.create({ name: 'la portada', isDefault: true });
-  });
-
-  it('mientras no haya ninguno, el primero puede serlo', async () => {
-    // Es el camino normal del panel: el tablero por defecto vive en el código hasta que alguien
-    // mueve algo, y ese primer guardado lo crea.
-    const { service } = makeService({ current: null as never });
-    await service.create({ name: 'Vista general', isDefault: true });
-  });
-});
-
 describe('predeterminado', () => {
   it('🔴 marcar uno apaga al anterior, en la misma transacción', async () => {
     // Dos predeterminados y la pantalla abre el que la base devuelva primero: un tablero distinto
     // cada día sin que nadie haya tocado nada.
     const { service, calls } = makeService();
     await service.update('d1', { isDefault: true });
-    assert.deepEqual(calls.updateMany[0], { isDefault: true, id: { not: 'd1' } });
+    // Y sólo el de ESTA persona: el predeterminado de otra no se toca.
+    assert.deepEqual(calls.updateMany[0], { isDefault: true, ownerUserId: 'u1', id: { not: 'd1' } });
   });
 
   it('una copia nunca nace predeterminada', async () => {

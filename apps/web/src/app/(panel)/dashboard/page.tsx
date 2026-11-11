@@ -1,3 +1,4 @@
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import {
@@ -14,13 +15,14 @@ import {
 } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
 import { getAgendaSummary } from '@/lib/agenda-summary';
-import { analyticsQuery, dashboardFilters } from '@/lib/dashboard';
+import { analyticsQuery, DASHBOARD_VIEW_COOKIE, dashboardFilters } from '@/lib/dashboard';
 import { DEFAULT_WIDGETS } from '@/lib/widget-registry';
 import { EmptyState, PageHeader } from '@/components/panel-ui';
 import { MfaReminder } from '@/components/mfa-reminder';
 import { DashboardFilters } from '@/components/dashboard/dashboard-filters';
 import { getOffices } from '@/lib/offices-server';
 import { DashboardGrid } from '@/components/dashboard/dashboard-grid';
+import { DashboardTabs } from '@/components/dashboard/dashboard-tabs';
 import { DashboardToolbar } from '@/components/dashboard/dashboard-toolbar';
 import { WidgetActions } from '@/components/dashboard/widget-actions';
 import { WidgetRenderer, type DashboardData } from '@/components/dashboard/widget-renderer';
@@ -88,8 +90,13 @@ export default async function DashboardPage({
    * borrarlo deje la pantalla vacía para siempre.
    */
   const dashboards = boards.body.data ?? [];
+  // La pestaña: la de la URL, la última que miró (cookie), la predeterminada o la primera.
+  const remembered = cookies().get(DASHBOARD_VIEW_COOKIE)?.value;
   const current =
-    dashboards.find((d) => d.id === searchParams.view) ?? dashboards.find((d) => d.isDefault) ?? dashboards[0];
+    dashboards.find((d) => d.id === searchParams.view) ??
+    dashboards.find((d) => d.id === remembered) ??
+    dashboards.find((d) => d.isDefault) ??
+    dashboards[0];
   /*
    * 🔴 La condición es «¿hay tablero?», **no «¿tiene widgets?»**. Mirando el largo, quitar el último
    * widget hacía **resucitar los doce del código**: la persona borraba uno por uno, el guardado
@@ -140,7 +147,10 @@ export default async function DashboardPage({
       {/* Entró con «Lo hago después»: se recuerda hasta que active la verificación en dos pasos. */}
       {me.body.data?.mfaEnabled === false && <MfaReminder />}
 
-      <PageHeader title={current?.name ?? t('title')} subtitle={t('subtitle')} />
+      <PageHeader title={t('title')} subtitle={t('subtitle')} />
+
+      {/* Cada tablero es una pestaña: indicadores, gráficos, agenda… en vez de todo en una sola pantalla. */}
+      <DashboardTabs dashboards={dashboards} currentId={current?.id} />
 
       {/* Los filtros van ANTES de los números: primero se elige qué se mira. «Editar» y las acciones del tablero van adentro
           de la misma tarjeta, a la derecha: una fila aparte dejaba un hueco con un solo botón. */}
