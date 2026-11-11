@@ -755,7 +755,7 @@ export class ClientsService {
       const visible = new Set((await visibleCredits(tx, scope, { clientId })).map((c) => c.id));
       // F14 · F2b: aquí hace falta la lista COMPLETA de créditos del cliente (para restar los que sí se ven y resumir el resto en agregados).
       const all = await this.prisma.elevated(tx, () =>
-        tx.credit.findMany({ where: { clientId, deletedAt: null }, select: { id: true, outstandingBalance: true, assignedManagerId: true } }),
+        tx.credit.findMany({ where: { clientId, deletedAt: null }, select: { id: true, code: true, typeCode: true, currency: true, status: true, outstandingBalance: true, assignedManagerId: true } }),
       );
       const hidden = all.filter((c) => !visible.has(c.id));
       if (hidden.length === 0) return null;
@@ -765,7 +765,7 @@ export class ClientsService {
         select: { creditId: true, userId: true },
       });
       const people = (id: string, manager: string | null): string[] => [...new Set([...(manager ? [manager] : []), ...assigned.filter((a) => a.creditId === id).map((a) => a.userId)])];
-      const rows = hidden.map((c) => ({ outstandingBalance: Number(c.outstandingBalance), responsibleIds: people(c.id, c.assignedManagerId) }));
+      const rows = hidden.map((c) => ({ id: c.id, code: c.code, typeCode: c.typeCode, currency: c.currency, status: c.status, outstandingBalance: Number(c.outstandingBalance), responsibleIds: people(c.id, c.assignedManagerId) }));
       const names = await loadNames(tx, this.tenant.accountId, rows.flatMap((r) => r.responsibleIds));
       return summarizeOtherCredits(rows, names);
     });

@@ -21,6 +21,10 @@ describe('summarizeOtherCredits (F14 · F2, D-6)', () => {
       names,
     );
     assert.deepEqual(r, {
+      items: [
+        { code: null, typeCode: null, currency: null, status: null, outstandingBalance: 100.1, responsibles: ['Zoila Vargas'] },
+        { code: null, typeCode: null, currency: null, status: null, outstandingBalance: 200.2, responsibles: ['Ana Rojas', 'Zoila Vargas'] },
+      ],
       count: 2,
       totalOutstanding: 300.3,
       responsibles: [
@@ -35,9 +39,10 @@ describe('summarizeOtherCredits (F14 · F2, D-6)', () => {
     assert.deepEqual(r?.responsibles, [{ userId: 'u9', name: 'Alguien del equipo' }]);
   });
 
-  it('🔴 sólo agregados: el resultado nunca trae detalle del crédito ajeno', () => {
-    const r = summarizeOtherCredits([{ outstandingBalance: 5, responsibleIds: [] }], names);
-    assert.deepEqual(Object.keys(r!).sort(), ['count', 'responsibles', 'totalOutstanding']);
+  it('🔴 sólo agregados y tarjetas: nunca cuotas, mora, ids ni detalle del crédito ajeno', () => {
+    const r = summarizeOtherCredits([{ id: 'secreto', outstandingBalance: 5, responsibleIds: [] }], names);
+    assert.deepEqual(Object.keys(r!).sort(), ['count', 'items', 'responsibles', 'totalOutstanding']);
+    assert.deepEqual(Object.keys(r!.items[0]!).sort(), ['code', 'currency', 'outstandingBalance', 'responsibles', 'status', 'typeCode']);
     assert.deepEqual(r!.responsibles, []);
   });
 });

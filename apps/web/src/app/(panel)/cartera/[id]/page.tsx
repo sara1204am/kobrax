@@ -87,6 +87,7 @@ export default async function ClientePage({
             types={new Map((types.body.data ?? []).map((c) => [c.code, c.label]))}
             showClosed={searchParams.historial === '1'}
             denied={credits.status === 403}
+            otherCredits={client.body.data.otherCredits}
           />
         }
         creditOptions={creditos}

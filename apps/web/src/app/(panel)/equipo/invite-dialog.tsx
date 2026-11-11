@@ -67,7 +67,9 @@ export function InviteDialog({
   }
 
   const selected = roles.find((r) => r.id === form.roleId);
+  // La oficina se puede elegir con cualquier rol; sólo el gerente regional la necesita sí o sí.
   const needsOffice = selected?.name === 'MANAGER';
+  const canPickOffice = offices.length > 0;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -75,7 +77,7 @@ export function InviteDialog({
     setBusy(true);
     const { ok, data } = await postJson<InvitedMember>('/api/users', {
       ...form,
-      branchId: needsOffice ? form.branchId : undefined,
+      branchId: canPickOffice && form.branchId ? form.branchId : undefined,
       email: form.email.trim().toLowerCase(),
     });
     setBusy(false);
@@ -155,14 +157,14 @@ export function InviteDialog({
             </select>
           </Field>
 
-          {needsOffice && (
-            <Field label={t('office')}>
+          {canPickOffice && (
+            <Field label={needsOffice ? t('office') : t('officeOptional')}>
               <OfficeSelect
                 options={offices}
-                emptyLabel={t('officePlaceholder')}
+                emptyLabel={needsOffice ? t('officePlaceholder') : t('officeNone')}
                 value={form.branchId}
                 onChange={(e) => setForm({ ...form, branchId: e.target.value })}
-                required
+                required={needsOffice}
               />
             </Field>
           )}

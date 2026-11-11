@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { getLocale, getTranslations } from 'next-intl/server';
-import { hasInitialState, isUnknownField, paymentProgress, type CreditDetail } from '@kobrax/shared';
+import { hasInitialState, isUnknownField, paymentProgress, type CreditDetail, type OtherCreditsSummary } from '@kobrax/shared';
 import { Badge } from '@/components/panel-ui';
 import { SourceBadge } from '@/components/source-badge';
 import { CREDIT_STATUS_TONE, CreditProgress } from '@/components/credit-progress';
@@ -33,6 +33,7 @@ export async function CreditsSection({
   types,
   showClosed,
   denied,
+  otherCredits,
 }: {
   clientId: string;
   credits: CreditDetail[];
@@ -41,6 +42,8 @@ export async function CreditsSection({
   /** El «Ver historial» de la URL: con esto también salen los cerrados. */
   showClosed?: boolean;
   denied?: boolean;
+  /** Créditos de este cliente que otra persona lleva: se ven como tarjeta, sin enlace ni detalle. */
+  otherCredits?: OtherCreditsSummary | null;
 }) {
   const t = await getTranslations('portfolio');
   const locale = await getLocale();
@@ -76,6 +79,37 @@ export async function CreditsSection({
             </li>
           ))}
         </ul>
+      )}
+
+      {otherCredits?.items && otherCredits.items.length > 0 && (
+        <div className="mt-5">
+          <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-k-muted">{t('otherCredits.cardsTitle')}</h3>
+          <ul className="space-y-2">
+            {otherCredits.items.map((o, i) => (
+              // Sin enlace a propósito: el detalle de un crédito ajeno no se abre (el servidor también lo niega).
+              <li key={i} className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl border border-dashed border-k-border bg-k-bg/60 p-4">
+                <span aria-hidden className="text-k-muted">🔒</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[15px] font-semibold text-k-text-2">{o.code ?? t('noCode')}</span>
+                  <span className="block truncate text-[13px] text-k-text-2">{(o.typeCode && types.get(o.typeCode)) || t('creditNoType')}</span>
+                  <span className="block truncate text-[12px] text-k-muted">
+                    {t('otherCredits.responsible', { names: o.responsibles.join(', ') || t('otherCredits.nobody') })}
+                  </span>
+                </span>
+                <span className="text-right">
+                  <span className="block text-[11px] uppercase tracking-wide text-k-muted">{t('credit.outstanding')}</span>
+                  <span className="block text-[15px] font-semibold tabular-nums text-k-text-2">{money(o.outstandingBalance, o.currency ?? undefined)}</span>
+                </span>
+                {o.status && (
+                  <Badge tone={CREDIT_STATUS_TONE[o.status] ?? 'neutral'} dot>
+                    {t(`creditStatus.${o.status}`)}
+                  </Badge>
+                )}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-[12px] text-k-muted">{t('otherCredits.cardsHint')}</p>
+        </div>
       )}
     </>
   );
