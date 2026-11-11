@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import {
   canReveal,
+  canRevealContacts,
   canSeeContact,
   canSeeEconomic,
   documentInClearByDefault,
@@ -24,7 +25,7 @@ const PII_PERMISSIONS = [
 /**
  * F14 · F4 (ADR-F14-06, H-5/H-6): qué categorías de dato personal de un cliente ve quien hace la petición. Es una capa fina sobre las
  * funciones puras de `@kobrax/shared` (`pii-fields.ts`), que son la regla; acá sólo se arma el «quién» (permisos del request, canal y el
- * interruptor `PII_MOBILE_MASK`). La política `pii.reveal` es `canReveal()`/`assertCanReveal()`.
+ * interruptor `PII_MOBILE_MASK`). La política `pii.reveal` es `canReveal()` (el DOCUMENTO) y `canRevealContacts()`/`assertCanRevealContacts()` (los contactos, F14 · F8).
  *
  * Toda pantalla o exporte que devuelva datos de un cliente pasa por acá, para que la regla sea una sola.
  */
@@ -48,9 +49,14 @@ export class PiiService {
     return canReveal(this.actor());
   }
 
-  /** Lanza 403 `PII_REVEAL_DENIED` si no puede revelar. Para el pedido EXPLÍCITO de revelado. */
-  assertCanReveal(): void {
-    if (!this.canReveal()) throw new ForbiddenException({ code: 'PII_REVEAL_DENIED', message: 'No tienes permiso para ver estos datos en claro' });
+  /** F14 · F8 (D-4): ¿puede pedir los CONTACTOS en claro? El canal móvil con la máscara SÍ (el documento sigue tapado: `canReveal`). */
+  canRevealContacts(): boolean {
+    return canRevealContacts(this.actor());
+  }
+
+  /** Lanza 403 `PII_REVEAL_DENIED` si no puede revelar los contactos. Para el pedido EXPLÍCITO (`?reveal=true`). */
+  assertCanRevealContacts(): void {
+    if (!this.canRevealContacts()) throw new ForbiddenException({ code: 'PII_REVEAL_DENIED', message: 'No tienes permiso para ver estos datos en claro' });
   }
 
   /** ¿Ve teléfonos, direcciones, GPS, zona, notas, fotos de ubicación y personas relacionadas? */

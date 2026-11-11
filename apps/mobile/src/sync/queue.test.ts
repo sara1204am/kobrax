@@ -350,7 +350,7 @@ describe('send · mora', () => {
   it('un 4xx del servidor es definitivo y queda a la vista, no se reintenta', async () => {
     mockMora.res = { status: 'error', message: 'Ese id de nota ya pertenece a otro crédito.', httpStatus: 409 };
     const r = await send({ kind: 'credit.note', creditId: 'cr1', input: { id: ID, body: 'x' } });
-    expect(r).toEqual({ status: 'error', message: 'Ese id de nota ya pertenece a otro crédito.', permanent: true });
+    expect(r).toEqual({ status: 'error', message: 'Ese id de nota ya pertenece a otro crédito.', permanent: true, httpStatus: 409 });
   });
 
   it('sin red no es error: queda en la cola', async () => {

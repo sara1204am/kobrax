@@ -20,6 +20,8 @@ export interface AuthenticatedUser {
   /** F14 · F5: la persona de plataforma (sesión de soporte o login de plataforma). */
   actorType?: 'PLATFORM';
   supportSessionId?: string;
+  /** F14 · F8 (D-5): canal fijado en la sesión (claim `ch`); sin él, cae al encabezado como antes. */
+  channel?: 'web' | 'mobile' | 'api';
   permissions: string[];
   sessionId: string;
   av?: number;
@@ -108,6 +110,7 @@ export class JwtAuthGuard implements CanActivate {
       roleKey: claims.roleKey,
       actorType: claims.actorType,
       supportSessionId: claims.supportSessionId,
+      channel: claims.ch,
       permissions: claims.permissions,
       sessionId: claims.sessionId,
       av: claims.av,

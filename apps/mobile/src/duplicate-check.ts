@@ -10,7 +10,7 @@
  * compara contra clientes con ficha cacheada en claro (los dados de alta en este teléfono). Lo demás lo
  * vuelve a frenar el servidor al subir (`CLIENT_DUP`).
  */
-import type { ClientDuplicateCheck, ClientDuplicateCheckInput, ClientDuplicateMatch, ClienteForm } from '@kobrax/shared';
+import { looksMasked, type ClientDuplicateCheck, type ClientDuplicateCheckInput, type ClientDuplicateMatch, type ClienteForm } from '@kobrax/shared';
 import { apiMutate } from './api-client';
 import { clientDisplayName, normalizar } from './clients.service';
 import * as db from './db';
@@ -24,7 +24,8 @@ export function duplicateCheckInput(form: ClienteForm): ClientDuplicateCheckInpu
   const firstName = form.firstName.trim();
   const lastName = form.lastName.trim();
   const businessName = form.businessName.trim();
-  const docReady = nationalId.length >= 3;
+  // F14 · F8 (D-4): un documento ENMASCARADO (el que trae la edición) no es un documento para preguntar por duplicados.
+  const docReady = nationalId.length >= 3 && !looksMasked(nationalId);
   const nameReady = form.clientType === 'COMPANY' ? businessName.length >= 2 : firstName.length >= 2 && lastName.length >= 2;
   if (!docReady && !nameReady) return null;
   return form.clientType === 'COMPANY'

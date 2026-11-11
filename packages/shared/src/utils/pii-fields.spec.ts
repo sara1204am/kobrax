@@ -3,6 +3,7 @@ import { RoleType } from '../enums/role.enum.js';
 import { ROLE_PERMISSIONS } from '../constants/permissions.js';
 import {
   canReveal,
+  canRevealContacts,
   canSeeContact,
   canSeeEconomic,
   documentInClearByDefault,
@@ -72,5 +73,19 @@ describe('pii-fields · canal móvil (D-2, apagado por omisión)', () => {
     expect(piiChannelOf('web')).toBe('web');
     expect(piiChannelOf(undefined)).toBe('api');
     expect(piiChannelOf('curl')).toBe('api');
+  });
+});
+
+
+describe('canRevealContacts · F14 · F8 (D-4)', () => {
+  it('el canal móvil con la máscara revela contactos pero no el documento', () => {
+    const mobile = actorOf(RoleType.COLLECTOR, { channel: 'mobile', mobileMask: true });
+    expect(canRevealContacts(mobile)).toBe(true);
+    expect(canReveal(mobile)).toBe(false);
+  });
+
+  it('la persona de consulta no revela contactos', () => {
+    expect(canRevealContacts(actorOf(RoleType.VIEWER))).toBe(false);
+    expect(canRevealContacts(actorOf(RoleType.VIEWER, { channel: 'mobile', mobileMask: true }))).toBe(false);
   });
 });

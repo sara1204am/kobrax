@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
-import type { ClientDuplicateCheck } from '@kobrax/shared';
+import type { ClientDuplicateCheck, ClientDuplicateMatch } from '@kobrax/shared';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
 import { Button } from '@/components';
 
@@ -12,17 +12,30 @@ export function DuplicateNotice({
   local,
   accepted,
   onAccept,
+  onCreateMine,
 }: {
   check: ClientDuplicateCheck | null;
   local: boolean;
   accepted: boolean;
   onAccept: () => void;
+  /**
+   * F14 · F8 (D-8 b): el documento ya está registrado pero la persona no ve a ese cliente (lo llevan otras). Con permiso de crear créditos, la pantalla pasa
+   * esto y se ofrece «Crear mi préstamo sobre este cliente». Sin él (o sin señal) solo se explica.
+   */
+  onCreateMine?: (match: ClientDuplicateMatch) => void;
 }) {
   if (!check || (!check.document && check.names.length === 0)) return null;
   const doc = check.document;
   return (
     <View accessibilityRole="alert" style={[styles.box, doc ? styles.danger : styles.warn]}>
-      {doc ? (
+      {doc?.hidden ? (
+        <>
+          <Text style={styles.title}>Este cliente ya existe y lo llevan otras personas</Text>
+          <Text style={styles.line}>{`${doc.displayName}${doc.maskedDocument ? ` · ${doc.maskedDocument}` : ''}`}</Text>
+          <Text style={styles.hint}>Todavía no está en tu cartera. Puedes crear tu propio préstamo sobre él y desde ahí lo verás.</Text>
+          {onCreateMine && !local && <Button label="Crear mi préstamo sobre este cliente" onPress={() => onCreateMine(doc)} />}
+        </>
+      ) : doc ? (
         <>
           <Text style={styles.title}>Ya existe un cliente con ese documento</Text>
           <Text style={styles.line}>

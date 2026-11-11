@@ -20,7 +20,7 @@ import { Header, SectionLabel } from '@/ui';
 import { Button, ErrorBanner, Field } from '@/components';
 import { MONTHS, todayISO } from '@/agenda-form';
 import { ClienteFormView } from '@/cliente-form-view';
-import { collateralPayload, contactPayload, hydrateCliente, locationPayload, relationPayload, type ClienteForm } from '@kobrax/shared';
+import { collateralPayload, contactPayload, hydrateCliente, locationPayload, looksMasked, relationPayload, type ClienteForm } from '@kobrax/shared';
 import { diffCliente, hasClientChanges as hasChanges, type ClienteOps } from '@kobrax/shared';
 import { opsToActions, queueableOps } from '@/cliente-queue';
 import { queueForLater } from '@/sync/sync.service';
@@ -157,6 +157,10 @@ export default function EditarScreen() {
 
   const save = useCallback(async () => {
     if (!form || !original) return;
+    // F14 · F8 (D-4): el documento llega ENMASCARADO. Si no se tocó, no viaja; pero si se cambió y quedó con la máscara (`12345***`) pisaría el real.
+    if (looksMasked(form.nationalId) && form.nationalId !== original.nationalId) {
+      return setError('El documento está protegido: escribe el documento completo o déjalo como estaba.');
+    }
     setSaving(true);
     setError(null);
 

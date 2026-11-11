@@ -55,9 +55,17 @@ export function canSeeEconomic(a: PiiActor): boolean {
  * (si no, 404) lo resuelve la API con el alcance, no esta función.
  */
 export function canReveal(a: PiiActor): boolean {
-  if (!has(a, Permission.CLIENT_READ) || !has(a, Permission.CLIENT_CONTACT_READ)) return false;
+  if (!canRevealContacts(a)) return false;
   if (a.mobileMask === true && a.channel === 'mobile') return false;
   return true;
+}
+
+/**
+ * F14 · F8 (D-4): ¿puede pedir los CONTACTOS en claro (`?reveal=true`)? Hace falta poder leer clientes y el permiso de contacto. A diferencia del
+ * documento (`canReveal`), el canal móvil con la máscara encendida SÍ puede: el cobrador necesita el teléfono y la dirección para cobrar y editar.
+ */
+export function canRevealContacts(a: PiiActor): boolean {
+  return has(a, Permission.CLIENT_READ) && has(a, Permission.CLIENT_CONTACT_READ);
 }
 
 /** Alcance «propio»: sin ninguna de las tres capacidades de alcance mayor (la misma idea que `officeScopeKindOf` de la API). */
