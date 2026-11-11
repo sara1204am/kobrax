@@ -175,6 +175,7 @@
       "edit": "Editar",
       "done": "Listo",
       "addWidget": "Añadir widget",
+      "noWidgetMatch": "Ningún widget coincide con esa búsqueda.",
       "searchWidgets": "Buscar widgets",
       "widgetAdded": "Widget agregado",
       "removeWidget": "Quitar widget",
@@ -212,6 +213,22 @@
         "list": "Lista",
         "histogram": "Histograma",
         "text": "Texto / Nota"
+      },
+      "catalogItems": {
+        "kpiStrip": { "name": "Resumen de indicadores", "description": "Una tira con saldo de cartera, cartera en mora (monto y %), créditos en mora y recaudado.", "keywords": "resumen tira indicadores kpi saldo mora recaudo" },
+        "kpiOutstanding": { "name": "Saldo total de cartera", "description": "Cuánto falta por cobrar en total, con el desglose por fuente.", "keywords": "saldo cartera total pendiente kpi" },
+        "kpiOverdue": { "name": "Cartera en mora (monto)", "description": "Monto de los créditos con cuotas vencidas, con el desglose por fuente.", "keywords": "mora vencido atrasado monto kpi" },
+        "kpiOverdueRate": { "name": "% de cartera en mora", "description": "Qué parte del saldo de cartera está en mora.", "keywords": "porcentaje tasa mora morosidad kpi" },
+        "kpiCreditsInArrears": { "name": "Cantidad de créditos en mora", "description": "Cuántos créditos tienen cuotas vencidas (cantidad, no monto).", "keywords": "créditos préstamos mora cantidad número kpi" },
+        "kpiCollected": { "name": "Recaudado en el período", "description": "Lo cobrado en el período filtrado, con el desglose por fuente.", "keywords": "recaudo recaudado cobrado cobranza pagos kpi" },
+        "agingDonut": { "name": "Cartera en mora por tramo de días (dona)", "description": "Reparto del monto en mora entre tramos: 1–30, 31–90, 91–180 días, etc.", "keywords": "dona torta mora tramos días antigüedad aging rangos" },
+        "agingBars": { "name": "Cartera en mora por tramo de días (barras)", "description": "Créditos y monto en mora en cada tramo de días, en barras.", "keywords": "barras mora tramos días antigüedad aging rangos" },
+        "agendaDonut": { "name": "Estado de la agenda del período", "description": "Agendados del período: realizados, pendientes y vencidos, en dona.", "keywords": "dona agenda agendados visitas pendientes realizados cumplimiento" },
+        "indicatorsList": { "name": "Indicadores de gestión", "description": "Lista con visitas, llamadas, gestiones, promesas de pago y pagos registrados.", "keywords": "lista gestión visitas llamadas promesas pagos productividad" },
+        "collectorsTable": { "name": "Cartera por cobrador", "description": "Tabla con la cartera, la mora, el % de mora y lo recaudado de cada cobrador.", "keywords": "tabla cobradores equipo desempeño ranking cartera mora" },
+        "visitsMap": { "name": "Mapa de visitas del día", "description": "Las paradas del día en el mapa, visitadas y pendientes, por cobrador.", "keywords": "mapa visitas paradas ruta ubicación cobradores" },
+        "trendLine": { "name": "Evolución de cartera y recaudación", "description": "Línea en el tiempo del saldo de cartera y lo recaudado.", "keywords": "línea gráfico tendencia evolución histórico saldo recaudo" },
+        "agendaToday": { "name": "Agenda de hoy", "description": "Lo agendado para hoy: visitas, llamadas y promesas por atender.", "keywords": "calendario agenda hoy pendientes visitas llamadas promesas" }
       },
       "buckets": {
         "D1_30": "1 a 30 días",

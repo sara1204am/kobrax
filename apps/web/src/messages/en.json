@@ -175,6 +175,7 @@
       "edit": "Edit",
       "done": "Done",
       "addWidget": "Add widget",
+      "noWidgetMatch": "No widget matches that search.",
       "searchWidgets": "Search widgets",
       "widgetAdded": "Widget added",
       "removeWidget": "Remove widget",
@@ -212,6 +213,22 @@
         "list": "List",
         "histogram": "Histogram",
         "text": "Text / Note"
+      },
+      "catalogItems": {
+        "kpiStrip": { "name": "Summary of indicators", "description": "A strip with portfolio balance, overdue portfolio (amount and %), loans in arrears and collected.", "keywords": "summary strip indicators kpi balance overdue collected" },
+        "kpiOutstanding": { "name": "Total portfolio balance", "description": "How much is still owed in total, split by source.", "keywords": "balance portfolio total outstanding kpi" },
+        "kpiOverdue": { "name": "Overdue portfolio (amount)", "description": "Amount of loans with past-due installments, split by source.", "keywords": "overdue arrears past due amount kpi" },
+        "kpiOverdueRate": { "name": "% of portfolio overdue", "description": "What share of the portfolio balance is overdue.", "keywords": "percentage rate delinquency overdue kpi" },
+        "kpiCreditsInArrears": { "name": "Number of loans in arrears", "description": "How many loans have past-due installments (count, not amount).", "keywords": "loans credits arrears count number kpi" },
+        "kpiCollected": { "name": "Collected in the period", "description": "What was collected in the filtered period, split by source.", "keywords": "collected collections payments revenue kpi" },
+        "agingDonut": { "name": "Overdue portfolio by days past due (donut)", "description": "Overdue amount split by bucket: 1–30, 31–90, 91–180 days, etc.", "keywords": "donut pie overdue buckets days aging ranges" },
+        "agingBars": { "name": "Overdue portfolio by days past due (bars)", "description": "Loans and overdue amount per day bucket, as bars.", "keywords": "bars overdue buckets days aging ranges" },
+        "agendaDonut": { "name": "Agenda status for the period", "description": "Scheduled items for the period: done, pending and overdue, as a donut.", "keywords": "donut agenda scheduled visits pending done" },
+        "indicatorsList": { "name": "Collection activity indicators", "description": "List of visits, calls, contacts, payment promises and payments recorded.", "keywords": "list activity visits calls promises payments productivity" },
+        "collectorsTable": { "name": "Portfolio by collector", "description": "Table with each collector portfolio, overdue, overdue % and amount collected.", "keywords": "table collectors team performance ranking portfolio overdue" },
+        "visitsMap": { "name": "Visits map for the day", "description": "The stops of the day on a map, visited and pending, per collector.", "keywords": "map visits stops route location collectors" },
+        "trendLine": { "name": "Portfolio and collection trend", "description": "A line over time of portfolio balance and amount collected.", "keywords": "line chart trend evolution history balance collected" },
+        "agendaToday": { "name": "Today agenda", "description": "What is scheduled for today: visits, calls and promises to follow up.", "keywords": "calendar agenda today pending visits calls promises" }
       },
       "buckets": {
         "D1_30": "1 to 30 days",

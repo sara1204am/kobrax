@@ -42,6 +42,41 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
   { type: 'text', labelKey: 'text', defaultSize: { w: 3, h: 2 }, minSize: { w: 2, h: 1 }, source: null },
 ];
 
+/**
+ * Lo que el selector «Añadir widget» ofrece: **contenido concreto, no tipos de gráfico**.
+ *
+ * «KPI» o «Embudo» a secas no le dicen a nadie qué va a ver. Cada entrada es un tipo + la métrica que el
+ * renderer lee de `config.metric`, con nombre y descripción propios (`panel.dashboard.catalogItems.<id>`).
+ * Los tipos sin fuente de datos (embudo, medidor, histograma, texto) no se ofrecen: siguen en
+ * `WIDGET_DEFINITIONS` para que un tablero ya guardado con ellos se abra, pero prometerlos acá sería
+ * ofrecer una caja vacía.
+ */
+export interface CatalogItem {
+  /** Clave de i18n y de búsqueda; también identifica al widget recién creado. */
+  id: string;
+  type: WidgetType;
+  config: Record<string, string>;
+  /** Tamaño propio cuando difiere del natural del tipo (la tira de KPIs va a todo el ancho). */
+  size?: { w: number; h: number };
+}
+
+export const CATALOG_ITEMS: CatalogItem[] = [
+  { id: 'kpiStrip', type: 'kpi', config: { metric: 'strip' }, size: { w: 12, h: 2 } },
+  { id: 'kpiOutstanding', type: 'kpi', config: { metric: 'outstanding' } },
+  { id: 'kpiOverdue', type: 'kpi', config: { metric: 'overdue' } },
+  { id: 'kpiOverdueRate', type: 'kpi', config: { metric: 'overdueRate' } },
+  { id: 'kpiCreditsInArrears', type: 'kpi', config: { metric: 'creditsInArrears' } },
+  { id: 'kpiCollected', type: 'kpi', config: { metric: 'collected' } },
+  { id: 'agingDonut', type: 'donut_chart', config: { metric: 'aging' } },
+  { id: 'agingBars', type: 'bar_chart', config: { metric: 'agingBars' } },
+  { id: 'agendaDonut', type: 'donut_chart', config: { metric: 'agenda' } },
+  { id: 'indicatorsList', type: 'list', config: { metric: 'indicators' } },
+  { id: 'collectorsTable', type: 'table', config: { metric: 'collectors' } },
+  { id: 'visitsMap', type: 'map', config: { metric: 'visits' } },
+  { id: 'trendLine', type: 'line_chart', config: { metric: 'trend' } },
+  { id: 'agendaToday', type: 'calendar', config: { metric: 'agendaToday' } },
+];
+
 const BY_TYPE = new Map(WIDGET_DEFINITIONS.map((d) => [d.type, d]));
 
 export function widgetDefinition(type: string): WidgetDefinition | undefined {
