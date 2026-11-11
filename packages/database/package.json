@@ -20,6 +20,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:reset": "prisma migrate reset",
     "db:rebuild": "tsx prisma/rebuild.ts",
+    "db:rls": "tsx prisma/apply-rls.ts",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:catalog": "tsx prisma/seed.ts --catalog",
     "db:seed:refresh": "tsx prisma/seed.ts --refresh",

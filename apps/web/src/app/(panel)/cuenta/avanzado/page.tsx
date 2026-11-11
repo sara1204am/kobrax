@@ -1,5 +1,7 @@
+import { Permission } from '@kobrax/shared';
 import { getTranslations } from 'next-intl/server';
 import type { AccountRequestInfo, MeInfo, Member } from '@kobrax/shared';
+import { requirePermission } from '@/lib/authz';
 import { apiCall } from '@/lib/bff';
 import { Section } from '@/components/panel-ui';
 import { getAccount } from '../get-account';
@@ -12,6 +14,8 @@ import { RetentionNote } from './retention-note';
  * Pide `account:write`. Quién es el dueño sale de la lista de miembros cruzada con la sesión (`/auth/me`).
  */
 export default async function CuentaAvanzadoPage() {
+  const blocked = await requirePermission(Permission.ACCOUNT_WRITE);
+  if (blocked) return blocked;
   const t = await getTranslations('account.advanced');
   const { body } = await getAccount();
   if (!body.data) return null;

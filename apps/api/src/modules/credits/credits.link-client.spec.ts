@@ -30,7 +30,7 @@ function make() {
     paymentRequest: { updateMany: upd('payment_requests') },
     account: { findUnique: async () => ({ currencyCode: 'BOB', configuration: {}, settings: {} }) },
   };
-  const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
+  const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx), elevated: async (_tx: unknown, fn: () => Promise<unknown>) => fn() };
   const tenant = { accountId: 'acc-A', userId: 'u1', can: () => true };
   const audit = { record: async () => undefined, recordMany: async () => undefined };
   const service = new CreditsService(prisma as never, tenant as never, audit as never, {} as never, {} as never, {} as never, {} as never);

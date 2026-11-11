@@ -1,4 +1,5 @@
 import { describe, it } from 'node:test';
+import { fakePolicy } from '../../common/authz/testing';
 import assert from 'node:assert/strict';
 import { Permission, RoleType } from '@kobrax/shared';
 import { OfficeScopeService } from '../../common/office-scope/office-scope.service';
@@ -70,7 +71,7 @@ function makeService(opts: { permissions?: string[]; userId?: string; credits: C
   const permissions = opts.permissions ?? [Permission.ASSIGNMENT_WRITE, Permission.DATA_SCOPE_ALL];
   const tenant = { accountId: 'acc-A', userId: opts.userId ?? 'boss', can: (p: string) => permissions.includes(p) };
   const audit = { recordMany: async (e: typeof audited) => void audited.push(...e) };
-  const service = new AssignmentService(prisma as never, tenant as never, audit as never, new OfficeScopeService(tenant as never));
+  const service = new AssignmentService(prisma as never, tenant as never, audit as never, new OfficeScopeService(tenant as never), undefined, fakePolicy().service);
   return { service, tx: tx as never, credits, perms, agenda, audited, txCount: () => txCount };
 }
 

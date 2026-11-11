@@ -11,12 +11,9 @@ import {
   Put,
   Query,
   StreamableFile,
-  UseGuards,
 } from '@nestjs/common';
 import { Permission } from '@kobrax/shared';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { TenantGuard } from '../auth/guards/tenant.guard';
+import { Destructive } from '../auth/decorators/authz.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ClientsService } from './clients.service';
 import { buildClientPdf } from './client-pdf';
@@ -40,13 +37,12 @@ import {
 } from './dto/client.dto';
 
 @Controller('clients')
-@UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 export class ClientsController {
   constructor(private readonly clients: ClientsService) {}
 
   // ── Cliente ────────────────────────────────────────────────────────────────
   @Post()
-  @Roles(Permission.CLIENT_WRITE)
+  @Roles(Permission.CLIENT_CREATE)
   create(@Body() dto: CreateClientDto) {
     return this.clients.create(dto);
   }
@@ -69,6 +65,16 @@ export class ClientsController {
     return this.clients.list(query);
   }
 
+  /**
+   * Lo mínimo de un cliente que todavía no ves, para crearle TU crédito (F14 · F2b): nombre, carnet enmascarado y agregados.
+   * Quien lo ve por sus créditos recibe `visible: true`. El detalle completo sigue en `GET :id`, que da 404 sin crédito propio.
+   */
+  @Get(':id/preview')
+  @Roles(Permission.CREDIT_CREATE)
+  preview(@Param('id', ParseUUIDPipe) id: string) {
+    return this.clients.preview(id);
+  }
+
   @Get(':id')
   @Roles(Permission.CLIENT_READ)
   /**
@@ -80,7 +86,7 @@ export class ClientsController {
    * cablea al final; no se ramifica por rol ahora.
    */
   findOne(@Param('id', ParseUUIDPipe) id: string, @Query('reveal') reveal?: string) {
-    return this.clients.findOne(id, reveal === 'true');
+    return this.clients.findOne(id, reveal === 'true', true, { explicit: true });
   }
 
   /** El legajo del cliente en PDF: mismo revelado auditado que `findOne(id, true)`, para imprimir. */
@@ -99,7 +105,8 @@ export class ClientsController {
   }
 
   @Delete(':id')
-  @Roles(Permission.CLIENT_WRITE)
+  @Roles(Permission.CLIENT_DELETE)
+  @Destructive()
   @HttpCode(204)
   async remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     await this.clients.remove(id);

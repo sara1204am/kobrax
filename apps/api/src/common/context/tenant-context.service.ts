@@ -7,6 +7,11 @@ export interface RequestContext {
   userId: string;
   /** Permisos efectivos del JWT; habilitan el scoping por capacidad en los servicios. */
   permissions: string[];
+  /** F14 · F5: clave del rol de la cuenta (`account_roles.key`), si el token la trae. */
+  roleKey?: string;
+  /** F14 · F5: `PLATFORM` cuando la petición es de la persona de plataforma por una sesión de soporte; la auditoría lo marca. */
+  actorType?: 'PLATFORM';
+  supportSessionId?: string;
   sessionId?: string;
   requestId?: string;
   ip?: string;
@@ -16,6 +21,8 @@ export interface RequestContext {
    * funcional de compatibilidad aplica a un cliente móvil viejo (ver `legacyClientReason`).
    */
   appVersion?: string;
+  /** Canal de la petición (`x-client-type`: web | mobile | api). Sólo decide la proyección de PII (F14·F4, D-2); NO es autorización. */
+  channel?: 'web' | 'mobile' | 'api';
 }
 
 /**

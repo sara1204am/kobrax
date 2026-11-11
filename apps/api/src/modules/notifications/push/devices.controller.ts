@@ -1,9 +1,7 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 import { IsIn, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
-import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../../auth/guards/roles.guard';
-import { TenantGuard } from '../../auth/guards/tenant.guard';
 import { DevicesService } from './devices.service';
+import { Authenticated } from '../../auth/decorators/authz.decorator';
 
 export class RegisterDeviceDto {
   /** Identidad estable de la instalación (la genera la app una vez). Renovar el token no cambia este valor. */
@@ -22,22 +20,24 @@ export class RegisterDeviceDto {
  * empresa puede registrar el teléfono; lo que se envía luego depende de los avisos que ya le corresponden.
  */
 @Controller('notifications/devices')
-@UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 export class DevicesController {
   constructor(private readonly devices: DevicesService) {}
 
   @Post()
+  @Authenticated()
   @HttpCode(200)
   register(@Body() dto: RegisterDeviceDto) {
     return this.devices.register(dto);
   }
 
   @Get()
+  @Authenticated()
   list() {
     return this.devices.listMine();
   }
 
   @Delete(':installationId')
+  @Authenticated()
   @HttpCode(204)
   revoke(@Param('installationId', ParseUUIDPipe) installationId: string) {
     return this.devices.revoke(installationId);

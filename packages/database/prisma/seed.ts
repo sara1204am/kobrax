@@ -55,7 +55,7 @@ import {
   VisitOutcome,
   CollectionPriority,
 } from '@prisma/client';
-import { CATALOG_DEFAULTS, DEFAULT_ARREAR_CATEGORIES, ROLE_PERMISSIONS, RoleType, validateAgendaDetails } from '@kobrax/shared';
+import { CATALOG_DEFAULTS, DEFAULT_ARREAR_CATEGORIES, PERMISSION_META, ROLE_PERMISSIONS, RoleType, validateAgendaDetails, type Permission } from '@kobrax/shared';
 import bcrypt from 'bcryptjs';
 import { blindHash, encryptPII } from './pii';
 
@@ -86,11 +86,16 @@ const PERMISSIONS: PermRow[] = [
   ['catalog:write', 'catalogs', 'UPDATE', 'ACCOUNT'],
   ['client:read', 'clients', 'READ', 'ACCOUNT'],
   ['client:write', 'clients', 'UPDATE', 'ACCOUNT'],
+  ['client:create', 'clients', 'CREATE', 'ACCOUNT'],
+  ['client:delete', 'clients', 'DELETE', 'ACCOUNT'],
   ['client:pii:read', 'clients', 'READ', 'ACCOUNT'],
+  ['client:contact:read', 'clients', 'READ', 'ACCOUNT'],
+  ['support:consent', 'account', 'UPDATE', 'ACCOUNT'],
   ['client:import', 'clients', 'CREATE', 'ACCOUNT'],
   ['client:import:replace', 'clients', 'DELETE', 'ACCOUNT'],
   ['credit:read', 'credits', 'READ', 'ACCOUNT'],
   ['credit:write', 'credits', 'UPDATE', 'ACCOUNT'],
+  ['credit:create', 'credits', 'CREATE', 'ACCOUNT'],
   ['credit:pii:read', 'credits', 'READ', 'ACCOUNT'],
   ['report:read', 'reports', 'READ', 'ACCOUNT'],
   ['report:export', 'reports', 'EXECUTE', 'ACCOUNT'],
@@ -99,6 +104,7 @@ const PERMISSIONS: PermRow[] = [
   ['user:read', 'users', 'READ', 'ACCOUNT'],
   ['user:write', 'users', 'UPDATE', 'ACCOUNT'],
   ['user:invite', 'users', 'CREATE', 'ACCOUNT'],
+  ['user:sessions:revoke', 'users', 'EXECUTE', 'ACCOUNT'],
   ['role:read', 'roles', 'READ', 'ACCOUNT'],
   ['role:write', 'roles', 'UPDATE', 'ACCOUNT'],
   ['audit:read', 'audit', 'READ', 'ACCOUNT'],
@@ -1846,10 +1852,13 @@ async function main(): Promise<void> {
 
   // 1) Permisos
   for (const [code, module, action, scope] of PERMISSIONS) {
+    // F14 · F7: riesgo, reservado y dependencias salen de `PERMISSION_META` (fuente única); sin esto una base nueva quedaba sin ellos.
+    const meta = PERMISSION_META[code as Permission];
+    const catalogMeta = { risk: meta.risk, reserved: meta.reserved ?? null, requires: [...(meta.requires ?? [])].sort() };
     await prisma.permission.upsert({
       where: { code },
-      update: { module, action: action as never, scope: scope as never },
-      create: { code, name: code, module, action: action as never, scope: scope as never },
+      update: { module, action: action as never, scope: scope as never, ...catalogMeta },
+      create: { code, name: code, module, action: action as never, scope: scope as never, ...catalogMeta },
     });
   }
   console.log(`  ✓ ${PERMISSIONS.length} permisos`);
@@ -1874,6 +1883,42 @@ async function main(): Promise<void> {
     await prisma.rolePermission.deleteMany({ where: { roleId: role.id, permission: { code: { in: staleScopes } } } });
   }
   console.log(`  ✓ ${Object.keys(ROLES).length} roles`);
+
+  // 2b) F14 · F5: las PLANTILLAS de rol de empresa (las seis; SUPER_ADMIN no es plantilla de cuenta) y sus permisos. Cada cuenta que se crea recibe
+  // una copia por trigger (`accounts_create_roles`), así que las plantillas tienen que existir ANTES de las cuentas. `data:scope:*` es excluyente: la
+  // plantilla conserva sólo el más amplio (all > subtree > branch), que es el que ya manda en todo el código.
+  const SCOPE_ORDER = ['data:scope:all', 'data:scope:subtree', 'data:scope:branch'];
+  for (const [name, def] of Object.entries(ROLES)) {
+    if (name === 'SUPER_ADMIN') continue;
+    await prisma.roleTemplate.upsert({
+      where: { key: name },
+      update: { tier: def.level, tenantAssignable: name !== 'ACCOUNT_ADMIN' },
+      create: { key: name, tier: def.level, tenantAssignable: name !== 'ACCOUNT_ADMIN' },
+    });
+    const codes = [...(ROLE_PERMISSIONS[name as RoleType] as string[])];
+    const widest = SCOPE_ORDER.find((c) => codes.includes(c));
+    const wanted = codes.filter((c) => !SCOPE_ORDER.includes(c) || c === widest);
+    const perms = await prisma.permission.findMany({ where: { code: { in: wanted } } });
+    for (const perm of perms) {
+      await prisma.roleTemplatePermission.upsert({
+        where: { templateKey_permissionId: { templateKey: name, permissionId: perm.id } },
+        update: {},
+        create: { templateKey: name, permissionId: perm.id },
+      });
+    }
+    await prisma.roleTemplatePermission.deleteMany({ where: { templateKey: name, permissionId: { notIn: perms.map((p) => p.id) } } });
+  }
+  console.log('  ✓ plantillas de rol');
+
+  // 2c) F14 · F5 (H-11): la ÚNICA persona de plataforma. Se aprovisiona SOLO acá (infraestructura): no hay API ni pantalla que cree, edite o promueva a
+  // nadie a plataforma, y la base admite una sola fila. Sin `PLATFORM_ADMIN_EMAIL` / `PLATFORM_ADMIN_PASSWORD` no se crea (la plataforma queda inactiva).
+  // El MFA se enrola en el primer inicio de sesión; mientras tanto no puede entrar. Va ANTES del corte del catálogo: producción también la necesita.
+  if (process.env.PLATFORM_ADMIN_EMAIL && process.env.PLATFORM_ADMIN_PASSWORD && (await prisma.platformUser.count()) === 0) {
+    await prisma.platformUser.create({
+      data: { email: process.env.PLATFORM_ADMIN_EMAIL.trim().toLowerCase(), passwordHash: await bcrypt.hash(process.env.PLATFORM_ADMIN_PASSWORD, 12) },
+    });
+    console.log('  ✓ persona de plataforma (MFA pendiente de enrolar)');
+  }
 
   // Corte para PRODUCCIÓN: `pnpm db:seed:catalog` carga sólo permisos y roles. Sin el catálogo el registro público
   // falla con ROLE_CATALOG_MISSING; con el seed completo entrarían datos de prueba a la base real. Es un corte en

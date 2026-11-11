@@ -38,6 +38,7 @@ import { serializeEpisodes } from './mora-episodes';
 import { serializeNote } from './mora-notes';
 import { serializePromises } from './mora-promises';
 import { serializeMoraCredit, type MoraCreditRow } from './mora.serializer';
+import { AuthorizationService } from '../../common/authz/authorization.service';
 
 /** Lo que se le dice a quien registra una gestión inválida (el panel valida antes con la misma regla). */
 const ACTIVITY_ERRORS: Record<RecoveryActivityError, string> = {
@@ -85,6 +86,7 @@ export class MoraService {
     private readonly agenda: AgendaService,
     private readonly arrearsPriority: ArrearsPriorityService,
     private readonly crypto: CryptoService,
+    private readonly authz: AuthorizationService = new AuthorizationService(tenant),
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -515,7 +517,7 @@ export class MoraService {
 
   /** El texto, el tipo y el borrado son de quien escribió la nota o de quien reparte cartera. Mover y pintar, de cualquiera. */
   private canEditNote(note: { authorId: string | null }): boolean {
-    return (note.authorId !== null && note.authorId === this.tenant.userId) || this.tenant.can(Permission.ASSIGNMENT_WRITE);
+    return (note.authorId !== null && note.authorId === this.tenant.userId) || this.authz.can(Permission.ASSIGNMENT_WRITE);
   }
 
   /**
@@ -724,13 +726,15 @@ export class MoraService {
         },
       },
     });
+    // F14 · F4 (H-5): quien no tiene `client:contact:read` (VIEWER) no recibe zona, direcciones, GPS ni fotos de ubicación.
+    const withContact = this.tenant.can(Permission.CLIENT_CONTACT_READ);
     for (const c of clients) {
       const doc = this.safeDecrypt(c.nationalId);
       const own = c.locations.filter((l) => l.relationId == null);
       const primary = own.find((l) => l.locationType === 'HOME') ?? own[0];
       out.set(c.id, {
-        zone: primary?.zone ?? undefined,
-        locations: c.locations
+        zone: withContact ? (primary?.zone ?? undefined) : undefined,
+        locations: (withContact ? c.locations : [])
           .filter((l) => l.latitude != null && l.longitude != null)
           .map((l) => ({
             id: l.id,

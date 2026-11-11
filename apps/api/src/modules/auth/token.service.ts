@@ -8,9 +8,22 @@ export interface AccessClaims {
   sub: string; // userId
   accountId: string;
   roleId: string;
+  /** F14 · F5: clave del rol de la CUENTA (`account_roles.key`). Adicional a `roleId`, que se conserva; los clientes viejos la ignoran. */
+  roleKey?: string;
+  /** F14 · F5: `PLATFORM` = la persona de plataforma (login de plataforma o sesión de soporte). Ausente = usuario de empresa. */
+  actorType?: 'PLATFORM';
+  /** F14 · F5: la sesión de soporte con la que se entró a una cuenta (sólo con `actorType = PLATFORM`). */
+  supportSessionId?: string;
   permissions: string[];
   sessionId: string;
+  /** F14 · F1 (H-2): versión de autorización de la membresía al emitir el token. */
+  av: number;
+  /** F14 · F1 (H-2): versión de la política global al emitir el token. */
+  pv: number;
 }
+
+/** Lo que devuelve `verifyAccess`: los tokens anteriores a F14 · F1 no traen `av`/`pv` y se tratan como vencidos. */
+export type VerifiedAccessClaims = Omit<AccessClaims, 'av' | 'pv'> & { av?: number; pv?: number };
 
 /** Vida del pre-auth token (single-purpose, entre pasos del login). */
 const PRE_AUTH_TTL = '5m';
@@ -42,8 +55,8 @@ export class TokenService {
   }
 
   /** Verifica un access JWT (Bearer). Rechaza pre-auth tokens (distinto `type`). */
-  verifyAccess(token: string): AccessClaims {
-    const payload = this.jwt.verify<AccessClaims & { type?: string }>(token, {
+  verifyAccess(token: string): VerifiedAccessClaims {
+    const payload = this.jwt.verify<VerifiedAccessClaims & { type?: string }>(token, {
       secret: this.config.jwtSecret,
     });
     if (payload.type !== 'access') throw new Error('Token no es de acceso');

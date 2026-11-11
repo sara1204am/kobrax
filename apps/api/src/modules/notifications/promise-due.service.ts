@@ -87,7 +87,7 @@ export class PromiseDueService implements OnApplicationBootstrap, OnModuleDestro
   private async collectTargets(accountId: string, now: Date): Promise<PromiseDueTarget[]> {
     const since = new Date(now.getTime() - PROMISE_DUE_DEDUPE_MS);
 
-    return this.prisma.withTenant(accountId, async (tx) => {
+    return this.prisma.withSystemTenant(accountId, async (tx) => {
       // «Hoy» es el día civil de la empresa (no el instante UTC): una cuota que vence HOY tiene que entrar al aviso, y con el
       // instante UTC una cuota de hoy (medianoche) quedaba «en el pasado» desde la madrugada.
       const account = await tx.account.findFirst({ where: { id: accountId }, select: { timezone: true, countryCode: true } });

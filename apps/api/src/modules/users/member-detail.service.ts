@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { OfficeScopeService } from '../../common/office-scope/office-scope.service';
 import type { PrismaClient } from '@prisma/client';
 import { CreditActivityType, RouteStatus } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
@@ -149,6 +150,7 @@ export class MemberDetailService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenant: TenantContextService,
+    private readonly office: OfficeScopeService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -162,6 +164,8 @@ export class MemberDetailService {
       include: MEMBER_DETAIL_INCLUDE,
     });
     if (!member) throw memberNotFound();
+    // F14 · F1 (R-02): fuera del alcance del actor = 404, como si no existiera.
+    if (!(await this.office.visibleMemberIds(tx, [userId])).has(userId)) throw memberNotFound();
     return member;
   }
 
@@ -339,10 +343,12 @@ export class MemberDetailService {
       const roles = await tx.role.findMany({ where: { id: { in: [...roleIds] } }, select: { id: true, name: true } });
       const roleName = (id: unknown) => roles.find((x) => x.id === id)?.name ?? null;
       const actors = await tx.user.findMany({
-        where: { id: { in: [...new Set(rows.map((r) => r.userId))] } },
+        where: { id: { in: [...new Set(rows.map((r) => r.userId).filter((x): x is string => x != null))] } },
         select: { id: true, email: true, profile: { select: { firstName: true, lastName: true } } },
       });
-      const actorName = (id: string) => {
+      const actorName = (id: string | null, actorType?: string) => {
+        if (actorType === 'PLATFORM') return 'Soporte de Kobrax'; // F14 · F5: actuó plataforma, no un usuario de la cuenta
+        if (id == null) return null;
         const a = actors.find((x) => x.id === id);
         if (!a) return null;
         return [a.profile?.firstName, a.profile?.lastName].filter(Boolean).join(' ') || a.email;
@@ -353,7 +359,7 @@ export class MemberDetailService {
         const before = asJson(r.before);
         const after = asJson(r.after);
         const at = r.createdAt.toISOString();
-        const by = actorName(r.userId);
+        const by = actorName(r.userId, r.actorType);
         const push = (event: string, detail: MemberAuditEvent['detail'] = {}) =>
           out.push({ id: `${r.id}:${event}`, at, event, detail, actorName: by });
 

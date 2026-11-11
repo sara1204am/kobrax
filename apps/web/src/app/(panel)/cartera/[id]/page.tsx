@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
-import { CatalogType, type AccountInfo, type ClientDetail, type ClientTimelineEntry, type CreditDetail, type Member } from '@kobrax/shared';
+import { Permission, CatalogType, type AccountInfo, type ClientDetail, type ClientTimelineEntry, type CreditDetail, type Member } from '@kobrax/shared';
+import { requirePermission } from '@/lib/authz';
 import { apiCall } from '@/lib/bff';
 import { isUuid } from '@/lib/uuid';
 import { EmptyState } from '@/components/panel-ui';
@@ -36,6 +37,8 @@ export default async function ClientePage({
   params: { id: string };
   searchParams: { historial?: string };
 }) {
+  const blocked = await requirePermission(Permission.CLIENT_READ);
+  if (blocked) return blocked;
   const t = await getTranslations('portfolio');
 
   /*

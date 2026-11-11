@@ -1,8 +1,13 @@
 import createNextIntlPlugin from 'next-intl/plugin';
+import { LEGACY_REDIRECTS } from './legacy-redirects.mjs';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+
+  async redirects() {
+    return LEGACY_REDIRECTS;
+  },
 
   /**
    * `@kobrax/shared` entra al bundle por un **junction** de pnpm

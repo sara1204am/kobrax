@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaClient } from '@kobrax/database';
-import { Permission, PermissionScope } from '@kobrax/shared';
+import { PermissionScope } from '@kobrax/shared';
+import { officeScopeKindOf } from '../common/office-scope/office-scope';
 import { AppConfigService } from '../config/app-config.service';
 import { TenantContextService } from '../common/context/tenant-context.service';
 
@@ -8,7 +9,7 @@ import { TenantContextService } from '../common/context/tenant-context.service';
  * Alcance de datos con el que corre una transacción. Viaja a PostgreSQL en `app.scope` y lo leen
  * las policies de RLS con `app_current_scope()`.
  *
- * **Son exactamente tres valores. No hay un cuarto.** La ausencia de scope no es un valor del
+ * **Son exactamente cinco valores. No hay un sexto.** La ausencia de scope no es un valor del
  * contrato: es la falta de uno, y se representa con la variable vacía → `app_current_scope()`
  * devuelve NULL → toda policy escrita contra ella niega. Fail-closed por construcción.
  *
@@ -20,8 +21,12 @@ import { TenantContextService } from '../common/context/tenant-context.service';
  * son el mismo concepto visto desde la base.
  */
 export const DataScope = {
-  /** Toda la cartera del tenant. Admin y supervisión. No depende del canal. */
+  /** Toda la cartera del tenant (`data:scope:all`: administrador, auditor, lector). No depende del canal. */
   ACCOUNT: PermissionScope.ACCOUNT,
+  /** F14 · F2b: el subárbol de las oficinas de la persona (`data:scope:subtree`, gerente regional); asignada a la raíz, todo. */
+  SUBTREE: 'subtree',
+  /** F14 · F2b: lo suyo más lo de su(s) oficina(s) (`data:scope:branch`, supervisor). */
+  BRANCH: 'branch',
   /**
    * Sólo la **asignación efectiva** del usuario del contexto: su asignación permanente más las
    * temporales vigentes. Hoy: el cobrador, en web y en móvil por igual.
@@ -34,6 +39,14 @@ export const DataScope = {
 
 export type DataScopeValue = (typeof DataScope)[keyof typeof DataScope];
 
+/** El alcance por capacidad (API) → el valor que entiende PostgreSQL. */
+const SCOPE_OF_KIND = {
+  ALL: DataScope.ACCOUNT,
+  SUBTREE: DataScope.SUBTREE,
+  BRANCH: DataScope.BRANCH,
+  OWN: DataScope.OWN,
+} as const;
+
 /** Ausencia de scope: variable vacía → NULL en la base → DENY. No es un valor del contrato. */
 const NO_SCOPE = '';
 
@@ -41,9 +54,15 @@ const NO_SCOPE = '';
  * Cliente Prisma del runtime de la API. Conecta como `kobrax_app`
  * (APP_DATABASE_URL, NOBYPASSRLS) → toda query queda sujeta a RLS.
  */
+/** Las tablas con policy de alcance (`rls/006_scope_policies.sql`: `scope_<tabla>`). Una sola lista para el chequeo de arranque. */
+export const SCOPE_POLICY_TABLES = ['credits', 'clients', 'payments', 'agenda_items', 'route_plans'] as const;
+
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PrismaService.name);
+
+  /** F14 · F2b: `off` | `log` | `enforce`. Viaja a PostgreSQL en `app.scope_mode`. */
+  private readonly scopeMode: 'off' | 'log' | 'enforce';
 
   constructor(
     config: AppConfigService,
@@ -53,11 +72,40 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       datasourceUrl: config.appDatabaseUrl,
       log: config.isProduction ? ['warn', 'error'] : ['warn', 'error'],
     });
+    this.scopeMode = config.scopeRlsMode;
   }
 
   async onModuleInit(): Promise<void> {
     await this.$connect();
     this.logger.log('Prisma conectado como kobrax_app (RLS activa)');
+    await this.assertScopeBarrierInstalled();
+  }
+
+  /**
+   * F14·F2b — con `SCOPE_RLS_MODE` en `log` o `enforce` la segunda barrera TIENE que existir en la base. Si las policies no están
+   * (falta aplicar `pnpm db:rls`), la API correría "protegida" sin estarlo: falla abierto sin que nada lo avise. Mejor no arrancar.
+   * Con `off` no se pregunta nada (la base puede estar sin las policies).
+   */
+  private async assertScopeBarrierInstalled(): Promise<void> {
+    if (this.scopeMode === 'off') return;
+    const expected = SCOPE_POLICY_TABLES.map((t) => `scope_${t}`);
+    const rows = await this.$queryRaw<{ policies: bigint; member: boolean; inherits: boolean; gaps: bigint }[]>`
+      SELECT (SELECT count(*) FROM pg_policies WHERE policyname = ANY(${expected}::text[]) AND permissive = 'RESTRICTIVE' AND roles = '{kobrax_scoped}') AS policies,
+             COALESCE((SELECT pg_has_role('kobrax_app', 'kobrax_scoped', 'MEMBER') FROM pg_roles WHERE rolname = 'kobrax_scoped'), false) AS member,
+             COALESCE((SELECT pg_has_role('kobrax_app', 'kobrax_scoped', 'USAGE') FROM pg_roles WHERE rolname = 'kobrax_scoped'), false) AS inherits,
+             (SELECT count(*) FROM information_schema.role_table_grants g
+               WHERE g.grantee = 'kobrax_app' AND g.table_schema = 'public'
+                 AND NOT has_table_privilege('kobrax_scoped', format('%I.%I', g.table_schema, g.table_name), g.privilege_type)) AS gaps`;
+    const { policies, member, inherits, gaps } = rows[0] ?? { policies: 0n, member: false, inherits: false, gaps: 0n };
+    const problems: string[] = [];
+    if (Number(policies) < expected.length) problems.push(`hay ${Number(policies)} de ${expected.length} policies de alcance para kobrax_scoped (${expected.join(', ')})`);
+    if (!member) problems.push('kobrax_app no puede cambiar al rol kobrax_scoped (¿falta el rol o el GRANT?)');
+    if (inherits) problems.push('kobrax_app hereda kobrax_scoped, así que las policies de alcance le aplicarían a TODOS (falta ALTER ROLE kobrax_app NOINHERIT)');
+    if (Number(gaps) > 0) problems.push(`a kobrax_scoped le faltan ${Number(gaps)} permisos de tabla que sí tiene kobrax_app (el usuario con alcance restringido recibiría "permission denied")`);
+    if (problems.length > 0) {
+      throw new Error(`SCOPE_RLS_MODE=${this.scopeMode} pero la barrera no está bien instalada: ${problems.join('; ')}. Aplicá "pnpm db:rls" (rls/006_scope_policies.sql) o poné SCOPE_RLS_MODE=off.`);
+    }
+    this.logger.log(`Barrera RLS de alcance: modo ${this.scopeMode} (${SCOPE_POLICY_TABLES.length} policies, rol kobrax_scoped y permisos al día)`);
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -90,14 +138,30 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
           'Si es un trabajo de sistema o un flujo pre-sesión, usar withSystemTenant().',
       );
     }
-    const scope = !ctx
-      ? NO_SCOPE
-      : // F13: el gerente regional (`data:scope:subtree`) también abre la cuenta para RLS; lo que ve dentro lo acota la API por oficina.
-        ctx.permissions.includes(Permission.DATA_SCOPE_ALL) || ctx.permissions.includes(Permission.DATA_SCOPE_SUBTREE)
-        ? DataScope.ACCOUNT
-        : DataScope.OWN;
+    // F14 · F2b: el alcance llega a la base con sus cuatro valores reales, calculados con la MISMA función que usa la API
+    // (`officeScopeKindOf`, por capacidad). Antes `subtree` se colapsaba en `account` y `branch` en `own`: nada leía `app.scope`.
+    const scope = !ctx ? NO_SCOPE : SCOPE_OF_KIND[officeScopeKindOf((p) => ctx.permissions.includes(p))];
 
     return this.runScoped(accountId, ctx?.userId ?? '', scope, fn, timeout);
+  }
+
+  /**
+   * F14 · F2b: sube a alcance `system` **dentro de la transacción en curso** para UNA lectura que necesita ver toda la cuenta aunque
+   * quien pide tenga un alcance menor (los topes del plan, la detección de duplicados, el emparejamiento de las importaciones), y
+   * vuelve al alcance original. No cambia de transacción ni de usuario: sólo el alcance de lectura, y sólo mientras corre `fn`.
+   *
+   * 🔴 **Uso explícito y mínimo.** `grep "\.elevated("` lista todos los lugares; cada uno debe poder justificar en una línea por qué
+   * necesita la cuenta entera. Nunca para devolverle datos ajenos a quien pregunta: sólo para contar o para detectar existencia.
+   */
+  async elevated<T>(tx: PrismaClient, fn: () => Promise<T>): Promise<T> {
+    const rows = await tx.$queryRaw<{ s: string | null }[]>`SELECT current_setting('app.scope', true) AS s`;
+    const previous = rows[0]?.s ?? NO_SCOPE;
+    await tx.$queryRaw`SELECT set_config('app.scope', ${DataScope.SYSTEM}, true)`;
+    try {
+      return await fn();
+    } finally {
+      await tx.$queryRaw`SELECT set_config('app.scope', ${previous}, true)`;
+    }
   }
 
   /**
@@ -138,7 +202,17 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       async (tx) => {
         await tx.$queryRaw`SELECT set_config('app.current_account_id', ${accountId}, true),
                                   set_config('app.current_user_id', ${userId}, true),
-                                  set_config('app.scope', ${scope}, true)`;
+                                  set_config('app.scope', ${scope}, true),
+                                  set_config('app.scope_mode', ${this.scopeMode}, true)`;
+        /*
+         * F14·F2b — las policies de alcance sólo existen para el rol `kobrax_scoped`. Quien tiene alcance de TODA la cuenta (o el sistema)
+         * sigue como `kobrax_app`, sin policy alguna: así su costo es cero (con la policy, aunque no filtrara nada, el planificador perdía
+         * los index-only scans de los conteos: ×1,3 a ×3 en los listados del administrador). El alcance vacío (sin contexto) SÍ cambia de
+         * rol: es fail-closed. Con el modo `off` nadie cambia de rol: la barrera está apagada y no cuesta nada.
+         */
+        if (this.scopeMode !== 'off' && scope !== DataScope.ACCOUNT && scope !== DataScope.SYSTEM) {
+          await tx.$executeRaw`SET LOCAL ROLE kobrax_scoped`;
+        }
         return fn(tx as unknown as PrismaClient);
       },
       timeout ? { timeout, maxWait: timeout } : undefined,

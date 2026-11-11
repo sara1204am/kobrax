@@ -1,0 +1,1954 @@
+[
+  {
+    "route": "DELETE /agenda/:id",
+    "handler": "AgendaController.remove",
+    "kind": "permissions",
+    "all": [
+      "agenda:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "DELETE /assignments/:id",
+    "handler": "AssignmentsController.revoke",
+    "kind": "permissions",
+    "all": [
+      "assignment:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "DELETE /auth/sessions/:id",
+    "handler": "AuthController.revokeSession",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "DELETE /auth/sessions",
+    "handler": "AuthController.revokeOtherSessions",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "DELETE /branches/:id/members/:userId",
+    "handler": "BranchesController.unassignMember",
+    "kind": "permissions",
+    "all": [
+      "office:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "DELETE /branches/:id",
+    "handler": "BranchesController.remove",
+    "kind": "permissions",
+    "all": [
+      "office:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "DELETE /catalogs/:catalog/:id",
+    "handler": "CatalogsController.remove",
+    "kind": "permissions",
+    "all": [
+      "catalog:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "DELETE /clients/:id/attachments/:aid",
+    "handler": "ClientsController.removeAttachment",
+    "kind": "permissions",
+    "all": [
+      "client:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "DELETE /clients/:id/collaterals/:gid",
+    "handler": "ClientsController.removeCollateral",
+    "kind": "permissions",
+    "all": [
+      "client:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "DELETE /clients/:id/contacts/:cid",
+    "handler": "ClientsController.removeContact",
+    "kind": "permissions",
+    "all": [
+      "client:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "DELETE /clients/:id/locations/:lid",
+    "handler": "ClientsController.removeLocation",
+    "kind": "permissions",
+    "all": [
+      "client:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "DELETE /clients/:id/relations/:rid",
+    "handler": "ClientsController.removeRelation",
+    "kind": "permissions",
+    "all": [
+      "client:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "DELETE /clients/:id",
+    "handler": "ClientsController.remove",
+    "kind": "permissions",
+    "all": [
+      "client:delete"
+    ],
+    "any": [],
+    "destructive": true
+  },
+  {
+    "route": "DELETE /credits/:id/write-off",
+    "handler": "CreditsController.unWriteOff",
+    "kind": "permissions",
+    "all": [
+      "credit:write"
+    ],
+    "any": [],
+    "policy": "credit.writeOff",
+    "destructive": true
+  },
+  {
+    "route": "DELETE /dashboards/:id",
+    "handler": "DashboardsController.remove",
+    "kind": "permissions",
+    "all": [
+      "report:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "DELETE /imports/portfolio/advisors/:code",
+    "handler": "PortfolioImportController.unlinkAdvisor",
+    "kind": "permissions",
+    "all": [
+      "client:import"
+    ],
+    "any": []
+  },
+  {
+    "route": "DELETE /mora/:creditId/notes/:noteId",
+    "handler": "MoraController.deleteNote",
+    "kind": "permissions",
+    "all": [
+      "collection:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "DELETE /notifications/devices/:installationId",
+    "handler": "DevicesController.revoke",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "DELETE /routes/:id/stops/:sid",
+    "handler": "RoutesController.removeStop",
+    "kind": "permissions",
+    "all": [
+      "route:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "DELETE /users/:id",
+    "handler": "UsersController.remove",
+    "kind": "permissions",
+    "all": [
+      "user:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /accounts/me/activity",
+    "handler": "AccountsController.activityPage",
+    "kind": "permissions",
+    "all": [
+      "audit:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /accounts/me/plan-history",
+    "handler": "AccountsController.planHistory",
+    "kind": "permissions",
+    "all": [
+      "account:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /accounts/me/requests",
+    "handler": "AccountsController.listRequests",
+    "kind": "permissions",
+    "all": [
+      "account:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /accounts/me/retention",
+    "handler": "AccountsController.retentionReport",
+    "kind": "permissions",
+    "all": [
+      "account:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /accounts/me",
+    "handler": "AccountsController.findMine",
+    "kind": "permissions",
+    "all": [
+      "account:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /agenda/:id",
+    "handler": "AgendaController.findOne",
+    "kind": "permissions",
+    "all": [
+      "agenda:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /agenda/assignees",
+    "handler": "AgendaController.assignees",
+    "kind": "permissions",
+    "all": [
+      "agenda:assign"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /agenda/clients/:clientId/context",
+    "handler": "AgendaController.clientContext",
+    "kind": "permissions",
+    "all": [
+      "agenda:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /agenda/overdue",
+    "handler": "AgendaController.overdue",
+    "kind": "permissions",
+    "all": [
+      "agenda:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /agenda/summary",
+    "handler": "AgendaController.summary",
+    "kind": "permissions",
+    "all": [
+      "agenda:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /agenda",
+    "handler": "AgendaController.list",
+    "kind": "permissions",
+    "all": [
+      "agenda:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /analytics/agenda-summary",
+    "handler": "AnalyticsController.agenda",
+    "kind": "permissions",
+    "all": [
+      "report:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /analytics/collection-trend",
+    "handler": "AnalyticsController.trend",
+    "kind": "permissions",
+    "all": [
+      "report:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /analytics/collector-performance",
+    "handler": "AnalyticsController.collectors",
+    "kind": "permissions",
+    "all": [
+      "report:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /analytics/portfolio-aging",
+    "handler": "AnalyticsController.aging",
+    "kind": "permissions",
+    "all": [
+      "report:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /analytics/summary",
+    "handler": "AnalyticsController.summary",
+    "kind": "permissions",
+    "all": [
+      "report:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /analytics/visit-map",
+    "handler": "AnalyticsController.visits",
+    "kind": "permissions",
+    "all": [
+      "client:contact:read",
+      "report:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /arrear-categories",
+    "handler": "ArrearCategoriesController.list",
+    "kind": "permissions",
+    "all": [
+      "collection:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /assignments/assignees",
+    "handler": "AssignmentsController.assignees",
+    "kind": "permissions",
+    "all": [
+      "assignment:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /auth/accounts",
+    "handler": "AuthController.listAccounts",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "GET /auth/invitation/:code",
+    "handler": "AuthController.getInvitation",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "GET /auth/me",
+    "handler": "AuthController.me",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "GET /auth/sessions",
+    "handler": "AuthController.listSessions",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "GET /branch-types",
+    "handler": "BranchTypesController.list",
+    "kind": "permissions",
+    "all": [
+      "office:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /branches/:id",
+    "handler": "BranchesController.detail",
+    "kind": "permissions",
+    "all": [
+      "office:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /branches",
+    "handler": "BranchesController.list",
+    "kind": "permissions",
+    "all": [
+      "office:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /catalogs/:catalog",
+    "handler": "CatalogsController.list",
+    "kind": "permissions",
+    "all": [
+      "catalog:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /clients/:id/income-profile",
+    "handler": "ClientsController.getIncomeProfile",
+    "kind": "permissions",
+    "all": [
+      "client:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /clients/:id/pdf",
+    "handler": "ClientsController.pdf",
+    "kind": "permissions",
+    "all": [
+      "client:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /clients/:id/preview",
+    "handler": "ClientsController.preview",
+    "kind": "permissions",
+    "all": [
+      "credit:create"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /clients/:id/timeline",
+    "handler": "ClientsController.timeline",
+    "kind": "permissions",
+    "all": [
+      "client:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /clients/:id",
+    "handler": "ClientsController.findOne",
+    "kind": "permissions",
+    "all": [
+      "client:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /clients",
+    "handler": "ClientsController.list",
+    "kind": "permissions",
+    "all": [
+      "client:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /credits/:id/schedule",
+    "handler": "CreditsController.schedule",
+    "kind": "permissions",
+    "all": [
+      "credit:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /credits/:id",
+    "handler": "CreditsController.findOne",
+    "kind": "permissions",
+    "all": [
+      "credit:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /credits",
+    "handler": "CreditsController.list",
+    "kind": "permissions",
+    "all": [
+      "credit:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /dashboards/:id",
+    "handler": "DashboardsController.findOne",
+    "kind": "permissions",
+    "all": [
+      "report:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /dashboards",
+    "handler": "DashboardsController.list",
+    "kind": "permissions",
+    "all": [
+      "report:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /exports/agenda",
+    "handler": "ExportsController.agenda",
+    "kind": "permissions",
+    "all": [
+      "report:export"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /exports/backup",
+    "handler": "ExportsController.backup",
+    "kind": "permissions",
+    "all": [
+      "report:export"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /exports/clients",
+    "handler": "ExportsController.clients",
+    "kind": "permissions",
+    "all": [
+      "report:export"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /exports/locations",
+    "handler": "ExportsController.locations",
+    "kind": "permissions",
+    "all": [
+      "report:export"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /exports/mora",
+    "handler": "ExportsController.mora",
+    "kind": "permissions",
+    "all": [
+      "report:export"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /files/:id/raw",
+    "handler": "FilesController.raw",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "GET /files/:id",
+    "handler": "FilesController.read",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "GET /health/live",
+    "handler": "HealthController.live",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "GET /health",
+    "handler": "HealthController.ready",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "GET /imports/portfolio/advisors",
+    "handler": "PortfolioImportController.listAdvisors",
+    "kind": "permissions",
+    "all": [
+      "client:import"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /imports/portfolio/config",
+    "handler": "PortfolioImportController.getConfig",
+    "kind": "permissions",
+    "all": [
+      "client:import"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /imports/portfolio/runs/:id/file",
+    "handler": "PortfolioImportController.runFile",
+    "kind": "permissions",
+    "all": [
+      "client:import",
+      "client:pii:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /imports/portfolio/runs/:id/items",
+    "handler": "PortfolioImportController.listRunItems",
+    "kind": "permissions",
+    "all": [
+      "client:import"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /imports/portfolio/runs/:id",
+    "handler": "PortfolioImportController.getRun",
+    "kind": "permissions",
+    "all": [
+      "client:import"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /imports/portfolio/runs",
+    "handler": "PortfolioImportController.listRuns",
+    "kind": "permissions",
+    "all": [
+      "client:import"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /mora/:creditId/episodes",
+    "handler": "MoraController.episodes",
+    "kind": "permissions",
+    "all": [
+      "collection:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /mora/:creditId/metrics",
+    "handler": "MoraController.metrics",
+    "kind": "permissions",
+    "all": [
+      "collection:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /mora/:creditId/notes",
+    "handler": "MoraController.notes",
+    "kind": "permissions",
+    "all": [
+      "collection:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /mora/:creditId/promises",
+    "handler": "MoraController.promises",
+    "kind": "permissions",
+    "all": [
+      "collection:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /mora/:creditId",
+    "handler": "MoraController.findOne",
+    "kind": "permissions",
+    "all": [
+      "collection:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /mora/branches",
+    "handler": "MoraController.branches",
+    "kind": "permissions",
+    "all": [
+      "collection:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /mora/export.csv",
+    "handler": "MoraController.exportCsv",
+    "kind": "permissions",
+    "all": [
+      "collection:export",
+      "collection:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /mora/export.pdf",
+    "handler": "MoraController.exportPdf",
+    "kind": "permissions",
+    "all": [
+      "collection:export",
+      "collection:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /mora",
+    "handler": "MoraController.list",
+    "kind": "permissions",
+    "all": [
+      "collection:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /notifications/devices",
+    "handler": "DevicesController.list",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "GET /notifications",
+    "handler": "NotificationsController.list",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "GET /payment-requests/:id",
+    "handler": "PaymentsController.getRequest",
+    "kind": "permissions",
+    "all": [
+      "payment:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /payment-requests",
+    "handler": "PaymentsController.listRequests",
+    "kind": "permissions",
+    "all": [
+      "payment:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /payments/:id",
+    "handler": "PaymentsController.findOne",
+    "kind": "permissions",
+    "all": [
+      "payment:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /payments",
+    "handler": "PaymentsController.list",
+    "kind": "permissions",
+    "all": [
+      "payment:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /platform/accounts/:accountId/support-sessions",
+    "handler": "PlatformController.list",
+    "kind": "permissions",
+    "all": [
+      "platform:accounts:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /roles/:key/history",
+    "handler": "RolesController.history",
+    "kind": "permissions",
+    "all": [
+      "role:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /roles/:key",
+    "handler": "RolesController.detail",
+    "kind": "permissions",
+    "all": [
+      "role:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /roles/compare",
+    "handler": "RolesController.compare",
+    "kind": "permissions",
+    "all": [
+      "role:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /roles/permissions",
+    "handler": "RolesController.catalog",
+    "kind": "permissions",
+    "all": [
+      "role:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /roles",
+    "handler": "RolesController.list",
+    "kind": "permissions",
+    "all": [
+      "role:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /routes/:id/change-requests",
+    "handler": "RoutesController.listChanges",
+    "kind": "permissions",
+    "all": [
+      "route:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /routes/:id/pdf",
+    "handler": "RoutesController.pdf",
+    "kind": "permissions",
+    "all": [
+      "route:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /routes/:id/preview",
+    "handler": "RoutesController.preview",
+    "kind": "permissions",
+    "all": [
+      "route:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /routes/:id",
+    "handler": "RoutesController.findOne",
+    "kind": "permissions",
+    "all": [
+      "route:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /routes",
+    "handler": "RoutesController.list",
+    "kind": "permissions",
+    "all": [
+      "route:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /support-access/current",
+    "handler": "SupportAccessController.current",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "GET /support-access",
+    "handler": "SupportAccessController.list",
+    "kind": "permissions",
+    "all": [
+      "support:consent"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /uploads/:name",
+    "handler": "UploadsController.download",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "GET /users/:id/activity/events",
+    "handler": "UsersController.activityEvents",
+    "kind": "permissions",
+    "all": [
+      "user:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /users/:id/activity",
+    "handler": "UsersController.activity",
+    "kind": "permissions",
+    "all": [
+      "user:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /users/:id/audit",
+    "handler": "UsersController.audit",
+    "kind": "permissions",
+    "all": [
+      "audit:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /users/:id/connections",
+    "handler": "UsersController.connections",
+    "kind": "permissions",
+    "all": [
+      "user:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /users/:id",
+    "handler": "UsersController.getMember",
+    "kind": "permissions",
+    "all": [
+      "user:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /users/me/profile",
+    "handler": "UsersController.getMyProfile",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "GET /users",
+    "handler": "UsersController.list",
+    "kind": "permissions",
+    "all": [
+      "user:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /visits/:id",
+    "handler": "FieldController.findOne",
+    "kind": "permissions",
+    "all": [
+      "client:contact:read",
+      "route:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /visits",
+    "handler": "FieldController.list",
+    "kind": "permissions",
+    "all": [
+      "client:contact:read",
+      "route:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "PATCH /accounts/me",
+    "handler": "AccountsController.update",
+    "kind": "permissions",
+    "all": [
+      "account:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "PATCH /agenda/:id",
+    "handler": "AgendaController.update",
+    "kind": "permissions",
+    "all": [
+      "agenda:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "PATCH /agenda/clients/:clientId/locations/:locationId",
+    "handler": "AgendaController.updateClientLocation",
+    "kind": "permissions",
+    "all": [
+      "agenda:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "PATCH /branch-types/:id",
+    "handler": "BranchTypesController.update",
+    "kind": "permissions",
+    "all": [
+      "office:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "PATCH /branches/:id",
+    "handler": "BranchesController.update",
+    "kind": "permissions",
+    "all": [
+      "office:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "PATCH /catalogs/:catalog/:id",
+    "handler": "CatalogsController.update",
+    "kind": "permissions",
+    "all": [
+      "catalog:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "PATCH /clients/:id/attachments/:aid",
+    "handler": "ClientsController.updateAttachment",
+    "kind": "permissions",
+    "all": [
+      "client:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "PATCH /clients/:id/collaterals/:gid",
+    "handler": "ClientsController.updateCollateral",
+    "kind": "permissions",
+    "all": [
+      "client:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "PATCH /clients/:id/contacts/:cid",
+    "handler": "ClientsController.updateContact",
+    "kind": "permissions",
+    "all": [
+      "client:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "PATCH /clients/:id/locations/:lid",
+    "handler": "ClientsController.updateLocation",
+    "kind": "permissions",
+    "all": [
+      "client:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "PATCH /clients/:id/relations/:rid",
+    "handler": "ClientsController.updateRelation",
+    "kind": "permissions",
+    "all": [
+      "client:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "PATCH /clients/:id",
+    "handler": "ClientsController.update",
+    "kind": "permissions",
+    "all": [
+      "client:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "PATCH /credits/:id",
+    "handler": "CreditsController.update",
+    "kind": "permissions",
+    "all": [
+      "credit:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "PATCH /dashboards/:id",
+    "handler": "DashboardsController.update",
+    "kind": "permissions",
+    "all": [
+      "report:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "PATCH /imports/portfolio/config",
+    "handler": "PortfolioImportController.patchConfig",
+    "kind": "permissions",
+    "all": [
+      "client:import"
+    ],
+    "any": []
+  },
+  {
+    "route": "PATCH /mora/:creditId/notes/:noteId",
+    "handler": "MoraController.updateNote",
+    "kind": "permissions",
+    "all": [
+      "collection:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "PATCH /mora/:creditId/priority",
+    "handler": "MoraController.setPriority",
+    "kind": "permissions",
+    "all": [
+      "collection:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "PATCH /routes/:id/change-requests/:rid",
+    "handler": "RoutesController.decideChange",
+    "kind": "permissions",
+    "all": [
+      "route:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "PATCH /routes/:id/stops/:sid",
+    "handler": "RoutesController.updateStop",
+    "kind": "permissions",
+    "all": [
+      "route:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "PATCH /routes/:id",
+    "handler": "RoutesController.updateStatus",
+    "kind": "permissions",
+    "all": [
+      "route:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "PATCH /users/:id",
+    "handler": "UsersController.updateMember",
+    "kind": "permissions",
+    "all": [
+      "user:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "PATCH /users/me/profile",
+    "handler": "UsersController.updateMyProfile",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /accounts/me/requests",
+    "handler": "AccountsController.createRequest",
+    "kind": "permissions",
+    "all": [
+      "account:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /accounts/me/transfer-ownership",
+    "handler": "AccountsController.transferOwnership",
+    "kind": "permissions",
+    "all": [
+      "account:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /accounts",
+    "handler": "AccountsController.create",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /agenda/:id/cancel",
+    "handler": "AgendaController.cancel",
+    "kind": "permissions",
+    "all": [
+      "agenda:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /agenda/:id/complete",
+    "handler": "AgendaController.complete",
+    "kind": "permissions",
+    "all": [
+      "agenda:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /agenda/:id/postpone",
+    "handler": "AgendaController.postpone",
+    "kind": "permissions",
+    "all": [
+      "agenda:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /agenda/:id/reschedule",
+    "handler": "AgendaController.reschedule",
+    "kind": "permissions",
+    "all": [
+      "agenda:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /agenda/clients/:clientId/contacts",
+    "handler": "AgendaController.addClientContact",
+    "kind": "permissions",
+    "all": [
+      "agenda:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /agenda/clients/:clientId/locations",
+    "handler": "AgendaController.addClientLocation",
+    "kind": "permissions",
+    "all": [
+      "agenda:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /agenda",
+    "handler": "AgendaController.create",
+    "kind": "permissions",
+    "all": [
+      "agenda:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /assignments/bulk",
+    "handler": "AssignmentsController.bulk",
+    "kind": "permissions",
+    "all": [
+      "assignment:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /assignments/support",
+    "handler": "AssignmentsController.createSupport",
+    "kind": "permissions",
+    "all": [
+      "assignment:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /assignments/temporary",
+    "handler": "AssignmentsController.createTemporary",
+    "kind": "permissions",
+    "all": [
+      "assignment:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /auth/change-password",
+    "handler": "AuthController.changePassword",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /auth/forgot-password",
+    "handler": "AuthController.forgotPassword",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /auth/invitation/accept",
+    "handler": "AuthController.acceptInvitation",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /auth/login",
+    "handler": "AuthController.login",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /auth/logout",
+    "handler": "AuthController.logout",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /auth/mfa/backup-codes/regenerate",
+    "handler": "AuthController.regenerateBackupCodes",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /auth/mfa/challenge",
+    "handler": "AuthController.mfaChallenge",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /auth/mfa/disable",
+    "handler": "AuthController.disableMfa",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /auth/mfa/enroll",
+    "handler": "AuthController.enrollMfa",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /auth/mfa/setup/skip",
+    "handler": "AuthController.mfaSetupSkip",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /auth/mfa/setup/start",
+    "handler": "AuthController.mfaSetupStart",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /auth/mfa/setup/verify",
+    "handler": "AuthController.mfaSetupVerify",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /auth/mfa/verify",
+    "handler": "AuthController.verifyMfa",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /auth/refresh",
+    "handler": "AuthController.refresh",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /auth/reset-password",
+    "handler": "AuthController.resetPassword",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /auth/select-account",
+    "handler": "AuthController.selectAccount",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /auth/switch-account",
+    "handler": "AuthController.switchAccount",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /branch-types",
+    "handler": "BranchTypesController.create",
+    "kind": "permissions",
+    "all": [
+      "office:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /branches/:id/deactivate",
+    "handler": "BranchesController.deactivate",
+    "kind": "permissions",
+    "all": [
+      "office:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /branches/:id/members",
+    "handler": "BranchesController.assignMembers",
+    "kind": "permissions",
+    "all": [
+      "office:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /branches/:id/move",
+    "handler": "BranchesController.move",
+    "kind": "permissions",
+    "all": [
+      "office:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /branches/:id/restore",
+    "handler": "BranchesController.restore",
+    "kind": "permissions",
+    "all": [
+      "office:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /branches",
+    "handler": "BranchesController.create",
+    "kind": "permissions",
+    "all": [
+      "office:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /catalogs/:catalog",
+    "handler": "CatalogsController.create",
+    "kind": "permissions",
+    "all": [
+      "catalog:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /clients/:id/attachments",
+    "handler": "ClientsController.addAttachment",
+    "kind": "permissions",
+    "all": [
+      "client:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /clients/:id/collaterals",
+    "handler": "ClientsController.addCollateral",
+    "kind": "permissions",
+    "all": [
+      "client:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /clients/:id/contacts",
+    "handler": "ClientsController.addContact",
+    "kind": "permissions",
+    "all": [
+      "client:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /clients/:id/locations",
+    "handler": "ClientsController.addLocation",
+    "kind": "permissions",
+    "all": [
+      "client:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /clients/:id/relations",
+    "handler": "ClientsController.addRelation",
+    "kind": "permissions",
+    "all": [
+      "client:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /clients/duplicate-check",
+    "handler": "ClientsController.duplicateCheck",
+    "kind": "permissions",
+    "all": [
+      "client:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /clients/imports",
+    "handler": "ClientImportController.run",
+    "kind": "permissions",
+    "all": [
+      "client:import",
+      "client:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /clients",
+    "handler": "ClientsController.create",
+    "kind": "permissions",
+    "all": [
+      "client:create"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /credits/:id/arrears/clear",
+    "handler": "CreditsController.clearArrears",
+    "kind": "permissions",
+    "all": [
+      "credit:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /credits/:id/arrears",
+    "handler": "CreditsController.markArrears",
+    "kind": "permissions",
+    "all": [
+      "credit:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /credits/:id/link-client",
+    "handler": "CreditsController.linkClient",
+    "kind": "permissions",
+    "all": [
+      "credit:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /credits/:id/recalculate-arrears",
+    "handler": "CreditsController.recalculateArrears",
+    "kind": "permissions",
+    "all": [
+      "credit:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /credits/:id/write-off",
+    "handler": "CreditsController.writeOff",
+    "kind": "permissions",
+    "all": [
+      "credit:write"
+    ],
+    "any": [],
+    "policy": "credit.writeOff",
+    "destructive": true
+  },
+  {
+    "route": "POST /credits/link-review/:clientId/confirm",
+    "handler": "CreditsController.confirmClientLink",
+    "kind": "permissions",
+    "all": [
+      "credit:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /credits/reassign-office",
+    "handler": "CreditsController.reassignOffice",
+    "kind": "permissions",
+    "all": [
+      "assignment:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /credits",
+    "handler": "CreditsController.create",
+    "kind": "permissions",
+    "all": [
+      "credit:create"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /dashboards/:id/duplicate",
+    "handler": "DashboardsController.duplicate",
+    "kind": "permissions",
+    "all": [
+      "report:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /dashboards",
+    "handler": "DashboardsController.create",
+    "kind": "permissions",
+    "all": [
+      "report:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /files/:id/link",
+    "handler": "FilesController.link",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /imports/portfolio",
+    "handler": "PortfolioImportController.run",
+    "kind": "permissions",
+    "all": [
+      "client:import"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /mora/:creditId/activities",
+    "handler": "MoraController.addActivity",
+    "kind": "permissions",
+    "all": [
+      "collection:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /mora/:creditId/notes",
+    "handler": "MoraController.addNote",
+    "kind": "permissions",
+    "all": [
+      "collection:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /notifications/:id/read",
+    "handler": "NotificationsController.markRead",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /notifications/devices",
+    "handler": "DevicesController.register",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /notifications/read-all",
+    "handler": "NotificationsController.markAll",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /payment-requests/:id/confirm",
+    "handler": "PaymentsController.confirmRequest",
+    "kind": "permissions",
+    "all": [
+      "payment:approve"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /payment-requests",
+    "handler": "PaymentsController.createRequest",
+    "kind": "permissions",
+    "all": [
+      "payment:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /payments",
+    "handler": "PaymentsController.register",
+    "kind": "permissions",
+    "all": [
+      "payment:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /platform/accounts/:accountId/support-sessions/:id/token",
+    "handler": "PlatformController.token",
+    "kind": "permissions",
+    "all": [
+      "platform:support:open"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /platform/auth/login",
+    "handler": "PlatformAuthController.login",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /platform/auth/mfa/confirm",
+    "handler": "PlatformAuthController.confirm",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /platform/support-sessions",
+    "handler": "PlatformController.open",
+    "kind": "permissions",
+    "all": [
+      "platform:support:open"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /roles/:key/restore-template",
+    "handler": "RolesController.restore",
+    "kind": "permissions",
+    "all": [
+      "role:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /routes/:id/change-requests",
+    "handler": "RoutesController.requestChange",
+    "kind": "permissions",
+    "all": [
+      "route:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /routes/:id/optimize",
+    "handler": "RoutesController.optimize",
+    "kind": "permissions",
+    "all": [
+      "route:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /routes/:id/stops",
+    "handler": "RoutesController.addStop",
+    "kind": "permissions",
+    "all": [
+      "route:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /routes/generate",
+    "handler": "RoutesController.generate",
+    "kind": "permissions",
+    "all": [],
+    "any": [
+      "route:assign",
+      "route:execute",
+      "route:write"
+    ]
+  },
+  {
+    "route": "POST /routes/leg",
+    "handler": "RoutesController.leg",
+    "kind": "permissions",
+    "all": [],
+    "any": [
+      "route:assign",
+      "route:execute",
+      "route:write"
+    ]
+  },
+  {
+    "route": "POST /routes/plan-preview",
+    "handler": "RoutesController.planPreview",
+    "kind": "permissions",
+    "all": [],
+    "any": [
+      "route:assign",
+      "route:execute",
+      "route:write"
+    ]
+  },
+  {
+    "route": "POST /routes",
+    "handler": "RoutesController.create",
+    "kind": "permissions",
+    "all": [],
+    "any": [
+      "route:assign",
+      "route:execute",
+      "route:write"
+    ]
+  },
+  {
+    "route": "POST /support-access/:id/deny",
+    "handler": "SupportAccessController.deny",
+    "kind": "permissions",
+    "all": [
+      "support:consent"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /support-access/:id/grant",
+    "handler": "SupportAccessController.grant",
+    "kind": "permissions",
+    "all": [
+      "support:consent"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /support-access/:id/revoke",
+    "handler": "SupportAccessController.revoke",
+    "kind": "permissions",
+    "all": [
+      "support:consent"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /uploads",
+    "handler": "UploadsController.upload",
+    "kind": "permissions",
+    "all": [],
+    "any": [
+      "client:write",
+      "collection:write",
+      "payment:write",
+      "route:execute"
+    ]
+  },
+  {
+    "route": "POST /users/:id/invite/resend",
+    "handler": "UsersController.resendInvitation",
+    "kind": "permissions",
+    "all": [
+      "user:invite"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /users/:id/sessions/revoke",
+    "handler": "UsersController.revokeSessions",
+    "kind": "permissions",
+    "all": [
+      "user:sessions:revoke"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /users/invite",
+    "handler": "UsersController.invite",
+    "kind": "permissions",
+    "all": [
+      "user:invite"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /visits/:id/evidence",
+    "handler": "FieldController.addEvidence",
+    "kind": "permissions",
+    "all": [],
+    "any": [
+      "route:assign",
+      "route:execute",
+      "route:write"
+    ]
+  },
+  {
+    "route": "POST /visits",
+    "handler": "FieldController.createVisit",
+    "kind": "permissions",
+    "all": [],
+    "any": [
+      "route:assign",
+      "route:execute",
+      "route:write"
+    ]
+  },
+  {
+    "route": "PUT /arrear-categories",
+    "handler": "ArrearCategoriesController.replace",
+    "kind": "permissions",
+    "all": [
+      "account:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "PUT /clients/:id/income-profile",
+    "handler": "ClientsController.putIncomeProfile",
+    "kind": "permissions",
+    "all": [
+      "client:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "PUT /imports/portfolio/advisors/:code",
+    "handler": "PortfolioImportController.linkAdvisor",
+    "kind": "permissions",
+    "all": [
+      "client:import"
+    ],
+    "any": []
+  },
+  {
+    "route": "PUT /roles/:key/permissions",
+    "handler": "RolesController.update",
+    "kind": "permissions",
+    "all": [
+      "role:write"
+    ],
+    "any": []
+  }
+]

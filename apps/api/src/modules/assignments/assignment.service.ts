@@ -20,6 +20,8 @@ import {
 } from './assignment.errors';
 import { agencyViolations, isAssignable, notAssignable, type AssignScope, type AssignmentChange, type AssignmentReason } from './assignment-rules';
 import { handoffFrom, isHandedOffBy, withHandoff, withoutHandoff } from './assignment-handoff';
+import { AuthorizationService } from '../../common/authz/authorization.service';
+import { PolicyService } from '../../common/authz/policy.service';
 
 /** Cada cuánto barre los vencimientos. Un reemplazo se pide por horas o días: 15 min alcanza y no pesa. */
 export const ASSIGNMENT_EXPIRY_INTERVAL_MS = 15 * 60 * 1000;
@@ -88,6 +90,9 @@ export class AssignmentService implements OnApplicationBootstrap, OnModuleDestro
     private readonly tenant: TenantContextService,
     private readonly audit: AuditService,
     private readonly office: OfficeScopeService,
+    private readonly authz: AuthorizationService = new AuthorizationService(tenant),
+    /** F14 · F2: `credit.assign` (jerarquía real). Lo inyecta Nest; los specs que no validan destinos no lo necesitan. */
+    private readonly policy: PolicyService,
   ) {}
 
   /**
@@ -105,7 +110,7 @@ export class AssignmentService implements OnApplicationBootstrap, OnModuleDestro
 
   /** ¿Quien pide puede elegir el responsable de un crédito? */
   canAssign(): boolean {
-    return this.tenant.can(Permission.ASSIGNMENT_WRITE);
+    return this.authz.can(Permission.ASSIGNMENT_WRITE);
   }
 
   /**
@@ -185,6 +190,8 @@ export class AssignmentService implements OnApplicationBootstrap, OnModuleDestro
       this.tenant.userId,
     );
     if (bad.length > 0) throw assigneeNotEligible(bad);
+    // F14 · F2 (R-13, H-8): además de ser asignable, el destino tiene que estar a mi alcance jerárquico (tier ≤ el mío; el par sólo en oficina hija).
+    await this.policy.assert('credit.assign', { targetIds: ids }, tx);
     if (creditIds && creditIds.length > 0) {
       await this.assertAgency(tx, creditIds, ids);
     }
@@ -544,7 +551,8 @@ export class AssignmentService implements OnApplicationBootstrap, OnModuleDestro
 
   /** Un tenant. Sin contexto de request: la auditoría se escribe en la misma transacción. */
   async expireAccount(accountId: string, now: Date = new Date()): Promise<ExpireResult> {
-    return this.prisma.withTenant(accountId, async (tx) => {
+    // F14 · F2b: trabajo de sistema (sin request): alcance `system`, no el vacío de `withTenant` sin contexto.
+    return this.prisma.withSystemTenant(accountId, async (tx) => {
       const due = await tx.creditAssignment.findMany({
         where: {
           accountId,

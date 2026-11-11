@@ -27,6 +27,10 @@ export const AUTH_ERR = {
   MFA_REQUIRED_BY_POLICY: 'AUTH_011',
   /** Ya hay un segundo factor activo: reenrolar pisaría el secreto y dejaría a la persona afuera. */
   MFA_ALREADY_ENABLED: 'AUTH_012',
+  /** F14 · F1: el rol, la oficina o la política cambiaron desde que se emitió el token → el cliente renueva y reintenta UNA vez. */
+  AUTHZ_STALE: 'AUTHZ_STALE',
+  /** F14 · F1: no se pudo comprobar la versión (Redis caído) → falla cerrado. Distinto de STALE para no provocar un bucle de renovación. */
+  AUTHZ_UNAVAILABLE: 'AUTHZ_UNAVAILABLE',
 } as const;
 
 export const invalidCredentials = () =>
@@ -34,6 +38,12 @@ export const invalidCredentials = () =>
 
 export const invalidToken = () =>
   new UnauthorizedException({ code: AUTH_ERR.INVALID_TOKEN, message: 'Token inválido o expirado' });
+
+export const authzStale = () =>
+  new UnauthorizedException({ code: AUTH_ERR.AUTHZ_STALE, message: 'Tus permisos cambiaron: renovando la sesión' });
+
+export const authzUnavailable = () =>
+  new UnauthorizedException({ code: AUTH_ERR.AUTHZ_UNAVAILABLE, message: 'No se pudo verificar tu sesión, intenta de nuevo' });
 
 export const reuseDetected = () =>
   new UnauthorizedException({

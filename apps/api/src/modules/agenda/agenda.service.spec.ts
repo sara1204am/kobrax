@@ -265,6 +265,9 @@ function makeService(opts: Opts = {}) {
     record: async (e: { entity: string; action: string }) => void calls.audits.push({ entity: e.entity, action: e.action }),
   };
   const clientsService = {
+    // F14 · F4 (D-3): las pantallas de trabajo piden `findOneForWork` (contactos en claro; el documento según el rol).
+    findOneForWork: (id: string) => clientsService.findOne(id, true),
+    canRevealNow: () => true,
     findOne: async (id: string, reveal: boolean) => {
       calls.reveals.push({ id, reveal });
       return {

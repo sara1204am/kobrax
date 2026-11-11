@@ -1,8 +1,5 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
 import { Permission } from '@kobrax/shared';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { TenantGuard } from '../auth/guards/tenant.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { BranchesService } from './branches.service';
 import { AssignMembersDto, CreateBranchDto, CreateBranchTypeDto, MoveBranchDto, UpdateBranchDto, UpdateBranchTypeDto } from './dto/branch.dto';
@@ -12,7 +9,6 @@ import { AssignMembersDto, CreateBranchDto, CreateBranchTypeDto, MoveBranchDto, 
  * la administración de oficinas es un permiso propio que F14 podrá delegar por rol).
  */
 @Controller('branches')
-@UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 export class BranchesController {
   constructor(private readonly branches: BranchesService) {}
 
@@ -88,7 +84,6 @@ export class BranchesController {
 
 /** Catálogo de tipos de oficina por cuenta (Central, Regional, Agencia… editable: R1). */
 @Controller('branch-types')
-@UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 export class BranchTypesController {
   constructor(private readonly branches: BranchesService) {}
 

@@ -10,17 +10,21 @@ describe('visibleCuentaTabs', () => {
   });
 
   it('el administrador ve todas', () => {
-    expect(keys(ROLE_PERMISSIONS[RoleType.ACCOUNT_ADMIN])).toEqual(['general', 'plan', 'cobranza', 'mensajes', 'catalogos', 'oficinas', 'facturacion', 'actividad', 'avanzado']);
+    expect(keys(ROLE_PERMISSIONS[RoleType.ACCOUNT_ADMIN])).toEqual(['general', 'plan', 'cobranza', 'mensajes', 'catalogos', 'facturacion', 'avanzado']);
   });
 
-  it('sin catalog:read no hay «Mensajes» ni «Catálogos»; sin user:read, tampoco «Agencias»', () => {
+  it('sin catalog:read no hay «Mensajes» ni «Catálogos»', () => {
     expect(keys(['account:read'])).toEqual(['general', 'plan', 'cobranza', 'facturacion']);
+  });
+
+  it('F14 · F6: Oficinas, Actividad y Accesos de soporte ya no son pestañas de Cuenta (tienen su sección en el menú)', () => {
+    const all = CUENTA_TABS.map((t) => t.key as string);
+    for (const moved of ['oficinas', 'actividad', 'soporte']) expect(all).not.toContain(moved);
+    expect(keys(['office:read', 'audit:read', 'support:consent'])).toEqual([]);
   });
 
   it('sin account:read no hay ninguna que dependa de la cuenta', () => {
     expect(keys(['catalog:read'])).toEqual(['mensajes', 'catalogos']);
-    expect(keys(['office:read'])).toEqual(['oficinas']);
-    expect(keys(['audit:read'])).toEqual(['actividad']);
     expect(keys(['account:write'])).toEqual(['avanzado']);
     expect(keys([])).toEqual([]);
   });

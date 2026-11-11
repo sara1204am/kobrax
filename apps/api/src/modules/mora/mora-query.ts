@@ -2,7 +2,7 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 import { CollectionPriority, VisitOutcome } from '@prisma/client';
 import { MORA_SORTS, searchTerms, type ArrearRange, type MoraSort } from '@kobrax/shared';
 import type { ListMoraQueryDto } from './dto/mora.dto';
-import { officeScopeKindOf, officeVisibilitySql, type OfficeScopeKind } from '../../common/office-scope/office-scope';
+import { assignedToRootSql, officeInMySubtreeSql, officeScopeKindOf, officeVisibilitySql, type OfficeScopeKind } from '../../common/office-scope/office-scope';
 
 /**
  * El listado de Mora se arma en SQL y no con `findMany` de Prisma porque **ordena por columnas de dos
@@ -166,15 +166,31 @@ export function visibleCreditIdsSql(scope: MoraScope): Prisma.Sql {
 }
 
 /**
- * Clientes visibles: los que tienen al menos un crédito visible, MÁS los que no tienen ningún crédito vivo (un cliente recién
- * creado, sin cartera, no es de nadie todavía y no se esconde: sin esto, el cobrador no vería al cliente que acaba de dar de alta).
+ * Clientes visibles (F14 · F2, H-7): el cliente NO tiene dueño; su visibilidad se DERIVA de los créditos y de su oficina de registro.
+ *  · Todos: los que tienen al menos un crédito visible (la misma regla que la ficha de mora, con responsable/temporal/apoyo vigentes).
+ *  · `ALL`: además los que no tienen ningún crédito vivo (un cliente nuevo no es de nadie todavía).
+ *  · `SUBTREE` / `BRANCH`: además los registrados en una oficina de su subárbol, con o sin crédito vivo (`registered_branch_id`);
+ *    el gerente asignado a la raíz ve también los que no tienen oficina.
+ *  · Cualquiera: el cliente SIN crédito vivo que él mismo dio de alta (`created_by`), para no perder de vista al que acaba de crear.
+ * Sin accesos residuales: nada se guarda en el cliente; al perder el último crédito visible desaparece en la siguiente consulta.
  * Alias de la consulta que llama: `cl` = `clients`.
  */
 export function visibleClientIdsSql(scope: MoraScope): Prisma.Sql {
+  const noLiveCredit = Prisma.sql`NOT EXISTS (SELECT 1 FROM credits cx WHERE cx.client_id = c0.id AND cx.deleted_at IS NULL)`;
+  const me = scope.userId;
+  const cols = { account: Prisma.raw('c0.account_id'), branch: Prisma.raw('c0.registered_branch_id') };
+  const reasons: Prisma.Sql[] = [];
+  if (scope.kind === 'ALL') {
+    reasons.push(noLiveCredit);
+  } else if (me) {
+    reasons.push(Prisma.sql`(c0.created_by = ${me} AND ${noLiveCredit})`);
+    if (scope.kind === 'SUBTREE' || scope.kind === 'BRANCH') reasons.push(officeInMySubtreeSql(me, cols));
+    if (scope.kind === 'SUBTREE') reasons.push(assignedToRootSql(me, cols));
+  }
+  const registered = reasons.length > 0 ? Prisma.join(reasons, ' OR ') : Prisma.sql`FALSE`;
   return Prisma.sql`SELECT cr.client_id FROM credits cr WHERE ${Prisma.join(moraAccessConditions(scope), ' AND ')}
       UNION
-      SELECT c0.id FROM clients c0 WHERE c0.account_id = ${scope.accountId} AND NOT EXISTS (
-        SELECT 1 FROM credits cx WHERE cx.client_id = c0.id AND cx.deleted_at IS NULL)`;
+      SELECT c0.id FROM clients c0 WHERE c0.account_id = ${scope.accountId} AND (${registered})`;
 }
 
 /** Sólo el crédito, para consultas de alcance que no necesitan ni el cliente ni el episodio. */

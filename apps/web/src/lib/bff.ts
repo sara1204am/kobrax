@@ -1,4 +1,5 @@
 import { cookies, headers as requestHeaders } from 'next/headers';
+import { redirect } from 'next/navigation';
 import type { NextResponse } from 'next/server';
 import { SESSION_CHANGED_CODE, SESSION_HEADER, sessionIdFromToken } from './session-sync';
 
@@ -22,6 +23,14 @@ const base = {
   secure: isProd,
   path: '/',
 };
+
+/** F14 · F1 (H-2): la API avisa que cambió el rol, la oficina o la política desde que se firmó el token. */
+export const AUTHZ_STALE_CODE = 'AUTHZ_STALE';
+/** Marca de 20 s: ya se renovó hace un momento. Evita el bucle si la API sigue diciendo AUTHZ_STALE (un segundo aviso = login). */
+export const RENEWED_COOKIE = 'k_renewed';
+const RENEWED_MAX_AGE = 20;
+/** Lo pone el middleware: la ruta que se está renderizando, para volver a ella tras renovar. */
+export const PATH_HEADER = 'x-k-path';
 
 const ACCESS_MAX_AGE = 15 * 60; // 15 min (alineado con el access JWT)
 const REFRESH_MAX_AGE = 7 * 24 * 60 * 60; // 7 días
@@ -81,19 +90,73 @@ export async function apiCall<T>(
   path: string,
   init: RequestInit & { auth?: boolean } = {},
 ): Promise<{ status: number; body: ApiEnvelope<T> }> {
+  const first = await apiCallOnce<T>(path, init);
+  if (!init.auth || first.status !== 401 || first.body.error?.code !== AUTHZ_STALE_CODE) return first;
+
+  /*
+   * F14 · F1 (H-2): el token está al día en firma pero su rol/oficina/política cambiaron. Se renueva y se reintenta **una vez**.
+   * La renovación rota el refresh token, así que SOLO se hace donde se pueden escribir las cookies nuevas (route handlers y
+   * server actions). En una pantalla de servidor no se puede: se manda a `/api/auth/renew`, que renueva y vuelve acá.
+   * Un 401 no ejecuta nada en el servidor, así que reintentar también es seguro para un POST.
+   */
+  if (cookies().get(RENEWED_COOKIE)) return first; // ya se renovó hace instantes y sigue obsoleto → sesión terminada (login)
+  try {
+    cookies().set(RENEWED_COOKIE, '1', { ...base, maxAge: RENEWED_MAX_AGE });
+  } catch {
+    // Pantalla de servidor: no puede escribir cookies.
+    let back = '/dashboard';
+    try {
+      back = requestHeaders().get(PATH_HEADER) || back;
+    } catch {
+      // fuera de un pedido
+    }
+    redirect(`/api/auth/renew?next=${encodeURIComponent(back)}`);
+  }
+  const tokens = await refreshTokens();
+  if (!tokens) return first;
+  cookies().set(COOKIE.access, tokens.accessToken, { ...base, maxAge: ACCESS_MAX_AGE });
+  cookies().set(COOKIE.refresh, tokens.refreshToken, { ...base, maxAge: REFRESH_MAX_AGE });
+  return apiCallOnce<T>(path, init, tokens.accessToken);
+}
+
+/** Pide un par nuevo con el refresh de la cookie. `null` si no hay refresh o la API lo rechaza. */
+export async function refreshTokens(): Promise<{ accessToken: string; refreshToken: string } | null> {
+  const refresh = cookies().get(COOKIE.refresh)?.value;
+  if (!refresh) return null;
+  try {
+    const r = await fetch(`${API_BASE}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-client-type': 'web' },
+      body: JSON.stringify({ refreshToken: refresh }),
+      cache: 'no-store',
+    });
+    if (!r.ok) return null;
+    const json = (await r.json()) as { data?: { accessToken?: string; refreshToken?: string } };
+    const { accessToken, refreshToken } = json.data ?? {};
+    return accessToken && refreshToken ? { accessToken, refreshToken } : null;
+  } catch {
+    return null;
+  }
+}
+
+async function apiCallOnce<T>(
+  path: string,
+  init: RequestInit & { auth?: boolean },
+  accessOverride?: string,
+): Promise<{ status: number; body: ApiEnvelope<T> }> {
   const headers = new Headers(init.headers);
   headers.set('content-type', 'application/json');
   headers.set('x-client-type', 'web');
   forwardClient(headers);
   if (init.auth) {
-    const access = cookies().get(COOKIE.access)?.value;
+    const access = accessOverride ?? cookies().get(COOKIE.access)?.value;
     if (access) {
       /*
        * Control de sesión (W-LOG-54): la pestaña manda con qué sesión se cargó. Si la cookie ya es de
        * otra (login/cambio de empresa en otra pestaña), se rechaza **sin llamar a la API**: así una
        * pestaña dormida no guarda nada en la cuenta equivocada ni a nombre de otra persona.
        */
-      if (sessionMismatch(access)) return sessionChangedResult();
+      if (!accessOverride && sessionMismatch(access)) return sessionChangedResult();
       headers.set('authorization', `Bearer ${access}`);
     }
   }

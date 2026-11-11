@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { Permission } from '@kobrax/shared';
-import { assignedToRootSql, officeInMySubtreeSql, officeScopeKindOf, officeVisibilitySql } from './office-scope';
+import { memberVisibleTo, assignedToRootSql, officeInMySubtreeSql, officeScopeKindOf, officeVisibilitySql } from './office-scope';
 import { OfficeScopeService } from './office-scope.service';
 
 const ROOT = '/r/';
@@ -205,5 +205,40 @@ describe('F13 · A-6 resolveCreditBranch: la oficina del crédito la decide el s
       userBranchAssignment: { findMany: async () => [] },
     } as never;
     await assert.rejects(admin().resolveCreditBranch(tx, { responsibleId: 'sin-oficina' }), (e: { response?: { code?: string } }) => e.response?.code === 'CREDIT_BRANCH_UNRESOLVED');
+  });
+});
+
+describe('memberVisibleTo — Personas por alcance (F14 · F1, R-02)', () => {
+  const REG_A = '/root/regA/';
+  const AG_A1 = '/root/regA/ag1/';
+  const REG_B = '/root/regB/';
+  const regional = { kind: 'OFFICES' as const, paths: [REG_A] };
+
+  it('alcance ALL ve a todos, también a quien no tiene oficina', () => {
+    const all = { kind: 'ALL' as const, paths: [] };
+    assert.equal(memberVisibleTo(all, 'yo', 'otro', []), true);
+  });
+  it('el gerente de una regional ve su regional y sus agencias, NO otra regional', () => {
+    assert.equal(memberVisibleTo(regional, 'yo', 'a', [REG_A]), true);
+    assert.equal(memberVisibleTo(regional, 'yo', 'b', [AG_A1]), true);
+    assert.equal(memberVisibleTo(regional, 'yo', 'c', [REG_B]), false);
+  });
+  it('quien no tiene oficina no se ve con alcance por oficinas', () => {
+    assert.equal(memberVisibleTo(regional, 'yo', 'sin-oficina', []), false);
+  });
+  it('un actor sin asignaciones sólo se ve a sí mismo (falla cerrado)', () => {
+    const none = { kind: 'OFFICES' as const, paths: [] };
+    assert.equal(memberVisibleTo(none, 'yo', 'yo', []), true);
+    assert.equal(memberVisibleTo(none, 'yo', 'otro', [AG_A1]), false);
+  });
+  it('el supervisor de una agencia ve su agencia, no la hermana', () => {
+    const sup = { kind: 'OFFICES' as const, paths: [AG_A1] };
+    assert.equal(memberVisibleTo(sup, 'yo', 'x', [AG_A1]), true);
+    assert.equal(memberVisibleTo(sup, 'yo', 'y', ['/root/regA/ag2/']), false);
+    assert.equal(memberVisibleTo(sup, 'yo', 'z', [REG_A]), false);
+  });
+  it('un id que sólo comparte prefijo de texto no cuenta como subárbol', () => {
+    const sup = { kind: 'OFFICES' as const, paths: ['/root/regA/ag1/'] };
+    assert.equal(memberVisibleTo(sup, 'yo', 'x', ['/root/regA/ag10/']), false);
   });
 });

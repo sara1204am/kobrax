@@ -30,6 +30,7 @@ const REPORTS = [
 let prisma: PrismaClient;
 let accountId: string;
 let token: string;
+let collectorId = '';
 
 /** Un crédito está en mora si está vivo, con días y en un estado que no es cerrado. Misma regla que el trigger. */
 const EN_MORA = `c.deleted_at IS NULL AND c.days_past_due > 0 AND c.status::text NOT IN ('PAID', 'CANCELLED')`;
@@ -77,6 +78,7 @@ describe('Episodios de mora — por las vías reales', { timeout: 600_000 }, () 
     await freshDatabase();
     prisma = db();
     const collector = await prisma.user.findUniqueOrThrow({ where: { email: 'collector@kobrax.demo' }, include: { userAccounts: true } });
+    collectorId = collector.id;
     accountId = collector.userAccounts[0]!.accountId;
     const account = await prisma.account.findUniqueOrThrow({ where: { id: accountId } });
     await prisma.account.update({
@@ -139,7 +141,8 @@ describe('Episodios de mora — por las vías reales', { timeout: 600_000 }, () 
 
   it('una acción manual de la API (marcar y poner al día) abre y cierra el episodio', async () => {
     const credit = await prisma.credit.findFirstOrThrow({
-      where: { accountId, externalSource: null, daysPastDue: 0, status: 'ACTIVE', deletedAt: null },
+      // F14 · F2b: un crédito DEL cobrador que entra (la barrera de alcance niega, con razón, marcar mora en el de otra persona).
+      where: { accountId, externalSource: null, daysPastDue: 0, status: 'ACTIVE', deletedAt: null, assignedManagerId: collectorId },
     });
     const marca = await call(token, 'POST', `/credits/${credit.id}/arrears`, { days: 12 });
     assert.ok(marca.status === 200 || marca.status === 201, JSON.stringify(marca.error));

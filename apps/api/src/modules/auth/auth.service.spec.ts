@@ -44,6 +44,9 @@ function makeAuth(opts: {
   brand?: { businessName: string; phone: string | null; logoUrl: string | null; configuration?: unknown };
   /** Leer la cuenta falla (base caída). */
   brandFails?: boolean;
+  /** F14 · F6: la persona de plataforma y su sesión de soporte (lo que lee `/auth/me` para actor de plataforma). */
+  platform?: { id: string; email: string; isActive: boolean } | null;
+  support?: { id: string; expiresAt: Date; revokedAt?: Date | null; consentStatus?: string } | null;
 }) {
   const calls = {
     userUpdate: [] as { where: { id: string }; data: Record<string, unknown> }[],
@@ -59,23 +62,35 @@ function makeAuth(opts: {
       },
     },
     role: { findUnique: async () => ({ name: 'MANAGER' }) },
+    platformUser: { findUnique: async () => opts.platform ?? null },
     $queryRaw: async () => opts.memberships ?? [],
     // `issueTokens` escribe la sesión y el refresh dentro del tenant destino.
     withTenant: async <T>(_accountId: string, fn: (tx: unknown) => Promise<T>): Promise<T> =>
       fn({
         userSession: { create: async () => ({ id: 'sess-nueva' }) },
         refreshToken: { create: async () => ({}) },
+        // F14 · F1: `av` sale de la membresía en la DB (aquí: versión 3).
+        userAccount: { findFirst: async () => ({ authzVersion: 3 }) },
       }),
     // `/auth/me` lee la marca del negocio por acá (no pasa por TenantGuard).
     withSystemTenant: async <T>(_accountId: string, fn: (tx: unknown) => Promise<T>): Promise<T> => {
       if (opts.brandFails) throw new Error('base caída');
-      return fn({ account: { findFirst: async () => opts.brand ?? null } });
+      return fn({ account: { findFirst: async () => opts.brand ?? null }, supportSession: { findFirst: async () => opts.support ?? null } });
     },
   };
   const permissions = {
     forRole: async (roleId: string) => {
       calls.forRole.push(roleId);
       return ['collection:read'];
+    },
+    // F14 · F5: la membresía resuelve sus permisos por el rol de la cuenta; estos dobles no tienen rol de cuenta → cae al rol global (mismo resultado).
+    forMembership: async (_accountId: string, _userId: string, roleId: string) => {
+      calls.forRole.push(roleId);
+      return { permissions: ['collection:read'], source: 'global' as const };
+    },
+    forMembershipIn: async (_tx: unknown, ua: { roleId: string }) => {
+      calls.forRole.push(ua.roleId);
+      return { permissions: ['collection:read'], source: 'global' as const };
     },
   };
   const sessions = {
@@ -100,6 +115,8 @@ function makeAuth(opts: {
     sessions as never,
     mfa as never,
     audit as never,
+    // F14 · F1: `pv` global = 7; `warm` no hace nada (no hay Redis en esta prueba).
+    { currentPolicyVersion: async () => 7, warm: async () => {} } as never,
   );
   return { service, calls, audited };
 }
@@ -250,6 +267,14 @@ describe('AuthService — cambio de empresa con la sesión ya iniciada (W1)', ()
     );
   });
 
+  it('F14·F1: el access emitido lleva av y pv leídos de la DB (H-2)', async () => {
+    const { service } = makeAuth({ user, memberships: [memb('SUPERVISOR', 'a1'), memb('COLLECTOR', 'a2')] });
+    const res = await service.switchAccount('u9', 'sess-vieja', 'a2', META);
+    const claims = token.verifyAccess(res.accessToken!);
+    assert.equal(claims.av, 3);
+    assert.equal(claims.pv, 7);
+  });
+
   it('lista sólo las empresas donde el usuario puede operar', async () => {
     const { service } = makeAuth({
       user,
@@ -396,6 +421,7 @@ describe('AuthService.me — sesión del token (W-LOG-54)', () => {
       name: 'Cobranzas Pérez',
       phone: '70000000',
       logoUrl: '/api/uploads/x.png',
+      timezone: null,
       preferences: { workDays: [1, 2, 3, 4, 5, 6], workStart: '08:00', workEnd: '18:00', weekStart: 'MON', defaultLocale: 'es' },
     });
   });
@@ -423,5 +449,47 @@ describe('AuthService.me — sesión del token (W-LOG-54)', () => {
     const me = await service.me({ userId: 'u1', accountId: 'a1', roleId: 'r1', permissions: [] });
     assert.equal(me.account, null);
     assert.equal(me.userId, 'u1');
+  });
+});
+
+describe('AuthService.me — persona de plataforma en sesión de soporte (F14 · F6)', () => {
+  const claims = { userId: 'p1', accountId: 'a1', roleId: 'platform-support', permissions: ['client:read'], sessionId: 'support:ss1', actorType: 'PLATFORM' as const, supportSessionId: 'ss1' };
+
+  it('informa la sesión de soporte y cuándo vence, sin buscar un usuario de empresa', async () => {
+    const expiresAt = new Date(Date.now() + 3600_000);
+    const { service } = makeAuth({ user: {}, platform: { id: 'p1', email: 'soporte@kobrax.test', isActive: true }, support: { id: 'ss1', expiresAt } });
+    const me = await service.me(claims);
+    assert.deepEqual(me.supportSession, { id: 'ss1', expiresAt: expiresAt.toISOString() });
+    assert.equal(me.email, 'soporte@kobrax.test');
+    assert.equal(me.accountId, 'a1');
+    assert.deepEqual(me.permissions, ['client:read']);
+    assert.equal(me.profile, null);
+  });
+
+  it('🔴 no informa una sesión revocada, vencida o con el consentimiento rechazado: el banner no debe decir algo falso', async () => {
+    const plat = { id: 'p1', email: 'soporte@kobrax.test', isActive: true };
+    const future = new Date(Date.now() + 3600_000);
+    for (const support of [
+      { id: 'ss1', expiresAt: future, revokedAt: new Date() },
+      { id: 'ss1', expiresAt: new Date(Date.now() - 1000) },
+      { id: 'ss1', expiresAt: future, consentStatus: 'DENIED' },
+      { id: 'ss1', expiresAt: future, consentStatus: 'REVOKED' },
+    ]) {
+      const { service } = makeAuth({ user: {}, platform: plat, support });
+      assert.equal((await service.me(claims)).supportSession, undefined);
+    }
+  });
+
+  it('una persona de plataforma desactivada o inexistente no obtiene identidad', async () => {
+    const { service } = makeAuth({ user: {}, platform: { id: 'p1', email: 'soporte@kobrax.test', isActive: false } });
+    await assert.rejects(() => service.me(claims));
+    const { service: s2 } = makeAuth({ user: {}, platform: null });
+    await assert.rejects(() => s2.me(claims));
+  });
+
+  it('un usuario de empresa nunca trae supportSession', async () => {
+    const { service } = makeAuth({ user: { id: 'u1', email: 'm@kobrax.demo', profile: null, mfaEnabled: false, requiresPasswordChange: false } });
+    const me = await service.me({ userId: 'u1', accountId: 'a1', roleId: 'r1', permissions: [] });
+    assert.equal(me.supportSession, undefined);
   });
 });

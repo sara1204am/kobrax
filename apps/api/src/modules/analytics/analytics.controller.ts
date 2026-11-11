@@ -1,8 +1,5 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
 import { Permission } from '@kobrax/shared';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { TenantGuard } from '../auth/guards/tenant.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { AnalyticsService } from './analytics.service';
 import { AnalyticsQueryDto, TrendQueryDto } from './dto/analytics.dto';
@@ -15,7 +12,6 @@ import { AnalyticsQueryDto, TrendQueryDto } from './dto/analytics.dto';
  * gerencia, y eso es a propósito.
  */
 @Controller('analytics')
-@UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 @Roles(Permission.REPORT_READ)
 export class AnalyticsController {
   constructor(private readonly analytics: AnalyticsService) {}
@@ -40,7 +36,9 @@ export class AnalyticsController {
     return this.analytics.agendaSummary(query);
   }
 
+  // F14 · F4: el mapa lleva el punto GPS de cada parada (dónde está el deudor) → también `client:contact:read` (VIEWER no).
   @Get('visit-map')
+  @Roles(Permission.REPORT_READ, Permission.CLIENT_CONTACT_READ)
   visits(@Query() query: AnalyticsQueryDto) {
     return this.analytics.visitMap(query);
   }

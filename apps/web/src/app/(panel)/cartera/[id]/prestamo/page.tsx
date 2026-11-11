@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
-import type { AccountInfo, Assignee, ClientDetail, MeInfo, Member } from '@kobrax/shared';
+import type { AccountInfo, Assignee, ClientDetail, ClientPreview, MeInfo, Member } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
 import { EmptyState } from '@/components/panel-ui';
 import { fullName } from '@/lib/format';
@@ -29,15 +29,27 @@ export default async function PrestamoPage({ params }: { params: { id: string } 
     apiCall<Member[]>('/users', { method: 'GET', auth: true }),
   ]);
 
-  if (client.status === 404) notFound();
-  if (client.status !== 200 || !client.body.data) {
+  // F14 · F2b: un cliente que lleva otra persona no se ve (404) pero se le puede crear MI crédito: se usa su vista mínima.
+  let preview: ClientPreview | null = null;
+  if (client.status === 404) {
+    const pv = await apiCall<ClientPreview>(`/clients/${params.id}/preview`, { method: 'GET', auth: true });
+    if (pv.status !== 200 || !pv.body.data) notFound();
+    preview = pv.body.data;
+  } else if (client.status !== 200 || !client.body.data) {
     return <EmptyState title={t('noAccess')} text={client.body.error?.message} />;
   }
+  const clientName = preview ? preview.displayName : fullName(client.body.data!);
 
   return (
+    <>
+      {preview && (
+        <p role="note" className="mb-4 rounded-lg bg-k-highlight px-4 py-3 text-[13px] text-k-periwinkle">
+          {t('previewNotice', { count: preview.otherCredits?.count ?? 0, names: preview.otherCredits?.responsibles.map((p) => p.name).join(', ') || '—' })}
+        </p>
+      )}
     <LoanForm
       clientId={params.id}
-      clientName={fullName(client.body.data)}
+      clientName={clientName}
       assignees={assignees.body.data ?? []}
       currency={account.body.data?.currencyCode ?? 'BOB'}
       defaultArrearsMethod={account.body.data?.arrearsMethod}
@@ -47,5 +59,6 @@ export default async function PrestamoPage({ params }: { params: { id: string } 
         (team.body.data ?? []).find((m) => m.userId === me.body.data?.userId)?.branchId,
       )}
     />
+    </>
   );
 }

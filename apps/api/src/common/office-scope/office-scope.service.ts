@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { PrismaClient } from '@prisma/client';
 import { collapseOfficePaths, officeDepth, officeInScope } from '@kobrax/shared';
 import { TenantContextService } from '../context/tenant-context.service';
-import { officeScopeKindOf, type AssignScope, type OfficeScopeKind } from './office-scope';
+import { memberVisibleTo, officeScopeKindOf, type AssignScope, type OfficeScopeKind } from './office-scope';
 import { officeInvalid, officeUnresolved } from './office-scope.errors';
 
 /**
@@ -63,6 +63,17 @@ export class OfficeScopeService {
     // La raíz es el único nodo de profundidad 0: su ruta es un solo id. Asignado a ella = cubre todo el árbol.
     if (kind === 'SUBTREE' && paths.some((p) => officeDepth(p) === 0)) return { kind: 'ALL', paths: [] };
     return { kind: 'OFFICES', paths };
+  }
+
+  /**
+   * F14 · F1 (R-02): de estos miembros, los que el actor ve en Personas. Con alcance `ALL` no consulta nada.
+   */
+  async visibleMemberIds(tx: PrismaClient, userIds: string[]): Promise<Set<string>> {
+    const scope = await this.assignScope(tx);
+    if (scope.kind === 'ALL') return new Set(userIds);
+    const paths = await this.assignmentPaths(tx, userIds);
+    const me = this.tenant.userId;
+    return new Set(userIds.filter((id) => memberVisibleTo(scope, me, id, paths.get(id) ?? [])));
   }
 
   /** ¿Está asignado (vigente) a la raíz de su cuenta, y activo? */

@@ -52,7 +52,7 @@ export class PasswordService {
     });
 
     if (!this.config.isProduction) {
-      this.logger.warn(`[DEV] Reset token para ${user.email}: ${token}`);
+      this.logger.warn(`[DEV] Reset token del usuario ${user.id}: ${token}`); // F14 · F4: sin correo en los registros
     }
     const { subject, text } = passwordResetBody(token);
     await this.mail.send(user.email, subject, text);

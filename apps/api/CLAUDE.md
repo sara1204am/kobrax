@@ -15,7 +15,7 @@ src/
 │   │   ├── auth.controller.ts
 │   │   ├── auth.service.ts
 │   │   ├── strategies/         # JWT, local, refresh
-│   │   ├── guards/             # JwtAuthGuard, RolesGuard
+│   │   ├── guards/             # JwtAuthGuard, TenantGuard, AuthzGuard (globales)
 │   │   ├── decorators/         # @CurrentUser(), @Roles()
 │   │   └── dto/
 │   ├── mora/                   # Central de Mora: una fila por crédito, gestiones, promesas, notas
@@ -130,9 +130,11 @@ EVIDENCE_001 → Hash de evidencia inválido
 
 ## Seguridad en cada endpoint
 ```typescript
-// Stack de guards obligatorio en endpoints protegidos:
-@UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
-@Roles(Permission.COLLECTION_WRITE)
+// F14·F3: los guards (JwtAuthGuard → TenantGuard → AuthzGuard) son GLOBALES: no se pone @UseGuards.
+// Cada handler DECLARA su contrato; sin contrato se niega (403 AUTHZ_000):
+@Roles(Permission.COLLECTION_WRITE)        // o @RolesAny(...), @Authz({...}), @Authenticated(), @Public()
+// Decisiones por fila en servicios: AuthorizationService / PolicyService (nunca tenant.can).
+// Ver src/modules/auth/CLAUDE.md y authz-coverage.spec.ts.
 ```
 
 ## WebSocket Gateway (supervisión en tiempo real)

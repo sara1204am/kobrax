@@ -41,7 +41,7 @@ describe('AccountActivityService.activity', () => {
     const { service, calls } = makeService();
     await service.activity({});
     assert.equal(calls.where!.accountId, 'acc-A');
-    assert.deepEqual((calls.where!.entity as { in: string[] }).in.sort(), ['account', 'account_request', 'arrear_category', 'branch', 'catalog_item', 'user_account']);
+    assert.deepEqual((calls.where!.entity as { in: string[] }).in.sort(), ['account', 'account_request', 'arrear_category', 'branch', 'catalog_item', 'support_session', 'user_account']);
   });
 
   it('🔴 un `entity` fuera de la lista se ignora: no abre el registro entero (pagos, clientes…)', async () => {

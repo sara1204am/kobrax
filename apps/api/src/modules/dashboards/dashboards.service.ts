@@ -5,6 +5,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { CreateDashboardDto, UpdateDashboardDto, WidgetDto } from './dto/dashboard.dto';
+import { AuthorizationService } from '../../common/authz/authorization.service';
 
 const notFound = () => new NotFoundException({ code: 'RESOURCE_NOT_FOUND', message: 'Tablero no encontrado' });
 const notYours = () =>
@@ -43,6 +44,7 @@ export class DashboardsService {
     private readonly prisma: PrismaService,
     private readonly tenant: TenantContextService,
     private readonly audit: AuditService,
+    private readonly authz: AuthorizationService = new AuthorizationService(tenant),
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -51,7 +53,7 @@ export class DashboardsService {
 
   private assertCanWrite(d: Dashboard): void {
     const mine = d.createdBy && d.createdBy === this.tenant.userId;
-    if (!mine && !this.tenant.can(Permission.ACCOUNT_WRITE)) throw notYours();
+    if (!mine && !this.authz.can(Permission.ACCOUNT_WRITE)) throw notYours();
   }
 
   /**
@@ -67,7 +69,7 @@ export class DashboardsService {
    * mueve algo.
    */
   private async assertCanSetDefault(tx: PrismaClient): Promise<void> {
-    if (this.tenant.can(Permission.ACCOUNT_WRITE)) return;
+    if (this.authz.can(Permission.ACCOUNT_WRITE)) return;
     const existing = await tx.dashboard.findFirst({ where: { isDefault: true, deletedAt: null } });
     if (existing) throw notYours();
   }

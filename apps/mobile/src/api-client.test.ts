@@ -117,3 +117,31 @@ describe('authedFetch — 401 por credencial equivocada no es sesión muerta', (
     expect(mockFetch).toHaveBeenCalledTimes(3);
   });
 });
+
+describe('authedFetch — AUTHZ_STALE (F14 · F1, H-2)', () => {
+  const stale = { status: 401, data: null, error: { code: 'AUTHZ_STALE', message: 'x' } };
+
+  it('AUTHZ_STALE → refresca y reintenta UNA vez con el token nuevo → 200', async () => {
+    mockGetSession.mockResolvedValue(SESSION);
+    mockFetch
+      .mockResolvedValueOnce(stale)
+      .mockResolvedValueOnce({ status: 200, data: { accessToken: 'a2', refreshToken: 'r2' }, error: null })
+      .mockResolvedValueOnce({ status: 200, data: { ok: 1 }, error: null });
+    const res = await authedFetch('/x');
+    expect(res.status).toBe(200);
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(mockFetch).toHaveBeenLastCalledWith('/x', expect.objectContaining({ token: 'a2' }));
+  });
+
+  it('segundo AUTHZ_STALE tras refrescar → no reintenta otra vez y limpia la sesión (login)', async () => {
+    mockGetSession.mockResolvedValue(SESSION);
+    mockFetch
+      .mockResolvedValueOnce(stale)
+      .mockResolvedValueOnce({ status: 200, data: { accessToken: 'a2', refreshToken: 'r2' }, error: null })
+      .mockResolvedValueOnce(stale);
+    const res = await authedFetch('/x');
+    expect(res.status).toBe(401);
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(clearSession).toHaveBeenCalled();
+  });
+});

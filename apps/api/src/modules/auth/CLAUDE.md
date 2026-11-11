@@ -39,60 +39,44 @@ interface JwtPayload {
 
 ## RBAC (Control de Acceso Basado en Roles)
 
-### Jerarquía de Roles (predefinidos)
+### Roles del sistema (plantillas; F14)
 ```
-SUPER_ADMIN    → acceso total al sistema (solo Kobrax)
-ACCOUNT_ADMIN  → administrador del tenant
-MANAGER        → supervisor de sucursal
-SUPERVISOR     → supervisa cobradores
-COLLECTOR      → cobrador en campo
-AUDITOR        → solo lectura + reportes
+SUPER_ADMIN    → plataforma (un único usuario de infraestructura; ninguna ruta lo crea ni edita)
+ACCOUNT_ADMIN  → administrador del tenant (todos los permisos)
+MANAGER        → gerente regional (alcance de subárbol de su oficina)
+SUPERVISOR     → supervisa a su agencia (alcance de agencia)
+COLLECTOR      → cobrador en campo (lo suyo)
+AUDITOR / VIEWER → sólo lectura
 ```
+El nivel (`Role.level`) y los permisos por rol salen de `ROLE_PERMISSIONS` (`packages/shared/src/constants/permissions.ts`, fuente única, que
+el seed vuelca a `role_permissions`). El alcance de datos es un permiso más: `data:scope:all|subtree|branch` (nada → sólo lo propio).
 
-### Scopes de Permiso
-```
-global  → sobre todos los tenants (solo SUPER_ADMIN)
-account → sobre todo el tenant
-branch  → sobre su sucursal
-own     → solo sobre sus propios recursos
-```
+### Permisos granulares (nomenclatura `{recurso}:{acción}`)
+Catálogo completo: `Permission` en `@kobrax/shared`. Ejemplos: `collection:read`, `route:execute`, `credit:write`, `user:sessions:revoke`, `data:scope:subtree`.
 
-### Permisos Granulares (nomenclatura: {recurso}:{acción})
-```
-collection:read, collection:write, collection:export, assignment:write
-payment:read, payment:write, payment:approve
-route:read, route:write, route:assign
-client:read, client:write
-report:read, report:export
-user:read, user:write, user:invite
-role:read, role:write
-audit:read
-```
+### Contrato de acceso de cada endpoint (F14 · F3, ADR-F14-03)
+**Los guards son GLOBALES** y corren en este orden: `RateLimitGuard`, `AppVersionGuard`, `JwtAuthGuard` (sesión + versiones `av`/`pv`), `TenantGuard`
+(tenant presente, sólo para handlers con permisos) y `AuthzGuard` (permisos). **No se pone `@UseGuards` en los controladores.** Cada handler declara
+UNO de estos contratos; **sin ninguno se niega: 403 `AUTHZ_000`** (deny by default):
 
-### Implementación en NestJS
 ```typescript
-// Guard de roles
-@Injectable()
-export class RolesGuard implements CanActivate {
-  canActivate(context: ExecutionContext): boolean {
-    const requiredPermissions = this.reflector.get<string[]>(
-      'permissions', context.getHandler()
-    );
-    const user = context.switchToHttp().getRequest().user;
-    return requiredPermissions.every(p => user.permissions.includes(p));
-  }
-}
-
-// Decorador
-export const Roles = (...permissions: string[]) =>
-  SetMetadata('permissions', permissions);
-
-// Uso en controller
-@Get()
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('collection:read')
-async findAll() { ... }
+@Public()                                   // sin sesión: login, alta de cuenta, salud
+@Authenticated()                            // sólo sesión válida: perfil propio, MFA, notificaciones
+@Roles(Permission.COLLECTION_READ)          // TODOS los permisos (alias de @Authz({ all }))
+@RolesAny(Permission.ROUTE_EXECUTE, Permission.ROUTE_ASSIGN)   // ALGUNO (alias de @Authz({ any }))
+@Authz({ all: [...], any: [...] })          // las dos condiciones
+@Policy('credit.writeOff')                  // la decisión fina (para quién / sobre qué fila) vive en esa política
+@Destructive()                              // acción de riesgo alto (marca; la confirmación llega en F6/F8)
 ```
+Un contrato en la **clase** vale para todos sus handlers; el del handler lo reemplaza. La resolución es única (`authz-access.ts`).
+
+- **Verificación:** `src/modules/authz-coverage.spec.ts` recorre todos los controladores y exige contrato en cada handler; compara la tabla con
+  `docs/epics/F14/authz-snapshot.json` (cambiar una puerta = cambiar el snapshot en el mismo commit, y lo aprueba la usuaria).
+- **Rollback:** `AUTHZ_DENY_BY_DEFAULT=log` (un release): lo no declarado pasa y se registra en el log.
+- **Servicios:** no llaman a `tenant.can(...)`: usan `AuthorizationService` (`common/authz/`): `can/canAny/canAll/assert`, y `assertPolicy` para las
+  políticas puras (`policies/`). Las que necesitan datos de la DB van por `PolicyService` + `FactsLoader`. Lista blanca de `tenant.can`: los dos
+  resolvedores de alcance (`office-scope.service.ts`, `mora-query.ts`); una prueba lo vigila.
+- **Nunca** aceptar `accountId`/`userId` del actor en un DTO (N-13): salen de la sesión (`authz-dto-ids.spec.ts`).
 
 ## Multi-Tenant: Aislamiento Total
 
@@ -115,16 +99,9 @@ export class TenantMiddleware implements NestMiddleware {
 }
 ```
 
-### TenantGuard (validación de recursos)
-```typescript
-// Verifica que el recurso pertenece al tenant del usuario
-// Nunca confiar solo en el ID del recurso — siempre verificar accountId
-async canActivate(context: ExecutionContext): Promise<boolean> {
-  const { params, user } = context.switchToHttp().getRequest();
-  const resource = await this.service.findOne(params.id);
-  return resource?.accountId === user.accountId;
-}
-```
+### TenantGuard
+Guard global: exige `accountId` en la sesión a los handlers con permisos (403 `TENANT_001`). **No valida recursos**: el aislamiento por tenant lo
+da `prisma.withTenant(accountId, …)` + RLS, y el alcance por oficina `OfficeScopeService`/`moraAccessConditions`. Nunca confiar sólo en el ID del recurso.
 
 ## Cifrado y Hashing
 
@@ -184,9 +161,9 @@ Toda mutación de datos debe registrar en `audit_logs`:
 
 ## Checklist de Seguridad por Endpoint
 Antes de marcar un endpoint como listo:
-- [ ] JwtAuthGuard aplicado
-- [ ] TenantGuard aplicado (si accede a recursos del tenant)
-- [ ] RolesGuard con permiso correcto
+- [ ] Contrato de acceso declarado (`@Public` / `@Authenticated` / `@Roles` / `@RolesAny` / `@Authz`); sin él se niega
+- [ ] Si hay decisión contextual: `@Policy` + política en `common/authz/policies/`
+- [ ] Snapshot de puertas actualizado (`UPDATE_AUTHZ_SNAPSHOT=1 pnpm test`) y aprobado
 - [ ] DTO con validación class-validator
 - [ ] accountId siempre incluido en queries
 - [ ] Audit log registrado en mutaciones

@@ -1,4 +1,5 @@
 import { describe, it } from 'node:test';
+import { fakePolicy } from '../../common/authz/testing';
 import assert from 'node:assert/strict';
 import { fakePlanLimits } from '../../common/plan/plan-test-utils';
 import { ClientsService } from './clients.service';
@@ -116,7 +117,7 @@ function makeService(
     creditActivity: { groupBy: async () => opts.pdf?.lastActions ?? [] },
     account: { findUnique: async () => ({ businessName: 'Demo', currencyCode: 'BOB' }) },
   };
-  const prisma = { withTenant: async (_acc: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
+  const prisma = { withTenant: async (_acc: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx), elevated: async (_tx: unknown, fn: () => Promise<unknown>) => fn() };
   // `can` por defecto dice que sí a todo; los tests de la bitácora le pasan la lista que quieren.
   const tenant = { accountId: 'acc-A', can: (p: string) => opts.permissions?.includes(p) ?? true };
   const crypto = {
@@ -142,6 +143,8 @@ function makeService(
     blind as never,
     audit as never,
     fakePlanLimits(),
+    undefined,
+    fakePolicy().service,
   );
   return { service, calls };
 }

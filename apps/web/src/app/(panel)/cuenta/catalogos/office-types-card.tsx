@@ -6,7 +6,7 @@ import { Section } from '@/components/panel-ui';
 import { usePermissions } from '@/components/permissions';
 import { sendJson } from '@/lib/client';
 import type { OfficeType } from '@/lib/offices';
-import { useOfficeApi } from '../oficinas/use-office-api';
+import { useOfficeApi } from '../../organizacion/use-office-api';
 
 /**
  * Los tipos de oficina de la cuenta (Central, Regional, Agencia…) viven con el resto de los catálogos del negocio.

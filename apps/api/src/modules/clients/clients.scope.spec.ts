@@ -1,4 +1,5 @@
 import { describe, it } from 'node:test';
+import { fakePolicy } from '../../common/authz/testing';
 import assert from 'node:assert/strict';
 import { Permission } from '@kobrax/shared';
 import { fakePlanLimits } from '../../common/plan/plan-test-utils';
@@ -27,8 +28,10 @@ function makeService(permissions: string[], visibleIds: string[]) {
       findFirst: async (args: { where: { id?: string } }) => (args.where.id ? row(args.where.id) : null),
     },
     clientIncomeProfile: { findFirst: async () => null },
+    // F14 · F2: `otherCredits` mira los créditos del cliente; acá no hay ninguno que esconder.
+    credit: { findMany: async () => [] },
   };
-  const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
+  const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx), elevated: async (_tx: unknown, fn: () => Promise<unknown>) => fn() };
   const tenant = { accountId: 'acc-A', userId: 'u1', can: (p: string) => permissions.includes(p) };
   const crypto = { encrypt: (v: string) => v, decrypt: (v: string) => v };
   const service = new ClientsService(
@@ -38,6 +41,8 @@ function makeService(permissions: string[], visibleIds: string[]) {
     { hash: () => null } as never,
     { record: async () => undefined } as never,
     fakePlanLimits(),
+    undefined,
+    fakePolicy().service,
   );
   return { service, sql, findManyWhere };
 }
@@ -99,4 +104,18 @@ describe('Clientes · alcance por oficina (D-7)', () => {
       });
     });
   }
+});
+
+describe('findOne — otherCredits es opt-in (F14 · F2)', () => {
+  it('sin pedirlo (PDF y otros llamadores internos) no consulta ni devuelve otherCredits', async () => {
+    const { service, sql } = makeService([Permission.DATA_SCOPE_BRANCH], ['c1']);
+    const r = await service.findOne('c1', false);
+    assert.equal('otherCredits' in r, false);
+  });
+
+  it('pedido por la ficha lo trae (null si el actor ve todos los créditos)', async () => {
+    const { service } = makeService([Permission.DATA_SCOPE_BRANCH], ['c1']);
+    const r = await service.findOne('c1', false, true);
+    assert.equal('otherCredits' in r, true);
+  });
 });

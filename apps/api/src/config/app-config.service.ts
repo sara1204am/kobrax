@@ -36,6 +36,36 @@ export class AppConfigService {
   get jwtRefreshSecret() {
     return this.get('JWT_REFRESH_SECRET');
   }
+  /** F14 · F3 (D-1): `true` = un handler sin contrato de acceso se niega. */
+  get authzDenyByDefault(): boolean {
+    return this.get('AUTHZ_DENY_BY_DEFAULT') !== 'log';
+  }
+
+  /**
+   * F14 · F2b (D-1): la segunda barrera de RLS por alcance. `off` (por omisión) = las policies no evalúan nada; `log` = registran lo que
+   * habrían negado; `enforce` = niegan. Cualquier otro valor cuenta como `off` (falla hacia lo que ya funcionaba).
+   */
+  get scopeRlsMode(): 'off' | 'log' | 'enforce' {
+    const v = this.get('SCOPE_RLS_MODE');
+    return v === 'log' || v === 'enforce' ? v : 'off';
+  }
+
+  /** F14 · F4 (D-2): regla «documento enmascarado y sin revelar en móvil». Apagada por omisión (la edición de cliente del móvil aún revela). */
+  get piiMobileMask(): boolean {
+    return this.get('PII_MOBILE_MASK') === 'on';
+  }
+
+  /**
+   * F14 · F4: secreto con el que se firman los enlaces temporales de archivos. Si no se define `FILE_LINK_SECRET` se deriva del secreto del JWT
+   * (un secreto distinto por propósito: un enlace firmado no sirve como token de sesión ni al revés).
+   */
+  get fileLinkSecret(): string {
+    return this.get('FILE_LINK_SECRET') || `${this.get('JWT_SECRET')}:file-link`;
+  }
+
+  get authzVersionCheck(): boolean {
+    return this.get('AUTHZ_VERSION_CHECK') !== 'off';
+  }
   get jwtExpiresIn() {
     return this.get('JWT_EXPIRES_IN');
   }

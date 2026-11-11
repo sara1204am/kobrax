@@ -21,6 +21,16 @@ export interface AuditEntry {
  * del `TenantContextService`. Redacta PII en los snapshots `before/after`.
  * Si no hay contexto de tenant (request no autenticado) → no audita (la tabla exige `account_id`).
  */
+/**
+ * Quién actuó. Un usuario de la cuenta va por `userId`; la persona de plataforma (sesión de soporte) NO es un usuario de empresa: `userId` queda nulo y el
+ * rastro lleva `actorType = PLATFORM`, su id y la sesión de soporte (F14 · F5).
+ */
+function actorOf(ctx: { userId: string; actorType?: 'PLATFORM'; supportSessionId?: string }) {
+  return ctx.actorType === 'PLATFORM'
+    ? { userId: null, actorType: 'PLATFORM' as const, actorId: ctx.userId, supportSessionId: ctx.supportSessionId ?? null }
+    : { userId: ctx.userId };
+}
+
 @Injectable()
 export class AuditService {
   private readonly logger = new Logger(AuditService.name);
@@ -42,7 +52,7 @@ export class AuditService {
         tx.auditLog.create({
           data: {
             accountId: ctx.accountId,
-            userId: ctx.userId,
+            ...actorOf(ctx),
             action: entry.action,
             entity: entry.entity,
             entityId: entry.entityId,
@@ -61,6 +71,29 @@ export class AuditService {
   }
 
   /**
+   * Escribe la entrada DENTRO de la transacción del cambio (F14 · F7, D-5): si la auditoría falla, el cambio NO queda. Para lo que no puede
+   * existir sin su rastro (permisos de un rol). Sin contexto de tenant lanza: un cambio sensible sin quién ni cuándo no se hace.
+   * Mismas reglas de PII que `record`.
+   */
+  async recordInTx(tx: Prisma.TransactionClient, entry: AuditEntry): Promise<void> {
+    const ctx = this.tenantContext.get();
+    if (!ctx) throw new Error('recordInTx requiere un request autenticado');
+    await tx.auditLog.create({
+      data: {
+        accountId: ctx.accountId,
+        ...actorOf(ctx),
+        action: entry.action,
+        entity: entry.entity,
+        entityId: entry.entityId,
+        before: (entry.before === undefined ? undefined : redactPII(entry.before, entry.redactKeys)) as Prisma.InputJsonValue | undefined,
+        after: (entry.after === undefined ? undefined : redactPII(entry.after, entry.redactKeys)) as Prisma.InputJsonValue | undefined,
+        ip: ctx.ip,
+        userAgent: ctx.userAgent,
+      },
+    });
+  }
+
+  /**
    * Muchas entradas en una sola escritura. Para lo que genera una importación: un evento por crédito
    * que apareció, faltó o volvió, que en un reporte de miles de filas serían miles de inserts sueltos.
    * Mismas reglas que `record`: contexto del tenant, PII redactada, y un fallo no rompe la operación.
@@ -71,7 +104,7 @@ export class AuditService {
 
     const data = entries.map((entry) => ({
       accountId: ctx.accountId,
-      userId: ctx.userId,
+      ...actorOf(ctx),
       action: entry.action,
       entity: entry.entity,
       entityId: entry.entityId,

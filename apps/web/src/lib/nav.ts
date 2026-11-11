@@ -18,14 +18,19 @@ export type NavKey =
   | 'team'
   | 'account'
   | 'export'
+  | 'organization'
+  | 'activity'
+  | 'accessSecurity'
   | 'profile'
   | 'security';
 
 export interface NavItem {
   label: NavKey;
   href: string;
-  /** Permiso necesario para verlo. `null` = lo ve cualquiera con sesión. */
+  /** Permiso necesario para verlo. `null` = lo ve cualquiera con sesión (salvo que tenga `anyOf`). */
   permission: Permission | null;
+  /** F14 · F6: «cualquiera de» estos permisos (la sección Seguridad). Si está, manda sobre `permission`. */
+  anyOf?: readonly Permission[];
   /** `false` mientras el módulo no exista: se pinta en gris y **no navega**. */
   built: boolean;
   /**
@@ -53,9 +58,19 @@ export const NAV: NavItem[] = [
   { label: 'agenda', href: '/agenda', permission: Permission.AGENDA_READ, built: true },
   { label: 'routes', href: '/rutas', permission: Permission.ROUTE_READ, built: true },
   { label: 'payments', href: '/pagos', permission: Permission.PAYMENT_READ, built: true },
-  { label: 'team', href: '/equipo', permission: Permission.USER_READ, built: true },
-  { label: 'account', href: '/cuenta', permission: Permission.ACCOUNT_READ, built: true },
   { label: 'export', href: '/exportar', permission: Permission.REPORT_EXPORT, built: true },
+  // F14 · F6 (ADR-F14-09): cada sección pide SU permiso; ninguna depende de `account:read` salvo Cuenta.
+  { label: 'organization', href: '/organizacion', permission: Permission.OFFICE_READ, built: true },
+  { label: 'team', href: '/equipo', permission: Permission.USER_READ, built: true },
+  {
+    label: 'accessSecurity',
+    href: '/seguridad',
+    permission: null,
+    anyOf: [Permission.ROLE_READ, Permission.USER_SESSIONS_REVOKE, Permission.SUPPORT_CONSENT],
+    built: true,
+  },
+  { label: 'activity', href: '/actividad', permission: Permission.AUDIT_READ, built: true },
+  { label: 'account', href: '/cuenta', permission: Permission.ACCOUNT_READ, built: true },
   { label: 'profile', href: '/settings/perfil', permission: null, built: true },
   { label: 'security', href: '/settings/security', permission: null, built: true, hidden: true },
 ];
@@ -69,10 +84,15 @@ export const NAV: NavItem[] = [
  *
  * 🔴 Esto es cosmética. La API valida siempre: ocultar no es autorizar.
  */
+function canSee(item: NavItem, granted: ReadonlySet<string>): boolean {
+  if (item.anyOf) return item.anyOf.some((p) => granted.has(p));
+  return item.permission === null || granted.has(item.permission);
+}
+
 export function visibleNav(permissions: string[]): NavItem[] {
   const granted = new Set(permissions);
   return NAV.filter(
-    (item) => !item.hidden && (item.permission === null || granted.has(item.permission)),
+    (item) => !item.hidden && canSee(item, granted),
   );
 }
 

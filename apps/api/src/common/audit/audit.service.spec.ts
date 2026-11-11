@@ -72,3 +72,37 @@ describe('AuditService.record', () => {
     assert.equal(row.after.nationalId, REDACTED);
   });
 });
+
+describe('AuditService.recordInTx (F14 · F7, D-5)', () => {
+  it('escribe en la MISMA transacción que recibe, con who/entity/action, sin abrir otra', async () => {
+    const { service, calls } = makeDeps(CTX);
+    const written: Record<string, unknown>[] = [];
+    const tx = { auditLog: { create: async (a: { data: Record<string, unknown> }) => (written.push(a.data), a.data) } };
+    await service.recordInTx(tx as never, { entity: 'account_role', entityId: 'r1', action: 'ROLE_PERMISSIONS_UPDATED', after: { added: ['x'] } });
+    assert.equal(calls.withTenant.length, 0, 'no abre una transacción propia');
+    assert.equal(written.length, 1);
+    assert.equal(written[0]!.accountId, 'acc-1');
+    assert.equal(written[0]!.userId, 'user-1');
+    assert.equal(written[0]!.entity, 'account_role');
+  });
+
+  it('🔴 si la escritura falla, el error SE PROPAGA (el cambio de negocio no queda sin su rastro)', async () => {
+    const { service } = makeDeps(CTX);
+    const tx = { auditLog: { create: async () => { throw new Error('disco lleno'); } } };
+    await assert.rejects(() => service.recordInTx(tx as never, { entity: 'account_role', entityId: 'r1', action: 'X' }), /disco lleno/);
+  });
+
+  it('🔴 sin contexto de tenant lanza: un cambio sensible sin autor no se hace', async () => {
+    const { service } = makeDeps(undefined);
+    await assert.rejects(() => service.recordInTx({} as never, { entity: 'account_role', entityId: 'r1', action: 'X' }), /autenticado/);
+  });
+
+  it('la actividad de plataforma se marca como PLATFORM, sin usuario de la cuenta', async () => {
+    const { service } = makeDeps({ ...CTX, actorType: 'PLATFORM', supportSessionId: 'ss1' });
+    const written: Record<string, unknown>[] = [];
+    const tx = { auditLog: { create: async (a: { data: Record<string, unknown> }) => (written.push(a.data), a.data) } };
+    await service.recordInTx(tx as never, { entity: 'account_role', entityId: 'r1', action: 'X' });
+    assert.equal(written[0]!.actorType, 'PLATFORM');
+    assert.equal(written[0]!.userId, null);
+  });
+});

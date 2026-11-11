@@ -1,9 +1,7 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { Permission } from '@kobrax/shared';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { TenantGuard } from '../auth/guards/tenant.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { Destructive, Policy } from '../auth/decorators/authz.decorator';
 import { CreditsService } from './credits.service';
 import {
   ClearArrearsDto,
@@ -17,7 +15,6 @@ import {
 } from './dto/credit.dto';
 
 @Controller('credits')
-@UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 export class CreditsController {
   constructor(private readonly credits: CreditsService) {}
 
@@ -34,7 +31,7 @@ export class CreditsController {
   }
 
   @Post()
-  @Roles(Permission.CREDIT_WRITE)
+  @Roles(Permission.CREDIT_CREATE)
   create(@Body() dto: CreateCreditDto) {
     return this.credits.create(dto);
   }
@@ -68,6 +65,8 @@ export class CreditsController {
    * service lo exige. No cierra la mora ni cambia `status`.
    */
   @Post(':id/write-off')
+  @Policy('credit.writeOff')
+  @Destructive()
   @Roles(Permission.CREDIT_WRITE)
   writeOff(@Param('id', ParseUUIDPipe) id: string, @Body() dto: WriteOffDto) {
     return this.credits.writeOff(id, dto.reason);
@@ -75,6 +74,8 @@ export class CreditsController {
 
   /** Revierte el castigo. Mismas reglas. */
   @Delete(':id/write-off')
+  @Policy('credit.writeOff')
+  @Destructive()
   @Roles(Permission.CREDIT_WRITE)
   unWriteOff(@Param('id', ParseUUIDPipe) id: string) {
     return this.credits.unWriteOff(id);

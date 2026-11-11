@@ -8,7 +8,9 @@ import {
   type AssignableRole,
   type MeInfo,
   type Member,
+  Permission,
 } from '@kobrax/shared';
+import { requirePermission } from '@/lib/authz';
 import { apiCall } from '@/lib/bff';
 import { activeOffices, officeOptions } from '@/lib/offices';
 import { getOffices } from '@/lib/offices-server';
@@ -31,6 +33,8 @@ import { InviteButton } from './invite-button';
  * de una cuenta nueva, no un error.
  */
 export default async function EquipoPage({ searchParams }: { searchParams: TeamParams }) {
+  const blocked = await requirePermission(Permission.USER_READ);
+  if (blocked) return blocked;
   const t = await getTranslations('team');
   const tPlans = await getTranslations('plans');
 

@@ -1,8 +1,5 @@
-import { Controller, Get, StreamableFile, UseGuards } from '@nestjs/common';
+import { Controller, Get, StreamableFile } from '@nestjs/common';
 import { Permission } from '@kobrax/shared';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { TenantGuard } from '../auth/guards/tenant.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ExportsService, type ExportFile } from './exports.service';
 
@@ -15,7 +12,6 @@ function toFile(f: ExportFile): StreamableFile {
 
 /** Descargas de datos de la cuenta. Todo detrás de `REPORT_EXPORT`, el permiso ya reservado para esto. */
 @Controller('exports')
-@UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 @Roles(Permission.REPORT_EXPORT)
 export class ExportsController {
   constructor(private readonly exports: ExportsService) {}

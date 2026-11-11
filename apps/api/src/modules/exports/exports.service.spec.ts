@@ -144,7 +144,7 @@ describe('ExportsService — alcance por oficina (D-7)', () => {
     const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
     const audit = { record: async () => undefined };
     const office = { assignScope: async () => ({ kind: assign, paths: [] }) };
-    const service = new ExportsService(prisma as never, { accountId: 'acc-A', userId: 'u1', can } as never, {} as never, audit as never, office as never);
+    const service = new ExportsService(prisma as never, { accountId: 'acc-A', userId: 'u1', can: (p: string) => p === 'client:contact:read' || can(p) } as never, {} as never, audit as never, office as never);
     return { service, wheres, raw: () => raw };
   }
   const branch = (p: string) => p === 'data:scope:branch';

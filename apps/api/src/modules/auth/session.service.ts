@@ -94,6 +94,16 @@ export class SessionService {
     await this.revokeRows(row.account_id, sessionId);
   }
 
+  /**
+   * Revoca las sesiones del usuario **en una cuenta** (F14 · F1): desactivar su membresía no debe tocar lo que tiene abierto en otro
+   * tenant. Devuelve las sesiones revocadas.
+   */
+  async revokeAccountSessions(userId: string, accountId: string): Promise<number> {
+    const rows = (await this.activeRows(userId)).filter((r) => r.account_id === accountId);
+    for (const r of rows) await this.revokeRows(r.account_id, r.session_id);
+    return rows.length;
+  }
+
   /** Revoca todas las sesiones del usuario, opcionalmente excepto una (la actual). */
   async revokeAll(userId: string, exceptSessionId?: string): Promise<number> {
     const rows = await this.activeRows(userId);

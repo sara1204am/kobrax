@@ -51,6 +51,39 @@ function renderShell(
   );
 }
 
+describe('PanelShell — sesión de soporte (F14 · F6)', () => {
+  it('con una sesión de soporte avisa «Sesión de soporte» y cuándo vence', async () => {
+    render(
+      <PanelShell user={USER} accounts={ACCOUNTS} nav={visibleNav(['client:read'])} supportSession={{ id: 'ss1', expiresAt: '2026-11-08T20:00:00.000Z' }}>
+        <p>contenido</p>
+      </PanelShell>,
+    );
+    const banner = await screen.findByRole('status');
+    expect(banner).toHaveTextContent('Sesión de soporte.');
+    expect(banner).toHaveTextContent(/Vence a las \d{1,2}[:.]\d{2}/);
+  });
+
+  it('sin sesión de soporte no hay aviso', () => {
+    renderShell();
+    expect(screen.queryByText('Sesión de soporte.')).not.toBeInTheDocument();
+  });
+});
+
+describe('PanelShell — secciones nuevas del menú (F14 · F6)', () => {
+  it('el supervisor ve Organización y Equipo como enlaces a sus rutas nuevas', () => {
+    renderShell(ACCOUNTS, ['office:read', 'user:read']);
+    expect(screen.getAllByRole('link', { name: 'Organización' })[0]).toHaveAttribute('href', '/organizacion');
+    expect(screen.getAllByRole('link', { name: 'Equipo' })[0]).toHaveAttribute('href', '/equipo');
+    expect(screen.queryByRole('link', { name: 'Actividad' })).not.toBeInTheDocument();
+  });
+
+  it('el administrador ve Seguridad y Actividad', () => {
+    renderShell(ACCOUNTS, ['support:consent', 'audit:read']);
+    expect(screen.getAllByRole('link', { name: 'Seguridad' })[0]).toHaveAttribute('href', '/seguridad');
+    expect(screen.getAllByRole('link', { name: 'Actividad' })[0]).toHaveAttribute('href', '/actividad');
+  });
+});
+
 describe('PanelShell — el menú', () => {
   it('los módulos construidos navegan', () => {
     renderShell();

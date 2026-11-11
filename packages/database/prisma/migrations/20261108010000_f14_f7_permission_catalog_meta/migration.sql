@@ -1,0 +1,49 @@
+-- F14 · F7 — metadatos del catálogo de permisos (riesgo, reservado, dependencias).
+-- Fuente única: packages/shared/src/constants/permission-meta.ts (PERMISSION_META). Idempotente: se puede reaplicar.
+-- Antes de esto, risk/reserved salían de un UPDATE puntual de la migración de F5 (una base nueva quedaba sin ellos) y requires estaba vacío.
+
+UPDATE "permissions" SET "risk" = 'LOW'::"PermissionRisk", "reserved" = NULL, "requires" = '[]'::jsonb WHERE "code" = 'account:read';
+UPDATE "permissions" SET "risk" = 'CRITICAL'::"PermissionRisk", "reserved" = 'ADMIN_CORE'::"PermissionReserved", "requires" = '["account:read"]'::jsonb WHERE "code" = 'account:write';
+UPDATE "permissions" SET "risk" = 'MEDIUM'::"PermissionRisk", "reserved" = NULL, "requires" = '["agenda:read"]'::jsonb WHERE "code" = 'agenda:assign';
+UPDATE "permissions" SET "risk" = 'LOW'::"PermissionRisk", "reserved" = NULL, "requires" = '[]'::jsonb WHERE "code" = 'agenda:read';
+UPDATE "permissions" SET "risk" = 'MEDIUM'::"PermissionRisk", "reserved" = NULL, "requires" = '["agenda:read"]'::jsonb WHERE "code" = 'agenda:write';
+UPDATE "permissions" SET "risk" = 'HIGH'::"PermissionRisk", "reserved" = NULL, "requires" = '["credit:read"]'::jsonb WHERE "code" = 'assignment:write';
+UPDATE "permissions" SET "risk" = 'MEDIUM'::"PermissionRisk", "reserved" = NULL, "requires" = '[]'::jsonb WHERE "code" = 'audit:read';
+UPDATE "permissions" SET "risk" = 'LOW'::"PermissionRisk", "reserved" = NULL, "requires" = '[]'::jsonb WHERE "code" = 'catalog:read';
+UPDATE "permissions" SET "risk" = 'MEDIUM'::"PermissionRisk", "reserved" = NULL, "requires" = '["catalog:read"]'::jsonb WHERE "code" = 'catalog:write';
+UPDATE "permissions" SET "risk" = 'MEDIUM'::"PermissionRisk", "reserved" = NULL, "requires" = '["client:read"]'::jsonb WHERE "code" = 'client:contact:read';
+UPDATE "permissions" SET "risk" = 'MEDIUM'::"PermissionRisk", "reserved" = NULL, "requires" = '["client:read"]'::jsonb WHERE "code" = 'client:create';
+UPDATE "permissions" SET "risk" = 'HIGH'::"PermissionRisk", "reserved" = NULL, "requires" = '["client:read"]'::jsonb WHERE "code" = 'client:delete';
+UPDATE "permissions" SET "risk" = 'MEDIUM'::"PermissionRisk", "reserved" = NULL, "requires" = '["client:read"]'::jsonb WHERE "code" = 'client:import';
+UPDATE "permissions" SET "risk" = 'CRITICAL'::"PermissionRisk", "reserved" = NULL, "requires" = '["client:import"]'::jsonb WHERE "code" = 'client:import:replace';
+UPDATE "permissions" SET "risk" = 'HIGH'::"PermissionRisk", "reserved" = NULL, "requires" = '["client:read"]'::jsonb WHERE "code" = 'client:pii:read';
+UPDATE "permissions" SET "risk" = 'LOW'::"PermissionRisk", "reserved" = NULL, "requires" = '[]'::jsonb WHERE "code" = 'client:read';
+UPDATE "permissions" SET "risk" = 'MEDIUM'::"PermissionRisk", "reserved" = NULL, "requires" = '["client:read"]'::jsonb WHERE "code" = 'client:write';
+UPDATE "permissions" SET "risk" = 'MEDIUM'::"PermissionRisk", "reserved" = NULL, "requires" = '["collection:read"]'::jsonb WHERE "code" = 'collection:export';
+UPDATE "permissions" SET "risk" = 'LOW'::"PermissionRisk", "reserved" = NULL, "requires" = '[]'::jsonb WHERE "code" = 'collection:read';
+UPDATE "permissions" SET "risk" = 'MEDIUM'::"PermissionRisk", "reserved" = NULL, "requires" = '["collection:read"]'::jsonb WHERE "code" = 'collection:write';
+UPDATE "permissions" SET "risk" = 'MEDIUM'::"PermissionRisk", "reserved" = NULL, "requires" = '["credit:read"]'::jsonb WHERE "code" = 'credit:create';
+UPDATE "permissions" SET "risk" = 'HIGH'::"PermissionRisk", "reserved" = NULL, "requires" = '["credit:read"]'::jsonb WHERE "code" = 'credit:pii:read';
+UPDATE "permissions" SET "risk" = 'LOW'::"PermissionRisk", "reserved" = NULL, "requires" = '[]'::jsonb WHERE "code" = 'credit:read';
+UPDATE "permissions" SET "risk" = 'MEDIUM'::"PermissionRisk", "reserved" = NULL, "requires" = '["credit:read"]'::jsonb WHERE "code" = 'credit:write';
+UPDATE "permissions" SET "risk" = 'HIGH'::"PermissionRisk", "reserved" = NULL, "requires" = '[]'::jsonb WHERE "code" = 'data:scope:all';
+UPDATE "permissions" SET "risk" = 'MEDIUM'::"PermissionRisk", "reserved" = NULL, "requires" = '[]'::jsonb WHERE "code" = 'data:scope:branch';
+UPDATE "permissions" SET "risk" = 'MEDIUM'::"PermissionRisk", "reserved" = NULL, "requires" = '[]'::jsonb WHERE "code" = 'data:scope:subtree';
+UPDATE "permissions" SET "risk" = 'LOW'::"PermissionRisk", "reserved" = NULL, "requires" = '[]'::jsonb WHERE "code" = 'office:read';
+UPDATE "permissions" SET "risk" = 'HIGH'::"PermissionRisk", "reserved" = 'ADMIN_CORE'::"PermissionReserved", "requires" = '["office:read"]'::jsonb WHERE "code" = 'office:write';
+UPDATE "permissions" SET "risk" = 'HIGH'::"PermissionRisk", "reserved" = NULL, "requires" = '["payment:read"]'::jsonb WHERE "code" = 'payment:approve';
+UPDATE "permissions" SET "risk" = 'LOW'::"PermissionRisk", "reserved" = NULL, "requires" = '[]'::jsonb WHERE "code" = 'payment:read';
+UPDATE "permissions" SET "risk" = 'MEDIUM'::"PermissionRisk", "reserved" = NULL, "requires" = '["payment:read"]'::jsonb WHERE "code" = 'payment:write';
+UPDATE "permissions" SET "risk" = 'HIGH'::"PermissionRisk", "reserved" = NULL, "requires" = '["report:read"]'::jsonb WHERE "code" = 'report:export';
+UPDATE "permissions" SET "risk" = 'LOW'::"PermissionRisk", "reserved" = NULL, "requires" = '[]'::jsonb WHERE "code" = 'report:read';
+UPDATE "permissions" SET "risk" = 'LOW'::"PermissionRisk", "reserved" = NULL, "requires" = '[]'::jsonb WHERE "code" = 'role:read';
+UPDATE "permissions" SET "risk" = 'CRITICAL'::"PermissionRisk", "reserved" = 'ADMIN_CORE'::"PermissionReserved", "requires" = '["role:read"]'::jsonb WHERE "code" = 'role:write';
+UPDATE "permissions" SET "risk" = 'MEDIUM'::"PermissionRisk", "reserved" = NULL, "requires" = '["route:read"]'::jsonb WHERE "code" = 'route:assign';
+UPDATE "permissions" SET "risk" = 'MEDIUM'::"PermissionRisk", "reserved" = NULL, "requires" = '["route:read"]'::jsonb WHERE "code" = 'route:execute';
+UPDATE "permissions" SET "risk" = 'LOW'::"PermissionRisk", "reserved" = NULL, "requires" = '[]'::jsonb WHERE "code" = 'route:read';
+UPDATE "permissions" SET "risk" = 'MEDIUM'::"PermissionRisk", "reserved" = NULL, "requires" = '["route:read"]'::jsonb WHERE "code" = 'route:write';
+UPDATE "permissions" SET "risk" = 'HIGH'::"PermissionRisk", "reserved" = NULL, "requires" = '[]'::jsonb WHERE "code" = 'support:consent';
+UPDATE "permissions" SET "risk" = 'HIGH'::"PermissionRisk", "reserved" = NULL, "requires" = '["user:read"]'::jsonb WHERE "code" = 'user:invite';
+UPDATE "permissions" SET "risk" = 'LOW'::"PermissionRisk", "reserved" = NULL, "requires" = '[]'::jsonb WHERE "code" = 'user:read';
+UPDATE "permissions" SET "risk" = 'HIGH'::"PermissionRisk", "reserved" = NULL, "requires" = '["user:read"]'::jsonb WHERE "code" = 'user:sessions:revoke';
+UPDATE "permissions" SET "risk" = 'CRITICAL'::"PermissionRisk", "reserved" = 'ADMIN_CORE'::"PermissionReserved", "requires" = '["user:read"]'::jsonb WHERE "code" = 'user:write';

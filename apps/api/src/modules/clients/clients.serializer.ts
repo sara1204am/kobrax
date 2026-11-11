@@ -14,6 +14,15 @@ export interface SerializeOpts {
   crypto: CryptoService;
   /** Si true, devuelve la PII en claro (requiere permiso `*:pii:read` + auditoría). */
   reveal: boolean;
+  /**
+   * F14 · F4 (D-3): el documento se revela aparte de los contactos. Por omisión sigue a `reveal`. En las pantallas de trabajo el
+   * supervisor recibe teléfonos y direcciones en claro (los necesita para cobrar) pero el documento enmascarado.
+   */
+  revealDocument?: boolean;
+  /** F14 · F4: ¿ve contactos, direcciones, GPS, fotos, personas relacionadas y adjuntos? (`client:contact:read`). Por omisión sí. */
+  contact?: boolean;
+  /** F14 · F4: ¿ve el perfil económico y las garantías? Por omisión sí. */
+  economic?: boolean;
 }
 
 /**
@@ -184,6 +193,9 @@ type ClientWithRelations = Client & {
 /** Serializa un cliente (con o sin sub-recursos), tokenizando la PII salvo `reveal`. */
 export function serializeClient(client: ClientWithRelations, opts: SerializeOpts) {
   const { crypto, reveal } = opts;
+  const revealDoc = opts.revealDocument ?? reveal;
+  const withContact = opts.contact !== false;
+  const withEconomic = opts.economic !== false;
   const nationalId = safeDecrypt(crypto, client.nationalId);
   const taxId = safeDecrypt(crypto, client.taxId);
   return {
@@ -193,8 +205,8 @@ export function serializeClient(client: ClientWithRelations, opts: SerializeOpts
     lastName: client.lastName ?? undefined,
     businessName: client.businessName ?? undefined,
     gender: client.gender ?? undefined,
-    nationalId: pii(nationalId, reveal, maskDocument),
-    taxId: pii(taxId, reveal, maskDocument),
+    nationalId: pii(nationalId, revealDoc, maskDocument),
+    taxId: pii(taxId, revealDoc, maskDocument),
     status: client.status,
     // D2 · opción B: cliente creado por la importación que puede ser alguien que ya existía.
     linkReviewPending: client.linkReviewPending || undefined,
@@ -217,12 +229,14 @@ export function serializeClient(client: ClientWithRelations, opts: SerializeOpts
     metadata: client.metadata,
     createdAt: client.createdAt,
     updatedAt: client.updatedAt,
-    contacts: client.contacts?.map((c) => serializeContact(c, opts)),
-    locations: client.locations?.map((l) => serializeLocation(l, opts)),
-    relations: client.relations?.map((r) => serializeRelation(r, opts)),
-    collaterals: client.collaterals?.map((g) => serializeCollateral(g)),
-    attachments: client.attachments?.map((a) => serializeAttachment(a)),
-    // F4/13 · E3. `null` si el cliente no tiene perfil; ausente si la consulta no lo trajo.
-    incomeProfile: client.incomeProfile === undefined ? undefined : client.incomeProfile ? serializeIncomeProfile(client.incomeProfile) : null,
+    // F14 · F4: quien no tiene `client:contact:read` (VIEWER) no recibe contactos, ubicaciones, personas relacionadas ni adjuntos;
+    // sin la categoría económica, tampoco garantías ni perfil de ingresos. Ausente (no vacío): la pantalla no los ofrece.
+    contacts: withContact ? client.contacts?.map((c) => serializeContact(c, opts)) : undefined,
+    locations: withContact ? client.locations?.map((l) => serializeLocation(l, opts)) : undefined,
+    relations: withContact ? client.relations?.map((r) => serializeRelation(r, opts)) : undefined,
+    collaterals: withEconomic ? client.collaterals?.map((g) => serializeCollateral(g)) : undefined,
+    attachments: withContact ? client.attachments?.map((a) => serializeAttachment(a)) : undefined,
+    // F4/13 · E3. `null` si el cliente no tiene perfil; ausente si la consulta no lo trajo (o si no puede verlo).
+    incomeProfile: !withEconomic || client.incomeProfile === undefined ? undefined : client.incomeProfile ? serializeIncomeProfile(client.incomeProfile) : null,
   };
 }

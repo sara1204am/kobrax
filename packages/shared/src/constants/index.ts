@@ -5,3 +5,5 @@ export * from './roles.js';
 export * from './kobrax.constants.js';
 export * from './offline-budget.js';
 export * from './catalog-defaults.js';
+export * from './platform.js';
+export * from './permission-meta.js';

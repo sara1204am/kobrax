@@ -1,4 +1,6 @@
+import { Permission } from '@kobrax/shared';
 import { getTranslations } from 'next-intl/server';
+import { requirePermission } from '@/lib/authz';
 import { apiCall } from '@/lib/bff';
 import { EmptyState } from '@/components/panel-ui';
 import { EDITABLE_CATALOGS, isEditableCatalog, type CatalogRow, type EditableCatalog } from '@/lib/catalog-editor';
@@ -12,6 +14,8 @@ import { OfficeTypesCard } from './office-types-card';
  * Pide `catalog:read`; la edición, `catalog:write` (la API valida los dos).
  */
 export default async function CuentaCatalogosPage({ searchParams }: { searchParams: { c?: string } }) {
+  const blocked = await requirePermission(Permission.CATALOG_READ);
+  if (blocked) return blocked;
   const t = await getTranslations('account');
   const catalog = isEditableCatalog(searchParams.c) ? searchParams.c : EDITABLE_CATALOGS[0];
 

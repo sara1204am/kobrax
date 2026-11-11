@@ -88,7 +88,7 @@ describe('MemberDetailService · aislamiento por cuenta', () => {
       },
     };
     const prisma = { withTenant: (_id: string, fn: (t: unknown) => unknown) => fn(tx) };
-    const service = new MemberDetailService(prisma as never, { accountId: 'cuenta-a' } as never);
+    const service = new MemberDetailService(prisma as never, { accountId: 'cuenta-a' } as never, { visibleMemberIds: async (_tx: unknown, ids: string[]) => new Set(ids) } as never);
 
     await rejectsWithCode(service.detail('u-ajeno'), 'USER_NOT_FOUND');
     await rejectsWithCode(service.activity('u-ajeno', 30), 'USER_NOT_FOUND');
@@ -115,7 +115,7 @@ describe('MemberDetailService · lista por cursor', () => {
       auditLog: { findMany: async () => [] },
     };
     const prisma = { withTenant: (_id: string, fn: (t: unknown) => unknown) => fn(tx) };
-    return new MemberDetailService(prisma as never, { accountId: 'cuenta-a' } as never);
+    return new MemberDetailService(prisma as never, { accountId: 'cuenta-a' } as never, { visibleMemberIds: async (_tx: unknown, ids: string[]) => new Set(ids) } as never);
   }
 
   it('mezcla las fuentes, ordena de nueva a vieja y avisa si hay más', async () => {

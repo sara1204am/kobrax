@@ -61,6 +61,7 @@ import {
 } from './portfolio-credit';
 import { documentLines, readReportMeta, type ReportMeta } from './report-meta';
 import { nameKey, resolveClients, searchWords } from './client-match';
+import { AuthorizationService } from '../../common/authz/authorization.service';
 
 /** La config del tenant + lo derivado que necesita una corrida. */
 interface RunConfig extends ImportConfig {
@@ -175,6 +176,7 @@ export class PortfolioImportService {
     private readonly clock: TenantClockService,
     private readonly assignment: AssignmentService,
     private readonly office: OfficeScopeService,
+    private readonly authz: AuthorizationService = new AuthorizationService(tenant),
   ) {}
 
   /**
@@ -366,7 +368,9 @@ export class PortfolioImportService {
           : scope.kind === 'official'
             ? c.assignedManagerId === scope.ref
             : scopeBranchPath !== null && c.branch !== null && c.branch.path.startsWith(scopeBranchPath);
-      const existing = await tx.credit.findMany({
+      // F14 · F2b: el match es contra TODAS las operaciones de la cuenta, no sólo contra las que ve quien importa; si no, un crédito de
+      // otra oficina se tomaría por nuevo y se duplicaría. Lo que cae fuera del alcance de la corrida lo marca `eligible` más abajo.
+      const existing = await this.prisma.elevated(tx, () => tx.credit.findMany({
         where: { accountId, externalSource: FILE_SOURCE },
         select: {
           id: true,
@@ -385,7 +389,7 @@ export class PortfolioImportService {
           // El nombre va al historial: una ausente no trae fila, así que su deudor sale de acá.
           client: { select: { firstName: true, lastName: true, businessName: true } },
         },
-      });
+      }));
       const byId = new Map(existing.map((c) => [c.id, c]));
       // Con asesor en el reporte, sus operaciones se reconocen por el asesor que ya tienen guardado;
       // las importadas antes de guardarlo, por el alcance.
@@ -444,21 +448,24 @@ export class PortfolioImportService {
             })
           : [],
         words.length > 0 || hashes.length > 0
-          ? tx.client.findMany({
-              where: {
-                accountId,
-                deletedAt: null,
-                OR: [
-                  ...words.flatMap((w) => [
-                    { lastName: { contains: w, mode: 'insensitive' as const } },
-                    { firstName: { contains: w, mode: 'insensitive' as const } },
-                  ]),
-                  ...(hashes.length > 0 ? [{ nationalIdHash: { in: hashes } }] : []),
-                ],
-              },
-              select: { id: true, firstName: true, lastName: true, businessName: true, nationalIdHash: true },
-              take: MAX_CANDIDATES,
-            })
+          ? // F14 · F2b: los candidatos son de TODA la cuenta (si no, quien importa duplicaría clientes de otra oficina).
+            this.prisma.elevated(tx, () =>
+              tx.client.findMany({
+                where: {
+                  accountId,
+                  deletedAt: null,
+                  OR: [
+                    ...words.flatMap((w) => [
+                      { lastName: { contains: w, mode: 'insensitive' as const } },
+                      { firstName: { contains: w, mode: 'insensitive' as const } },
+                    ]),
+                    ...(hashes.length > 0 ? [{ nationalIdHash: { in: hashes } }] : []),
+                  ],
+                },
+                select: { id: true, firstName: true, lastName: true, businessName: true, nationalIdHash: true },
+                take: MAX_CANDIDATES,
+              }),
+            )
           : [],
       ]);
       const resolution = resolveClients(
@@ -619,6 +626,9 @@ export class PortfolioImportService {
             clientsData.push({
               id: clientId,
               accountId,
+              createdBy: this.tenant.userId ?? null,
+              // F14 · F2: la oficina de registro del cliente importado es la de su crédito (el servidor la decidió arriba).
+              registeredBranchId: officeOf.get(row.code) ?? null,
               clientType: ClientType.PERSON,
               lastName: b.clientLastName ?? 'SIN NOMBRE',
               firstName: b.clientFirstName ?? undefined,
@@ -1135,7 +1145,7 @@ export class PortfolioImportService {
         .filter((b) => b.active)
         .map((b) => ({ id: b.id, name: officeLabel(branches, b.id) || b.name }))
         .sort((a, b) => a.name.localeCompare(b.name)),
-      viewer: { userId: this.tenant.userId ?? '', canAssign: this.tenant.can(Permission.ASSIGNMENT_WRITE), canConfigure },
+      viewer: { userId: this.tenant.userId ?? '', canAssign: this.authz.can(Permission.ASSIGNMENT_WRITE), canConfigure },
     };
   }
 
@@ -1149,7 +1159,7 @@ export class PortfolioImportService {
    * entra igual porque el cobrador independiente es COLLECTOR y dueño a la vez, y configura lo suyo.
    */
   private async canConfigure(): Promise<boolean> {
-    if (this.tenant.can(Permission.ASSIGNMENT_WRITE)) return true;
+    if (this.authz.can(Permission.ASSIGNMENT_WRITE)) return true;
     const userId = this.tenant.userId;
     if (!userId) return false;
     const owner = await this.tx((tx) =>

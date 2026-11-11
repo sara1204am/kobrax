@@ -1,15 +1,12 @@
-import { Body, Controller, ForbiddenException, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Post } from '@nestjs/common';
 import { Permission } from '@kobrax/shared';
-import { JwtAuthGuard, type AuthenticatedUser } from '../../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../../auth/guards/roles.guard';
-import { TenantGuard } from '../../auth/guards/tenant.guard';
+import type { AuthenticatedUser } from '../../auth/guards/jwt-auth.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { ClientImportService } from './client-import.service';
 import { ImportClientsDto } from './import.dto';
 
 @Controller('clients/imports')
-@UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 export class ClientImportController {
   constructor(private readonly imports: ClientImportService) {}
 

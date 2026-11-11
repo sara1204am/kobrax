@@ -69,10 +69,10 @@ import {
   currencyMismatch,
   resourceNotFound,
   scheduleInvalid,
-  writeOffForbidden,
   writeOffUseEndpoint,
 } from './credits.errors';
 import { ArrearsPriorityService } from '../arrears/arrears-priority.service';
+import { AuthorizationService } from '../../common/authz/authorization.service';
 
 interface AccountConfig {
   currencyCode: string;
@@ -100,6 +100,7 @@ export class CreditsService {
     private readonly assignment: AssignmentService,
     private readonly arrearsPriority: ArrearsPriorityService,
     private readonly office: OfficeScopeService,
+    private readonly authz: AuthorizationService = new AuthorizationService(tenant),
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -256,10 +257,10 @@ export class CreditsService {
      * asignar queda como responsable de lo que da de alta (P4) — el préstamo que el cobrador acuerda
      * en la calle es suyo. Quien sí puede asignar y no elige lo deja sin responsable, como antes.
      */
-    const me = this.tenant.userId;
-    if (dto.assignedManagerId && dto.assignedManagerId !== me) this.assignment.authorize();
-    const responsible = dto.assignedManagerId ?? (this.assignment.canAssign() ? undefined : me);
-    const assignReason = dto.assignedManagerId && dto.assignedManagerId !== me ? 'CREATE_MANUAL' : 'CREATE_OWN';
+    // F14 · F2: la política `credit.create` decide el responsable (permiso `credit:create`; elegir a otra persona exige `assignment:write`).
+    const decision = this.authz.assertPolicy('credit.create', { assignedManagerId: dto.assignedManagerId });
+    const responsible = decision?.responsibleId as string | undefined;
+    const assignReason = decision?.needsAssign ? 'CREATE_MANUAL' : 'CREATE_OWN';
 
     const accountId = this.tenant.accountId;
     const created = await this.tx(async (tx) => {
@@ -272,10 +273,14 @@ export class CreditsService {
         if (previo) return { credit: previo, reintento: true, assigned: [] };
       }
 
-      const client = await tx.client.findFirst({
-        where: { id: dto.clientId, deletedAt: null },
-        select: { id: true },
-      });
+      // F14 · F2b: el crédito puede ser el PRIMERO de quien lo crea sobre un cliente que lleva otra persona (el cliente no tiene dueño):
+      // basta con que exista en la cuenta. Recién con este crédito el cliente pasa a verse.
+      const client = await this.prisma.elevated(tx, () =>
+        tx.client.findFirst({
+          where: { id: dto.clientId, deletedAt: null },
+          select: { id: true },
+        }),
+      );
       if (!client) throw resourceNotFound(); // cliente inexistente o de otro tenant
       if (dto.assignedManagerId) await this.assignment.assertAssignable(tx, [dto.assignedManagerId]);
 
@@ -742,13 +747,12 @@ export class CreditsService {
    * (agencia) y el cobrador no. Con subárbol, además el crédito tiene que estar dentro de su alcance (`assertInScope`).
    */
   private assertCanWriteOff(): void {
-    const wide = this.tenant.can(Permission.DATA_SCOPE_ALL) || this.tenant.can(Permission.DATA_SCOPE_SUBTREE);
-    if (!this.tenant.can(Permission.CREDIT_WRITE) || !wide) throw writeOffForbidden();
+    this.authz.assertPolicy('credit.writeOff');
   }
 
   /** Quien no es ALL sólo castiga lo que ve: un crédito fuera de su subárbol es 404, igual que en la ficha de mora. */
   private async assertInScope(tx: PrismaClient, creditId: string): Promise<void> {
-    if (this.tenant.can(Permission.DATA_SCOPE_ALL)) return;
+    if (this.authz.can(Permission.DATA_SCOPE_ALL)) return;
     const [seen] = await visibleCredits(tx, moraScopeOf(this.tenant), { creditId });
     if (!seen) throw resourceNotFound();
   }
@@ -771,7 +775,8 @@ export class CreditsService {
       if (!credit) throw resourceNotFound();
       const [from, to] = await Promise.all([
         tx.client.findFirst({ where: { id: credit.clientId } }),
-        tx.client.findFirst({ where: { id: targetClientId, deletedAt: null } }),
+        // F14 · F2b: vincular a un cliente que lleva otra persona está permitido sin verlo (el vínculo no revela nada más).
+        this.prisma.elevated(tx, () => tx.client.findFirst({ where: { id: targetClientId, deletedAt: null } })),
       ]);
       if (!to || !from) throw resourceNotFound();
       if (from.id === to.id) return { credit, fromId: from.id, keySaved: false, retired: false };
@@ -864,6 +869,8 @@ export class CreditsService {
     const { credit } = await this.tx(async (tx) => {
       const found = await tx.credit.findFirst({ where: { id, deletedAt: null } });
       if (!found) throw resourceNotFound();
+      // F2b-H1: quien no ve todo sólo marca / pone al día lo que ve (antes lo frenaba únicamente la barrera de la base).
+      await this.assertInScope(tx, id);
       if (found.status !== CreditStatus.ACTIVE) throw creditNotActive();
       const meta = readCreditMetadata(found.metadata, found.origin);
       if (isExternalOrigin(meta.origin)) throw creditLocked();
@@ -902,6 +909,8 @@ export class CreditsService {
     const { credit } = await this.tx(async (tx) => {
       const found = await tx.credit.findFirst({ where: { id, deletedAt: null } });
       if (!found) throw resourceNotFound();
+      // F2b-H1: quien no ve todo sólo marca / pone al día lo que ve (antes lo frenaba únicamente la barrera de la base).
+      await this.assertInScope(tx, id);
       if (found.status !== CreditStatus.ACTIVE) throw creditNotActive();
       const meta = readCreditMetadata(found.metadata, found.origin);
       if (isExternalOrigin(meta.origin)) throw creditLocked();

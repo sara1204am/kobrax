@@ -18,7 +18,7 @@ import {
   type AccountForm,
 } from '@/account-form';
 
-const EMPTY: AccountForm = { businessName: '', taxId: '', countryCode: '', currencyCode: '', timezone: '', currencyDecimals: '2', arrearsMethod: 'oldest_unpaid' };
+const EMPTY: AccountForm = { businessName: '', taxId: '', countryCode: '', currencyCode: '', timezone: '', currencyDecimals: '2', arrearsMethod: 'oldest_unpaid', logoUrl: '', phone: '', email: '', website: '', address: '', city: '' };
 
 /**
  * Datos del negocio (CUENTA S1). País y moneda son **un solo selector** (S1-D1): están
@@ -51,6 +51,13 @@ export default function DatosCuentaScreen() {
         currencyDecimals: String(res.data.currencyDecimals ?? 2),
         // El método de mora por defecto (D20) lo edita la web; acá sólo se conserva para que el diff no lo mande.
         arrearsMethod: res.data.arrearsMethod ?? 'oldest_unpaid',
+        // Identidad y contacto: la web los edita; acá sólo se conservan para que el diff no los mande.
+        logoUrl: res.data.logoUrl ?? '',
+        phone: res.data.phone ?? '',
+        email: res.data.email ?? '',
+        website: res.data.website ?? '',
+        address: res.data.address ?? '',
+        city: res.data.city ?? '',
       };
       setBefore(f);
       setForm(f);

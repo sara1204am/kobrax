@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
+import type { PrismaClient } from '@prisma/client';
 import { compare, hash } from 'bcryptjs';
 import { KOBRAX, preferencesOf, type AccountPreferences, type AuthAccountOption, type AuthTokens, type LoginResult } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
@@ -7,6 +8,7 @@ import { AuditService } from '../../common/audit/audit.service';
 import { TokenService } from './token.service';
 import { PermissionsService } from './permissions.service';
 import { SessionService } from './session.service';
+import { AuthzVersionService } from './authz-version.service';
 import { MfaService } from './mfa.service';
 import { CRITICAL_ROLES, canPostponeEnrollment } from './mfa-policy';
 import {
@@ -62,6 +64,7 @@ export class AuthService implements OnModuleInit {
     private readonly sessions: SessionService,
     private readonly mfa: MfaService,
     private readonly audit: AuditService,
+    private readonly authz: AuthzVersionService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -353,6 +356,9 @@ export class AuthService implements OnModuleInit {
     roleId: string;
     permissions: string[];
     sessionId?: string;
+    /** F14 · F6: la persona de plataforma (sesión de soporte). Su `userId` es de `platform_users`, no de `users`. */
+    actorType?: 'PLATFORM';
+    supportSessionId?: string;
   }): Promise<{
     userId: string;
     email: string;
@@ -366,8 +372,11 @@ export class AuthService implements OnModuleInit {
     /** Sesión del token: el panel la compara entre pestañas (W-LOG-54). */
     sessionId?: string;
     /** La marca del negocio activo (nombre, teléfono, logo): la lee cualquier miembro, sin `account:read`. */
-    account: { name: string; phone: string | null; logoUrl: string | null; preferences: AccountPreferences } | null;
+    account: { name: string; phone: string | null; logoUrl: string | null; timezone: string | null; preferences: AccountPreferences } | null;
+    /** F14 · F6: sólo si quien navega es la plataforma en una sesión de soporte: el panel avisa «Sesión de soporte · vence HH:MM». */
+    supportSession?: { id: string; expiresAt: string };
   }> {
+    if (user.actorType === 'PLATFORM') return this.meOfPlatform(user);
     // users/profiles/roles son tablas globales (sin RLS) → acceso directo.
     const [dbUser, role] = await Promise.all([
       this.prisma.user.findUnique({ where: { id: user.userId }, include: { profile: true } }),
@@ -379,12 +388,12 @@ export class AuthService implements OnModuleInit {
     // `/auth/me` no pasa por `TenantGuard` (no hay contexto de request de tenant), así que `withTenant` avisaría en
     // cada llamada. Es una lectura de tres columnas de la cuenta del propio token —la policy de `accounts` es por id,
     // no por alcance de usuario—, por eso va con `withSystemTenant` y no se amplía el acceso de nadie.
-    let account: { businessName: string; phone: string | null; logoUrl: string | null; configuration?: unknown } | null = null;
+    let account: { businessName: string; phone: string | null; logoUrl: string | null; timezone?: string | null; configuration?: unknown } | null = null;
     try {
       account = await this.prisma.withSystemTenant(user.accountId, (tx) =>
         tx.account.findFirst({
           where: { id: user.accountId, deletedAt: null },
-          select: { businessName: true, phone: true, logoUrl: true, configuration: true },
+          select: { businessName: true, phone: true, logoUrl: true, timezone: true, configuration: true },
         }),
       );
     } catch {
@@ -410,8 +419,61 @@ export class AuthService implements OnModuleInit {
       requiresPasswordChange: dbUser.requiresPasswordChange,
       sessionId: user.sessionId,
       account: account
-        ? { name: account.businessName, phone: account.phone, logoUrl: account.logoUrl, preferences: preferencesOf(account.configuration) }
+        ? { name: account.businessName, phone: account.phone, logoUrl: account.logoUrl, timezone: account.timezone ?? null, preferences: preferencesOf(account.configuration) }
         : null,
+    };
+  }
+
+  /**
+   * `/auth/me` de la persona de plataforma. No es un usuario de la empresa: no tiene perfil ni `users` propio; lo que ve el
+   * panel es su correo, los permisos del token (ya recortados a la sesión de soporte) y cuándo vence el acceso.
+   */
+  private async meOfPlatform(user: { userId: string; accountId: string; permissions: string[]; sessionId?: string; supportSessionId?: string }) {
+    const person = await this.prisma.platformUser.findUnique({ where: { id: user.userId }, select: { id: true, email: true, isActive: true } });
+    if (!person || !person.isActive) throw invalidToken();
+    let supportSession: { id: string; expiresAt: string } | undefined;
+    let account: { businessName: string; phone: string | null; logoUrl: string | null; timezone?: string | null; configuration?: unknown } | null = null;
+    if (user.accountId) {
+      try {
+        // Una sola transacción de sistema para las dos lecturas.
+        const found = await this.prisma.withSystemTenant(user.accountId, async (tx) => {
+          const [session, acc] = await Promise.all([
+            user.supportSessionId
+              ? tx.supportSession.findFirst({
+                  where: { id: user.supportSessionId, accountId: user.accountId },
+                  select: { id: true, expiresAt: true, revokedAt: true, consentStatus: true },
+                })
+              : null,
+            tx.account.findFirst({
+              where: { id: user.accountId, deletedAt: null },
+              select: { businessName: true, phone: true, logoUrl: true, timezone: true, configuration: true },
+            }),
+          ]);
+          return { session, acc };
+        });
+        account = found.acc;
+        // Sólo se informa una sesión VIGENTE: revocada, vencida o con el consentimiento rechazado/retirado no es un acceso que mostrar.
+        const s = found.session;
+        if (s && !s.revokedAt && s.expiresAt.getTime() > Date.now() && s.consentStatus !== 'DENIED' && s.consentStatus !== 'REVOKED') {
+          supportSession = { id: s.id, expiresAt: s.expiresAt.toISOString() };
+        }
+      } catch {
+        // sin marca ni aviso: la identidad igual se entrega
+      }
+    }
+    return {
+      userId: person.id,
+      email: person.email,
+      profile: null,
+      accountId: user.accountId,
+      role: 'PLATFORM_SUPPORT',
+      permissions: user.permissions,
+      mfaEnabled: true,
+      mfaRequired: false,
+      requiresPasswordChange: false,
+      sessionId: user.sessionId,
+      account: account ? { name: account.businessName, phone: account.phone, logoUrl: account.logoUrl, timezone: account.timezone ?? null, preferences: preferencesOf(account.configuration) } : null,
+      supportSession,
     };
   }
 
@@ -426,6 +488,12 @@ export class AuthService implements OnModuleInit {
     await this.prisma.user.update({ where: { id: userId }, data });
   }
 
+  /** `av` de la membresía y `pv` global, leídos de la DB dentro de la transacción del tenant. */
+  private async versionsOf(tx: PrismaClient, userId: string, accountId: string): Promise<{ av: number; pv: number }> {
+    const ua = await tx.userAccount.findFirst({ where: { userId, accountId }, select: { authzVersion: true } });
+    return { av: ua?.authzVersion ?? 1, pv: await this.authz.currentPolicyVersion(tx) };
+  }
+
   /** Crea sesión + refresh y firma el access, dentro del contexto RLS del tenant. */
   private async issueTokens(
     userId: string,
@@ -433,7 +501,7 @@ export class AuthService implements OnModuleInit {
     roleId: string,
     meta: SessionMeta,
   ): Promise<AuthTokens> {
-    const permissions = await this.permissions.forRole(roleId);
+    const { permissions, roleKey } = await this.permissions.forMembership(accountId, userId, roleId);
     const familyId = randomBytes(16).toString('hex');
     const place = lookupPlace(meta.ip);
 
@@ -473,13 +541,19 @@ export class AuthService implements OnModuleInit {
         },
       });
 
+      // F14 · F1 (H-2): las versiones salen de la DB en ESTA transacción (la fuente), nunca de un token anterior.
+      const versions = await this.versionsOf(tx, userId, accountId);
       const accessToken = this.token.signAccess({
         sub: userId,
         accountId,
         roleId,
+        roleKey,
         permissions,
         sessionId: session.id,
+        av: versions.av,
+        pv: versions.pv,
       });
+      void this.authz.warm(userId, accountId, versions.av, versions.pv);
       return { accessToken, refreshToken: refresh.token };
     });
   }
@@ -534,7 +608,7 @@ export class AuthService implements OnModuleInit {
         where: { userId: claims.sub, accountId: claims.accountId, isActive: true },
       });
       if (!ua) return { kind: 'invalid' };
-      const permissions = await this.permissions.forRole(ua.roleId);
+      const { permissions, roleKey } = await this.permissions.forMembershipIn(tx, ua);
 
       const newRefresh = this.token.signRefresh({
         sub: claims.sub,
@@ -558,13 +632,18 @@ export class AuthService implements OnModuleInit {
         data: { lastSeenAt: new Date() },
       });
 
+      const pv = await this.authz.currentPolicyVersion(tx);
       const accessToken = this.token.signAccess({
         sub: claims.sub,
         accountId: claims.accountId,
         roleId: ua.roleId,
+        roleKey,
         permissions,
         sessionId: claims.sessionId,
+        av: ua.authzVersion,
+        pv,
       });
+      void this.authz.warm(claims.sub, claims.accountId, ua.authzVersion, pv);
       return { kind: 'ok', tokens: { accessToken, refreshToken: newRefresh.token } };
     });
 

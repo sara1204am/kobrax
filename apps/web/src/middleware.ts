@@ -67,9 +67,23 @@ async function guestOnly(req: NextRequest): Promise<NextResponse> {
   }
 }
 
+/** La ruta que se está pidiendo, para que una pantalla de servidor pueda volver a ella tras renovar la sesión (`AUTHZ_STALE`). */
+function withPath(req: NextRequest): Headers {
+  const headers = new Headers(req.headers);
+  headers.set('x-k-path', req.nextUrl.pathname + req.nextUrl.search);
+  return headers;
+}
+
+/**
+ * F14 · F4: la lectura de un archivo por ENLACE FIRMADO no lleva sesión (la credencial es la firma que valida la API), así que el panel no la
+ * exige. `/api/files/<id>/raw?acc=&exp=&sig=` es lo único del proxy de archivos que pasa sin cookie.
+ */
+const SIGNED_FILE_LINK = /^\/api\/files\/[^/]+\/raw$/;
+
 export async function middleware(req: NextRequest): Promise<NextResponse> {
+  if (SIGNED_FILE_LINK.test(req.nextUrl.pathname)) return NextResponse.next();
   if (GUEST_ONLY.has(req.nextUrl.pathname)) return guestOnly(req);
-  if (req.cookies.get(ACCESS)?.value) return NextResponse.next();
+  if (req.cookies.get(ACCESS)?.value) return NextResponse.next({ request: { headers: withPath(req) } });
 
   const refresh = req.cookies.get(REFRESH)?.value;
   /** El servidor dijo que ese refresh ya no vale. Distinto de «no pude preguntarle». */
@@ -98,7 +112,7 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
           const jar = new Map(req.cookies.getAll().map((c) => [c.name, c.value]));
           jar.set(ACCESS, json.data.accessToken);
           jar.set(REFRESH, json.data.refreshToken);
-          const headers = new Headers(req.headers);
+          const headers = withPath(req);
           headers.set(
             'cookie',
             [...jar].map(([name, value]) => `${name}=${value}`).join('; '),
@@ -167,6 +181,9 @@ export const config = {
     '/settings/:path*',
     '/cuenta/:path*',
     '/equipo/:path*',
+    '/organizacion/:path*', // F14 · F6: Oficinas salió de /cuenta
+    '/actividad/:path*',
+    '/seguridad/:path*',
     '/cartera/:path*',
     '/import/:path*',
     '/mora/:path*',
@@ -180,6 +197,7 @@ export const config = {
     '/api/auth/switch-account',
     '/api/account/:path*',
     '/api/users/:path*',
+    '/api/roles/:path*', // F14 · F7: roles de la cuenta (el listado de asignables y el editor)
     '/api/clients/:path*',
     '/api/routes/:path*',
     '/api/credits/:path*',
@@ -192,5 +210,7 @@ export const config = {
     '/api/payments/:path*',
     '/api/payment-requests/:path*',
     '/api/uploads/:path*',
+    '/api/files/:path*', // F14 · F4: archivos por identificador y enlaces firmados
+    '/api/support-access/:path*', // F14 · F5: aceptar / rechazar / cortar accesos de soporte
   ],
 };
