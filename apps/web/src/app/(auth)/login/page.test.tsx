@@ -1,12 +1,21 @@
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { server } from '@/test/msw-server';
+import { hardNav } from '@/lib/client';
 import LoginPage from './page';
 
 const { replace, push } = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push, replace }) }));
+
+const { hardNavigate } = vi.hoisted(() => ({ hardNavigate: vi.fn() }));
+// El login termina con una carga completa (`window.location.replace`), no con el router.
+beforeEach(() => {
+  hardNavigate.mockClear();
+  vi.spyOn(hardNav, 'replace').mockImplementation(hardNavigate);
+});
+afterEach(() => vi.restoreAllMocks());
 vi.mock('next/link', () => ({
   default: ({ href, children, ...props }: { href: string; children: React.ReactNode }) => (
     <a href={href} {...props}>
@@ -58,7 +67,7 @@ describe('LoginPage: validación por campo', () => {
     await userEvent.type(screen.getByLabelText('Contraseña'), 'Kobrax123!');
     await userEvent.click(screen.getByRole('button', { name: /iniciar sesión/i }));
 
-    await vi.waitFor(() => expect(replace).toHaveBeenCalledWith('/dashboard'));
+    await vi.waitFor(() => expect(hardNavigate).toHaveBeenCalledWith('/dashboard'));
     expect(calls).toEqual([{ email: 'manager@kobrax.demo', password: 'Kobrax123!' }]);
   });
 

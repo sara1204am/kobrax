@@ -80,13 +80,28 @@ interface MiniRouter {
   replace: (href: string) => void;
 }
 
+/**
+ * Navegación COMPLETA (recarga del documento) en vez de `router.replace`.
+ *
+ * 🔴 Al entrar o salir de una sesión no se puede usar la navegación del cliente: el Router Cache de
+ * Next guarda ~30 s el resultado de las pantallas dinámicas, y `router.replace('/dashboard')` lo
+ * sirve tal cual. Resultado: entrabas como cobrador10 y veías unos segundos los datos de cobrador1,
+ * hasta que la pantalla se refrescaba sola. Una carga completa deja el caché en blanco.
+ */
+export function hardNavigate(href: string): void {
+  hardNav.replace(href);
+}
+
+/** Costura para las pruebas: jsdom no deja reemplazar `window.location.replace`. */
+export const hardNav = { replace: (href: string): void => window.location.replace(href) };
+
 /** Navegación común tras un paso del login (reutilizada por todas las pantallas). */
 export function routeByStep(router: MiniRouter, step: Step, accounts?: AccountOption[] | null): void {
   switch (step) {
     case 'done':
       // Sesión nueva en el navegador: las otras pestañas abiertas tienen que enterarse.
       publishSessionEvent('login');
-      router.replace('/dashboard');
+      hardNavigate('/dashboard');
       break;
     case 'mfa':
       router.push('/login/mfa');
