@@ -3282,7 +3282,10 @@
     },
     "otherCredits": {
       "notice": "{count, plural, one {Este cliente tiene # crédito más} other {Este cliente tiene # créditos más}} que no ves, por un saldo de {total}. A cargo de: {names}.",
-      "nobody": "sin responsable"
+      "nobody": "sin responsable",
+      "cardsTitle": "Créditos que lleva otra persona",
+      "responsible": "A cargo de: {names}",
+      "cardsHint": "Tarjetas solo informativas: el detalle de estos créditos no está disponible para ti."
     },
     "loanMode": {
       "A": "Ya sé la cuota",
@@ -3965,6 +3968,8 @@
       "role": "¿Qué va a hacer?",
       "rolePlaceholder": "Elige un rol",
       "office": "Oficina del gerente",
+      "officeOptional": "Oficina (opcional)",
+      "officeNone": "Sin oficina por ahora",
       "officePlaceholder": "Elige una oficina",
       "cancel": "Cancelar",
       "send": "Enviar invitación",

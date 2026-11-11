@@ -184,7 +184,7 @@ function NavList({
   const labelClass = collapsible ? 'hidden xl:inline' : '';
 
   return (
-    <nav aria-label={t('nav.label')} className="flex-1 overflow-y-auto px-3 py-2">
+    <nav aria-label={t('nav.label')} className="k-scroll-dark flex-1 overflow-y-auto px-3 py-2">
       <ul className="space-y-1">
         {items.map((item) => {
           const active = pathname === item.href || pathname.startsWith(`${item.href}/`);

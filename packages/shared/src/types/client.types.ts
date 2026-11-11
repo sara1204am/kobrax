@@ -403,6 +403,8 @@ export interface ClientDetail {
 
 /** El aviso «tiene otros créditos» de la ficha del cliente (F14 · F2). */
 export interface OtherCreditsSummary {
+  /** Una tarjeta por crédito ajeno (sólo para mostrar: no hay detalle al que entrar). */
+  items?: { code: string | null; typeCode: string | null; currency: string | null; status: string | null; outstandingBalance: number; responsibles: string[] }[];
   count: number;
   totalOutstanding: number;
   responsibles: { userId: string; name: string }[];

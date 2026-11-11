@@ -3282,7 +3282,10 @@
     },
     "otherCredits": {
       "notice": "{count, plural, one {This client has # more credit} other {This client has # more credits}} you can't see, with a balance of {total}. Handled by: {names}.",
-      "nobody": "no owner"
+      "nobody": "no owner",
+      "cardsTitle": "Loans handled by someone else",
+      "responsible": "Handled by: {names}",
+      "cardsHint": "Informational cards only: you can not open the details of these loans."
     },
     "loanMode": {
       "A": "I know the instalment",
@@ -3965,6 +3968,8 @@
       "role": "What will they do?",
       "rolePlaceholder": "Pick a role",
       "office": "Manager office",
+      "officeOptional": "Office (optional)",
+      "officeNone": "No office for now",
       "officePlaceholder": "Choose an office",
       "cancel": "Cancel",
       "send": "Send invitation",
