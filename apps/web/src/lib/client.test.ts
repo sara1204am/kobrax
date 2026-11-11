@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { routeByStep, sendJson, type AccountOption } from './client';
+import { hardNav, routeByStep, sendJson, type AccountOption } from './client';
 
 beforeEach(() => sessionStorage.clear());
 
@@ -34,10 +34,14 @@ describe('sendJson', () => {
 });
 
 describe('routeByStep', () => {
-  it('done → replace a /dashboard', () => {
+  it('done → carga completa de /dashboard (nunca el Router Cache de otra sesión)', () => {
     const router = { push: vi.fn(), replace: vi.fn() };
+    const replaceLocation = vi.fn();
+    const spy = vi.spyOn(hardNav, 'replace').mockImplementation(replaceLocation);
     routeByStep(router, 'done');
-    expect(router.replace).toHaveBeenCalledWith('/dashboard');
+    spy.mockRestore();
+    expect(replaceLocation).toHaveBeenCalledWith('/dashboard');
+    expect(router.replace).not.toHaveBeenCalled();
     expect(router.push).not.toHaveBeenCalled();
   });
 

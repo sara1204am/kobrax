@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { AuthShell } from '@/components/auth-shell';
 import { ErrorBanner } from '@/components/ui';
-import { postJson, type AccountOption } from '@/lib/client';
+import { hardNavigate, postJson, type AccountOption } from '@/lib/client';
 
 export default function SelectAccountPage() {
   const router = useRouter();
@@ -37,7 +37,7 @@ export default function SelectAccountPage() {
       return;
     }
     sessionStorage.removeItem('k_accounts');
-    router.replace('/dashboard');
+    hardNavigate('/dashboard');
   }
 
   return (

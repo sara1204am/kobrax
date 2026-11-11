@@ -46,9 +46,6 @@ export default async function RoleDetailPage({ params, searchParams }: { params:
 
   return (
     <>
-      <Link href="/seguridad/roles" className="mb-3 inline-block text-[13px] font-medium text-k-purple hover:underline">
-        ← {t('back')}
-      </Link>
       <PageHeader
         title={name}
         subtitle={[role.templateKey ? t('detail.template', { name: t.has(`roleNames.${role.templateKey}`) ? t(`roleNames.${role.templateKey}`) : role.templateKey } ) : null, t('detail.peopleCount', { n: role.members ?? 0 }), role.scopeKind ? t(`scope.${role.scopeKind}`) : null]

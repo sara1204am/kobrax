@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import { Permission, type RoleCompare, type RoleSummary } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
@@ -29,9 +28,6 @@ export default async function CompareRolesPage({ searchParams }: { searchParams:
 
   return (
     <>
-      <Link href="/seguridad/roles" className="mb-3 inline-block text-[13px] font-medium text-k-purple hover:underline">
-        ← {t('back')}
-      </Link>
       <PageHeader title={t('compareView.title')} />
       <CompareView roles={roles.map((r) => ({ key: r.key ?? r.name }))} a={a} b={b} compare={compare} />
     </>

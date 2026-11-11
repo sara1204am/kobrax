@@ -51,7 +51,9 @@
       "pending": "{n, plural, one {# pending task} other {# pending tasks}}",
       "organization": "Organization",
       "activity": "Activity",
-      "accessSecurity": "Security"
+      "accessSecurity": "Security",
+      "roles": "Roles and permissions",
+      "supportAccess": "Support access"
     },
     "crumbs": {
       "datos-personales": "Personal details",
@@ -84,6 +86,7 @@
       "soporte": "Support",
       "organizacion": "Organization",
       "roles": "Roles and permissions",
+      "role": "Role",
       "comparar": "Compare",
       "historial": "History"
     },

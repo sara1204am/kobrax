@@ -2,13 +2,15 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { AuthAccountOption, NotificationPayload } from '@kobrax/shared';
 import { LocaleSwitch } from './locale-switch';
 import { useAccountBrand } from './account-brand';
-import { crumbsFor, type NavItem, type NavKey } from '@/lib/nav';
-import { postJson } from '@/lib/client';
+import { crumbsFor, type Crumb, type NavItem, type NavKey } from '@/lib/nav';
+
+const ROLE_NAME_KEYS = ['ACCOUNT_ADMIN', 'MANAGER', 'SUPERVISOR', 'COLLECTOR', 'AUDITOR', 'VIEWER'];
+import { hardNavigate, postJson } from '@/lib/client';
 import { notificationHref } from '@/lib/notifications';
 import { publishSessionEvent } from '@/lib/session-sync';
 import { SessionWatcher } from './session-watcher';
@@ -191,6 +193,12 @@ function NavList({
           const base =
             'flex min-h-[44px] items-center gap-3 rounded-xl border-l-[3px] border-transparent px-3 text-[14px] font-medium transition-colors';
 
+          if (item.built && item.children) {
+            return (
+              <NavGroup key={item.href} item={item} active={active} pathname={pathname} base={base} labelClass={labelClass} collapsible={collapsible} />
+            );
+          }
+
           return (
             <li key={item.href}>
               {item.built ? (
@@ -237,6 +245,64 @@ function NavList({
         })}
       </ul>
     </nav>
+  );
+}
+
+/**
+ * Un grupo del menú (Seguridad): no es una pantalla, es un botón que despliega o pliega sus hijos.
+ * Arranca abierto si ya estás dentro de la sección; el resto del tiempo lo decide el click.
+ */
+function NavGroup({
+  item,
+  active,
+  pathname,
+  base,
+  labelClass,
+  collapsible,
+}: {
+  item: NavItem;
+  active: boolean;
+  pathname: string;
+  base: string;
+  labelClass: string;
+  collapsible: boolean;
+}) {
+  const t = useTranslations('panel');
+  const [open, setOpen] = useState(active);
+  return (
+    <li>
+      <button
+        type="button"
+        aria-expanded={open}
+        title={t(`nav.${item.label}`)}
+        onClick={() => setOpen((o) => !o)}
+        className={`${base} w-full text-left ${active ? 'border-k-soft-periw bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'}`}
+      >
+        <Icon name={item.label} />
+        <span className={`flex-1 ${labelClass}`}>{t(`nav.${item.label}`)}</span>
+        <Icon name="chevron" className={`h-4 w-4 shrink-0 transition-transform ${labelClass} ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <ul className={`mt-1 space-y-1 ${collapsible ? 'hidden xl:block' : ''}`}>
+          {item.children?.map((child) => {
+            const childActive = pathname === child.href || pathname.startsWith(`${child.href}/`);
+            return (
+              <li key={child.href}>
+                <Link
+                  href={child.href}
+                  aria-current={childActive ? 'page' : undefined}
+                  className={`flex min-h-[40px] items-center rounded-xl border-l-[3px] border-transparent pl-10 pr-3 text-[13px] font-medium transition-colors ${
+                    childActive ? 'border-k-soft-periw bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'
+                  }`}
+                >
+                  {t(`nav.${child.label}`)}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </li>
   );
 }
 
@@ -360,6 +426,10 @@ function Topbar({
   const t = useTranslations('panel');
   const pathname = usePathname();
   const crumbs = crumbsFor(pathname);
+  const tRoles = useTranslations('permissions.roleNames');
+  // El rol se muestra con su nombre traducido; un rol propio de la cuenta (clave sin traducción) va tal cual.
+  const crumbText = (crumb: Crumb) =>
+    crumb.roleKey ? (ROLE_NAME_KEYS.includes(crumb.roleKey) ? tRoles(crumb.roleKey) : crumb.roleKey) : t(crumb.label);
   const brand = useAccountBrand();
   const current = accounts.find((a) => a.id === user.accountId);
   /*
@@ -404,10 +474,10 @@ function Topbar({
               )}
               {crumb.href ? (
                 <Link href={crumb.href} className="truncate text-k-text-2 hover:text-k-text">
-                  {t(crumb.label)}
+                  {crumbText(crumb)}
                 </Link>
               ) : (
-                <span className="truncate font-medium text-k-text">{t(crumb.label)}</span>
+                <span className="truncate font-medium text-k-text">{crumbText(crumb)}</span>
               )}
             </li>
           ))}
@@ -601,7 +671,6 @@ function SidebarIdentity({ user, collapsible = false }: { user: ShellUser; colla
  * usuario; en el sidebar colapsado (1024–1279) queda sólo el ícono, con `title` de respaldo.
  */
 function SidebarLogout({ collapsible = false }: { collapsible?: boolean }) {
-  const router = useRouter();
   const t = useTranslations('panel');
   const [busy, setBusy] = useState(false);
 
@@ -613,7 +682,7 @@ function SidebarLogout({ collapsible = false }: { collapsible?: boolean }) {
           setBusy(true);
           await postJson('/api/auth/logout', {});
           publishSessionEvent('logout');
-          router.replace('/login');
+          hardNavigate('/login');
         }}
         disabled={busy}
         title={t('logout')}

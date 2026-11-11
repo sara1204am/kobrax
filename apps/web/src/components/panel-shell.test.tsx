@@ -1,5 +1,5 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { server } from '@/test/msw-server';
@@ -79,8 +79,19 @@ describe('PanelShell — secciones nuevas del menú (F14 · F6)', () => {
 
   it('el administrador ve Seguridad y Actividad', () => {
     renderShell(ACCOUNTS, ['support:consent', 'audit:read']);
-    expect(screen.getAllByRole('link', { name: 'Seguridad' })[0]).toHaveAttribute('href', '/seguridad');
+    expect(screen.getAllByRole('button', { name: 'Seguridad' })[0]).toBeInTheDocument();
     expect(screen.getAllByRole('link', { name: 'Actividad' })[0]).toHaveAttribute('href', '/actividad');
+  });
+
+  it('Seguridad despliega y pliega sus hijos con el click', () => {
+    renderShell(ACCOUNTS, ['support:consent', 'role:read']);
+    const toggle = screen.getAllByRole('button', { name: 'Seguridad' })[0]!;
+    expect(screen.queryByRole('link', { name: 'Roles y permisos' })).not.toBeInTheDocument();
+    fireEvent.click(toggle);
+    expect(screen.getAllByRole('link', { name: 'Roles y permisos' })[0]).toHaveAttribute('href', '/seguridad/roles');
+    expect(screen.getAllByRole('link', { name: 'Accesos de soporte' })[0]).toHaveAttribute('href', '/seguridad/soporte');
+    fireEvent.click(toggle);
+    expect(screen.queryByRole('link', { name: 'Roles y permisos' })).not.toBeInTheDocument();
   });
 });
 

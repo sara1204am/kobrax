@@ -51,7 +51,9 @@
       "pending": "{n, plural, one {# gestión pendiente} other {# gestiones pendientes}}",
       "organization": "Organización",
       "activity": "Actividad",
-      "accessSecurity": "Seguridad"
+      "accessSecurity": "Seguridad",
+      "roles": "Roles y permisos",
+      "supportAccess": "Accesos de soporte"
     },
     "crumbs": {
       "datos-personales": "Datos personales",
@@ -84,6 +86,7 @@
       "soporte": "Soporte",
       "organizacion": "Organización",
       "roles": "Roles y permisos",
+      "role": "Rol",
       "comparar": "Comparar",
       "historial": "Historial"
     },
