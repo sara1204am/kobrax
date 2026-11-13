@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import type { ReactNode } from 'react';
-import { Permission, type AuthAccountOption, type MeInfo } from '@kobrax/shared';
+import { Permission, shouldOfferWizard, type AuthAccountOption, type MeInfo } from '@kobrax/shared';
 import { getMe } from '@/lib/authz';
 import { apiCall } from '@/lib/bff';
 import { getAgendaSummary } from '@/lib/agenda-summary';
@@ -12,6 +12,7 @@ import { PermissionsProvider } from '@/components/permissions';
 import { WorkspaceProvider } from '@/components/workspace';
 import { HiddenModuleNotice } from '@/components/hidden-module-notice';
 import { ToastProvider } from '@/components/toast';
+import { OnboardingWizard } from '@/components/onboarding-wizard';
 import { visibleNav } from '@/lib/nav';
 
 /**
@@ -59,46 +60,59 @@ export default async function PanelLayout({ children }: { children: ReactNode })
    */
   const today = user.permissions.includes(Permission.AGENDA_READ) ? await getAgendaSummary() : null;
   const agendaCount = today ? today.overdue + today.pending : 0;
-  const badges = agendaCount > 0 ? { agenda: { count: agendaCount, urgent: (today?.overdue ?? 0) > 0 } } : undefined;
+  const badges =
+    agendaCount > 0
+      ? { agenda: { count: agendaCount, urgent: (today?.overdue ?? 0) > 0 } }
+      : undefined;
 
   /*
    * Faltan datos fiscales: el aviso sólo le sale a quien puede completarlos. Si la cuenta no responde, el panel
    * sigue sin el aviso (es un recordatorio, no una dependencia).
    */
-  const account = user.permissions.includes(Permission.ACCOUNT_WRITE) ? (await getAccount()).body.data : null;
+  const account = user.permissions.includes(Permission.ACCOUNT_WRITE)
+    ? (await getAccount()).body.data
+    : null;
   const billingMissing = account?.billingMissing ?? [];
 
   return (
     <PermissionsProvider permissions={user.permissions}>
       <WorkspaceProvider workspace={user.account?.workspace}>
-      <AccountBrandProvider brand={user.account ?? null}>
-      <PanelShell
-        user={{
-          userId: user.userId,
-          sessionId: user.sessionId,
-          name: user.profile ? `${user.profile.firstName} ${user.profile.lastName}` : user.email,
-          email: user.email,
-          role: user.role,
-          accountId: user.accountId,
-          photoUrl: user.profile?.photoUrl,
-        }}
-        // Si la lista falla, el panel funciona igual: el selector de empresa simplemente no
-        // aparece. Es un adorno de la topbar, no la puerta de entrada.
-        accounts={accounts.body.data ?? []}
-        nav={visibleNav(user.permissions, user.account?.workspace)}
-        badges={badges}
-        billingMissing={billingMissing}
-        supportSession={user.supportSession}
-      >
-        {/* Los avisos se montan una sola vez acá: un provider por pantalla haría que un toast
+        <AccountBrandProvider brand={user.account ?? null}>
+          <PanelShell
+            user={{
+              userId: user.userId,
+              sessionId: user.sessionId,
+              name: user.profile
+                ? `${user.profile.firstName} ${user.profile.lastName}`
+                : user.email,
+              email: user.email,
+              role: user.role,
+              accountId: user.accountId,
+              photoUrl: user.profile?.photoUrl,
+            }}
+            // Si la lista falla, el panel funciona igual: el selector de empresa simplemente no
+            // aparece. Es un adorno de la topbar, no la puerta de entrada.
+            accounts={accounts.body.data ?? []}
+            nav={visibleNav(user.permissions, user.account?.workspace)}
+            badges={badges}
+            billingMissing={billingMissing}
+            supportSession={user.supportSession}
+          >
+            {/* Los avisos se montan una sola vez acá: un provider por pantalla haría que un toast
             disparado antes de navegar se pierda con el desmontaje. */}
-        <ToastProvider>
-          {/* F15: el aviso de «ese módulo está oculto» (`?oculto=`), en la pantalla a la que se volvió. */}
-          <HiddenModuleNotice canManage={user.permissions.includes(Permission.ACCOUNT_WRITE)} />
-          {children}
-        </ToastProvider>
-      </PanelShell>
-      </AccountBrandProvider>
+            <ToastProvider>
+              {/* F15: el aviso de «ese módulo está oculto» (`?oculto=`), en la pantalla a la que se volvió. */}
+              <HiddenModuleNotice canManage={user.permissions.includes(Permission.ACCOUNT_WRITE)} />
+              {/* F15 · P7 (D-14): el asistente de configuración, solo a quien administra una cuenta NUEVA (estado `pending`, que
+              el servidor pone al crearla). Una cuenta anterior no tiene estado y no lo recibe. Llega después de MFA: aquí ya hay sesión. */}
+              {account && shouldOfferWizard(user.account?.onboarding?.status) && (
+                // `key` = `rev`: tras «Recargar» por un conflicto el asistente vuelve a montarse con lo último guardado.
+                <OnboardingWizard key={account.workspace?.rev ?? 0} account={account} />
+              )}
+              {children}
+            </ToastProvider>
+          </PanelShell>
+        </AccountBrandProvider>
       </WorkspaceProvider>
     </PermissionsProvider>
   );

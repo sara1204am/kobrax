@@ -86,6 +86,8 @@ export interface AccountInfo {
 export interface AccountPatch {
   /** F15: reemplaza el espacio de trabajo completo, con control optimista por `rev`. */
   workspace?: Workspace;
+  /** F15 · P6: resuelve el asistente de configuración (el primero que lo resuelve gana). Quién y cuándo los pone el servidor. */
+  onboarding?: { status: 'done' | 'skipped'; preset?: 'independent' | 'team' | 'complete' | 'custom' };
   businessName?: string;
   /** `null` = quitarlo. Es opcional, así que se puede borrar. */
   taxId?: string | null;

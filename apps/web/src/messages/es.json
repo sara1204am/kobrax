@@ -4958,5 +4958,149 @@
       "name": "Su oficina",
       "description": "Ve los datos de su oficina, con responsable."
     }
+  },
+  "onboarding": {
+    "title": "Configura tu espacio de trabajo",
+    "progress": "Paso {n} de {total}",
+    "later": "Hacerlo después",
+    "back": "Atrás",
+    "next": "Siguiente",
+    "skipStep": "Dejar como está",
+    "useRecommended": "Usar la configuración recomendada y terminar",
+    "save": "Guardar y terminar",
+    "presets": {
+      "independent": {
+        "name": "Independiente",
+        "desc": "Lo esencial para trabajar solo."
+      },
+      "team": {
+        "name": "Equipo",
+        "desc": "Para un equipo de cobradores y supervisores."
+      },
+      "complete": {
+        "name": "Completo",
+        "desc": "Todo visible, como hasta ahora."
+      }
+    },
+    "welcome": {
+      "title": "Te damos la bienvenida a Kobrax",
+      "intro": "Mostramos solo lo que necesitas para que empieces más rápido. Tarda un minuto.",
+      "recommended": "Te recomendamos",
+      "reassure": "No tienes que configurar todo ahora: puedes cambiarlo cuando quieras en Cuenta › Espacio de trabajo.",
+      "pick": "O elige otro punto de partida",
+      "reason": {
+        "free": "Elegiste el plan gratuito: trabajas solo, así que mostramos lo esencial.",
+        "professional": "Elegiste Professional: pensado para un equipo, así que dejamos las herramientas de equipo.",
+        "business": "Elegiste Business: dejamos todo visible para una operación más grande.",
+        "fallback": "Empezamos con la vista sencilla; siempre puedes mostrar más."
+      }
+    },
+    "menu": {
+      "title": "Tu menú",
+      "intro": "Elige qué módulos quieres ver en el menú.",
+      "always": "Inicio, Cartera, Mora, Agenda, Pagos, Seguridad, Cuenta y Mi perfil siempre están visibles.",
+      "blocked": "No se puede ocultar mientras tu cuenta tenga más de una persona u oficina.",
+      "desc": {
+        "import": "Cargar cartera desde un archivo.",
+        "routes": "Planificar y recorrer visitas.",
+        "export": "Descargar reportes.",
+        "organization": "Oficinas y agencias.",
+        "team": "Invitar y administrar personas.",
+        "activity": "Historial de lo que pasa en la cuenta."
+      }
+    },
+    "how": {
+      "title": "Cómo trabajas",
+      "intro": "Cuéntanos cómo trabajas y ajustamos el menú.",
+      "visits": "¿Haces visitas a tus clientes?",
+      "visitsHint": "Muestra Rutas para planificar y registrar visitas.",
+      "file": "¿Cargas tu cartera desde un archivo?",
+      "fileHint": "Muestra Import.",
+      "team": "¿Trabajas con un equipo?",
+      "teamHint": "Muestra Equipo y Actividad.",
+      "offices": "¿Tienes varias oficinas?",
+      "officesHint": "Muestra Organización.",
+      "reports": "¿Necesitas descargar reportes?",
+      "reportsHint": "Muestra Exportar."
+    },
+    "clients": {
+      "title": "La ficha de tus clientes",
+      "intro": "Elige qué secciones y campos quieres ver al registrar un cliente.",
+      "sections": {
+        "income": "Ingresos",
+        "guarantors": "Garantes",
+        "collateral": "Garantías",
+        "attachments": "Adjuntos",
+        "gender": "Género",
+        "preferredChannel": "Canal preferido"
+      },
+      "note": "Lo que ya tengas guardado en un cliente siempre se sigue viendo."
+    },
+    "credits": {
+      "title": "Tus créditos",
+      "intro": "Elige cómo se definen tus créditos al crearlos.",
+      "definitions": {
+        "agreed_installment": {
+          "name": "Cuota acordada",
+          "desc": "Acuerdas el monto de cada cuota y el número de cuotas."
+        },
+        "agreed_total": {
+          "name": "Total acordado",
+          "desc": "Acuerdas el total a pagar y el número de cuotas."
+        },
+        "calculated": {
+          "name": "Cálculo con intereses",
+          "desc": "Se calcula con tasa de interés y plazo."
+        },
+        "choose": {
+          "name": "Que yo elija en cada crédito",
+          "desc": "Se te pregunta cada vez, como hasta ahora."
+        }
+      },
+      "advanced": "Opciones avanzadas",
+      "advancedHint": "Cómo se cuenta la mora y otros ajustes financieros."
+    },
+    "preview": {
+      "title": "Vista previa",
+      "intro": "Así quedará tu espacio de trabajo.",
+      "menu": "Tu menú",
+      "hidden": "Lo que se oculta",
+      "none": "Nada: verás todo, como hasta ahora.",
+      "definition": "Los créditos se crean siempre como: {name}",
+      "options": {
+        "client_income": "Ingresos del cliente",
+        "client_guarantors": "Garantes del cliente",
+        "client_collateral": "Garantías del cliente",
+        "client_attachments": "Adjuntos del cliente",
+        "client_gender": "Género del cliente",
+        "client_preferredChannel": "Canal preferido del cliente",
+        "client_taxId": "NIT del cliente",
+        "credit_advanced": "Opciones avanzadas del crédito",
+        "credit_arrearsMethod": "Método de cálculo de la mora"
+      }
+    },
+    "confirm": {
+      "title": "Confirmar",
+      "intro": "Revisa y guarda. Se escribe todo de una vez.",
+      "summary": "{modules, plural, =0 {Ningún módulo oculto} one {# módulo oculto} other {# módulos ocultos}} · {options, plural, =0 {ninguna sección oculta} one {# sección o campo oculto} other {# secciones o campos ocultos}}.",
+      "guarantee": "Esto no cambia permisos, planes ni datos: solo qué se muestra."
+    },
+    "done": {
+      "title": "Listo",
+      "intro": "Tu espacio de trabajo está configurado.",
+      "text": "Puedes cambiarlo cuando quieras en Cuenta › Espacio de trabajo.",
+      "enter": "Entrar a Kobrax"
+    },
+    "errors": {
+      "conflict": "Otra persona cambió la configuración mientras tanto.",
+      "reload": "Recargar",
+      "blocked": "No se pudo ocultar algo que tu cuenta todavía usa (personas, oficinas o rutas en curso).",
+      "invalid": "La configuración no es válida. Revisa tus elecciones.",
+      "generic": "No se pudo guardar. Inténtalo de nuevo."
+    },
+    "launcher": {
+      "button": "Revisar con el asistente",
+      "hint": "Recorre la configuración paso a paso."
+    }
   }
 }

@@ -1,7 +1,8 @@
-import { Permission } from '@kobrax/shared';
-import { requirePermission } from '@/lib/authz';
+import { Permission, shouldOfferWizard } from '@kobrax/shared';
+import { getMe, requirePermission } from '@/lib/authz';
 import { getAccount } from '../get-account';
 import { WorkspaceEditor } from './workspace-editor';
+import { OnboardingLauncher } from '@/components/onboarding-launcher';
 
 /**
  * Cuenta › Espacio de trabajo (F15 · P4): qué módulos y opciones ve esta organización. Pide `account:write`.
@@ -16,5 +17,14 @@ export default async function CuentaEspacioDeTrabajoPage() {
   if (blocked) return blocked;
   const { body } = await getAccount();
   if (!body.data) return null;
-  return <WorkspaceEditor key={body.data.workspace?.rev ?? 0} account={body.data} />;
+  // Con el asistente pendiente el panel ya lo muestra solo: ofrecerlo aquí apilaría un segundo diálogo.
+  const pending = shouldOfferWizard((await getMe()).body.data?.account?.onboarding?.status);
+  return (
+    <>
+      {!pending && (
+        <OnboardingLauncher key={`launcher-${body.data.workspace?.rev ?? 0}`} account={body.data} />
+      )}
+      <WorkspaceEditor key={body.data.workspace?.rev ?? 0} account={body.data} />
+    </>
+  );
 }
