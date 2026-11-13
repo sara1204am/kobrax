@@ -6,10 +6,14 @@ import { useTranslations } from 'next-intl';
 import type { DashboardDefinition, DashboardWidget } from '@kobrax/shared';
 import { Button, ErrorBanner, Field, Input } from '@/components/ui';
 import { Modal } from '@/components/modal';
+import { WidgetPreview } from './widget-preview';
 import { useToast } from '@/components/toast';
 import { sendJson } from '@/lib/client';
 import { saveWidgets } from '@/lib/dashboard-save';
-import { WIDGET_DEFINITIONS, widgetDefinition } from '@/lib/widget-registry';
+import { CATALOG_ITEMS, widgetDefinition, type CatalogItem } from '@/lib/widget-registry';
+
+/** Minúsculas y sin tildes: «mora» encuentra «Mora» y «gestion» encuentra «gestión». */
+const fold = (v: string) => v.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 /**
  * La barra del tablero: qué vista se está mirando, Ver/Editar y el catálogo de widgets.
@@ -72,28 +76,39 @@ export function DashboardToolbar({
    * No se busca un hueco libre: la grilla compacta hacia arriba apenas se suelta, así que el hueco
    * lo encuentra ella. Buscarlo acá sería reimplementar su algoritmo peor.
    */
-  function add(type: string) {
-    const def = widgetDefinition(type);
+  function add(item: CatalogItem) {
+    const def = widgetDefinition(item.type);
     if (!def) return;
+    const size = item.size ?? def.defaultSize;
     const bottom = widgets.reduce((max, w) => Math.max(max, w.layout.y + w.layout.h), 0);
     void save(
       [
         ...widgets,
         {
-          id: `nuevo-${type}-${bottom}`,
+          id: `nuevo-${item.id}-${bottom}`,
           type: def.type,
           title: '',
-          layout: { x: 0, y: bottom, w: def.defaultSize.w, h: def.defaultSize.h },
-          config: {},
+          layout: { x: 0, y: bottom, w: size.w, h: size.h },
+          config: { ...item.config },
         },
       ],
       t('widgetAdded'),
     );
   }
 
-  const filtered = WIDGET_DEFINITIONS.filter((d) =>
-    t(`catalog.${d.labelKey}`).toLowerCase().includes(search.trim().toLowerCase()),
-  );
+  /** El buscador mira lo que el widget **muestra** (nombre, descripción, palabras clave) y el tipo de gráfico. */
+  const needle = fold(search.trim());
+  const filtered = CATALOG_ITEMS.filter((item) => {
+    if (!needle) return true;
+    const def = widgetDefinition(item.type);
+    const haystack = [
+      t(`catalogItems.${item.id}.name`),
+      t(`catalogItems.${item.id}.description`),
+      t(`catalogItems.${item.id}.keywords`),
+      def ? t(`catalog.${def.labelKey}`) : '',
+    ].join(' ');
+    return needle.split(/\s+/).every((word) => fold(haystack).includes(word));
+  });
 
   return (
     // Sin margen ni `justify-between`: ya no es una fila propia, va dentro de la tarjeta de filtros (ver `DashboardFilters`).
@@ -115,7 +130,7 @@ export function DashboardToolbar({
 
       <div className="flex flex-wrap items-center gap-2">
         {editable && (
-          <Button variant="ghost" onClick={() => setAdding(true)} className="sm:w-auto sm:px-4">
+          <Button onClick={() => setAdding(true)} className="sm:w-auto sm:px-5">
             {t('addWidget')}
           </Button>
         )}
@@ -162,23 +177,28 @@ export function DashboardToolbar({
         <Field label={t('searchWidgets')}>
           <Input value={search} onChange={(e) => setSearch(e.target.value)} autoFocus />
         </Field>
-        <ul className="mt-4 grid max-h-[320px] grid-cols-2 gap-2 overflow-auto">
-          {filtered.map((d) => (
-            <li key={d.type}>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => add(d.type)}
-                className="w-full rounded-xl border border-k-border px-3 py-2.5 text-left hover:bg-k-bg disabled:opacity-50"
-              >
-                <span className="block text-[13px] font-medium text-k-text">{t(`catalog.${d.labelKey}`)}</span>
-                <span className="block text-[11px] text-k-muted">
-                  {d.defaultSize.w}×{d.defaultSize.h}
-                  {d.source === null ? ` · ${t('noSourceShort')}` : ''}
-                </span>
-              </button>
-            </li>
-          ))}
+        <ul className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {filtered.map((item) => {
+            const def = widgetDefinition(item.type);
+            return (
+              <li key={item.id}>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => add(item)}
+                  className="h-full w-full rounded-xl border border-k-border px-3 py-2.5 text-left hover:bg-k-bg disabled:opacity-50"
+                >
+                  <WidgetPreview type={item.type} strip={item.id === 'kpiStrip'} />
+                  <span className="mt-2 block text-[14px] font-semibold text-k-text">{t(`catalogItems.${item.id}.name`)}</span>
+                  <span className="mt-0.5 block text-[12px] leading-snug text-k-text-2">
+                    {t(`catalogItems.${item.id}.description`)}
+                  </span>
+                  {def && <span className="mt-1.5 block text-[11px] text-k-muted">{t(`catalog.${def.labelKey}`)}</span>}
+                </button>
+              </li>
+            );
+          })}
+          {filtered.length === 0 && <li className="col-span-full py-6 text-center text-[13px] text-k-muted">{t('noWidgetMatch')}</li>}
         </ul>
       </Modal>
 

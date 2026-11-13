@@ -90,19 +90,16 @@ export function DashboardTabs({ dashboards, currentId }: { dashboards: Dashboard
         </ul>
       </nav>
 
-      <button
-        type="button"
+      <Button
         onClick={() => {
           setName('');
           setError(null);
           setCreating(true);
         }}
-        title={t('tabs.new')}
-        aria-label={t('tabs.new')}
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[20px] leading-none text-k-purple hover:bg-k-highlight"
+        className="h-10 shrink-0 text-[14px] sm:w-auto sm:px-4"
       >
-        +
-      </button>
+        {t('tabs.new')}
+      </Button>
 
       <Modal
         open={creating}
