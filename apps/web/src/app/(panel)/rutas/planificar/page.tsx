@@ -2,7 +2,6 @@ import { redirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import {
   Permission,
-  RoleType,
   todayISO,
   type AgendaListItem,
   type ArrearCategory,
@@ -14,7 +13,7 @@ import {
 import { apiCall } from '@/lib/bff';
 import { getAgendaSummary } from '@/lib/agenda-summary';
 import { shiftDay } from '@/lib/agenda';
-import { availableQuery, hasPlanFilters, minStops, toAvailable, type PlanParams } from '@/lib/plan';
+import { availableQuery, hasPlanFilters, minStops, planningTargets, toAvailable, type PlanParams } from '@/lib/plan';
 import { EmptyState, PageHeader } from '@/components/panel-ui';
 import { RetryState } from '@/components/retry-state';
 import { PlanScreen, type PlannedVisit } from './plan-screen';
@@ -49,10 +48,10 @@ export default async function PlanificarPage({ searchParams }: { searchParams: P
   if (!me.body.data?.permissions?.includes(Permission.ROUTE_ASSIGN)) redirect('/rutas');
 
   /*
-   * Sólo cobradores activos. Un supervisor con `route:execute` podría tener ruta, pero planificarle
-   * la jornada a quien no sale a la calle es armar trabajo que nadie va a hacer.
+   * Los cobradores activos y, si ejecuta rutas, la propia persona (F15 · P-2: el cobrador independiente es `ACCOUNT_ADMIN`).
+   * Un supervisor que no sale a la calle sigue sin aparecer: planificarle la jornada es armar trabajo que nadie va a hacer.
    */
-  const collectors = (team.body.data ?? []).filter((m) => m.roleName === RoleType.COLLECTOR && m.isActive);
+  const collectors = planningTargets(team.body.data ?? [], { userId: me.body.data.userId, permissions: me.body.data.permissions ?? [] });
   if (collectors.length === 0) {
     return (
       <>

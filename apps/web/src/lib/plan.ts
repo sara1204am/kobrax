@@ -7,7 +7,23 @@
  * sin mora.
  */
 import { haversineKm } from '@kobrax/shared';
-import { COLLECTION_PRIORITIES, VisitOutcome, type MoraCreditListItem } from '@kobrax/shared';
+import { COLLECTION_PRIORITIES, Permission, RoleType, VisitOutcome, type Member, type MoraCreditListItem } from '@kobrax/shared';
+
+/**
+ * A quién se le puede planificar la jornada: los cobradores activos y, **además, a la propia persona si ejecuta rutas**
+ * (`route:execute`). Es el caso del cobrador independiente: la dueña de una cuenta de una sola persona es `ACCOUNT_ADMIN`, no
+ * `COLLECTOR`, y antes veía la pantalla vacía (F15 · P-2). El servidor ya lo acepta (`assertCollector` pide un miembro activo, no un
+ * rol); con una sola persona no hay pedidos de cambio de ruta porque quien administra las rutas no los necesita.
+ *
+ * Sigue sin ofrecer a un supervisor o gerente que no sale a la calle y no es quien planifica: armarle la jornada sería trabajo que
+ * nadie va a hacer. La propia persona va primero.
+ */
+export function planningTargets(team: Member[], me: { userId: string; permissions: string[] }): Member[] {
+  const collectors = team.filter((m) => m.roleName === RoleType.COLLECTOR && m.isActive);
+  const self = team.find((m) => m.userId === me.userId && m.isActive);
+  if (self && me.permissions.includes(Permission.ROUTE_EXECUTE) && !collectors.some((c) => c.userId === self.userId)) return [self, ...collectors];
+  return collectors;
+}
 
 /**
  * Una ubicación dibujable de un deudor: lo mínimo que usan el mapa y la lista.
