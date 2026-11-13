@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import {
+  HIDEABLE_MODULES,
   Permission,
   type AgendaSummary,
   type AgingBucketRow,
@@ -79,7 +80,8 @@ export default async function DashboardPage({
   const permissions = me.body.data?.permissions ?? [];
   if (!permissions.includes(Permission.REPORT_READ)) {
     // El cobrador no tiene tablero de gestión: su Inicio ES su agenda. Antes caía acá en una pantalla sin salida.
-    if (permissions.includes(Permission.AGENDA_READ)) redirect('/agenda');
+    // F15: el aviso `?oculto=` viaja con la redirección: si no, quien llegó a un módulo oculto no vería por qué volvió.
+    if (permissions.includes(Permission.AGENDA_READ)) redirect(searchParams.oculto && (HIDEABLE_MODULES as readonly string[]).includes(searchParams.oculto) ? `/agenda?oculto=${searchParams.oculto}` : '/agenda');
     return <EmptyState title={t('title')} text={t('noAccess')} />;
   }
 

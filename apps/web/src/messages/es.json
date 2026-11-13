@@ -314,6 +314,14 @@
       "title": "No pudimos conectar con el servidor",
       "text": "Vuelve a intentarlo en un momento. Si sigue así, avísale a tu administrador."
     },
+    "workspace": {
+      "hiddenModule": {
+        "title": "{module} está oculto para tu organización.",
+        "textAdmin": "Puedes volver a mostrarlo en Cuenta › Espacio de trabajo.",
+        "textMember": "Pídele a quien administra la cuenta que lo muestre.",
+        "dismiss": "Cerrar aviso"
+      }
+    },
     "billingAlert": {
       "title": "Faltan datos de facturación.",
       "text": "Completa {fields} para que podamos emitir tu factura.",

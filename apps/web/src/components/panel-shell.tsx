@@ -12,6 +12,7 @@ import { crumbsFor, type Crumb, type NavItem, type NavKey } from '@/lib/nav';
 const ROLE_NAME_KEYS = ['ACCOUNT_ADMIN', 'MANAGER', 'SUPERVISOR', 'COLLECTOR', 'AUDITOR', 'VIEWER'];
 import { hardNavigate, postJson } from '@/lib/client';
 import { notificationHref } from '@/lib/notifications';
+import { useWorkspace } from './workspace';
 import { publishSessionEvent } from '@/lib/session-sync';
 import { SessionWatcher } from './session-watcher';
 import { BillingAlert } from './billing-alert';
@@ -312,6 +313,7 @@ function NavGroup({
  * son pocas notificaciones propias, así que no vale la pena esperar al primer click para pedirlas.
  */
 function NotificationBell() {
+  const workspace = useWorkspace();
   const t = useTranslations('panel.notifications');
   const [items, setItems] = useState<NotificationPayload[] | null>(null);
   const [error, setError] = useState(false);
@@ -383,7 +385,7 @@ function NotificationBell() {
         {error && <p className="px-3 py-4 text-[13px] text-k-danger">{t('loadError')}</p>}
         {!error && items?.length === 0 && <p className="px-3 py-4 text-[13px] text-k-text-2">{t('empty')}</p>}
         {(items ?? []).map((n) => {
-          const href = notificationHref(n);
+          const href = notificationHref(n, workspace);
           const cls = `flex w-full items-start gap-2 border-b border-k-border px-3 py-2.5 text-left last:border-b-0 hover:bg-k-bg ${
             n.readAt ? '' : 'bg-k-highlight/40'
           }`;

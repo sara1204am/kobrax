@@ -314,6 +314,14 @@
       "title": "We could not reach the server",
       "text": "Try again in a moment. If it keeps happening, let your administrator know."
     },
+    "workspace": {
+      "hiddenModule": {
+        "title": "{module} is hidden for your organization.",
+        "textAdmin": "You can show it again in Account › Workspace.",
+        "textMember": "Ask whoever manages the account to show it.",
+        "dismiss": "Dismiss"
+      }
+    },
     "billingAlert": {
       "title": "Billing details are missing.",
       "text": "Fill in {fields} so we can issue your invoice.",
