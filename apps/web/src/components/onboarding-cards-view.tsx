@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { FirstStep, WorkspaceNavKey } from '@kobrax/shared';
 import { sendJson } from '@/lib/client';
+import { startTour } from '@/components/tour';
 
 /** Las dos pantallas de aterrizaje: Inicio y, para quien no ve Inicio, la Agenda. */
 const LANDING = ['/dashboard', '/agenda'];
@@ -34,6 +35,7 @@ export function OnboardingCardsView({
 }) {
   const t = useTranslations('onboarding');
   const nav = useTranslations('panel.nav');
+  const tourT = useTranslations('tour');
   const roles = useTranslations('roles.roleNames');
   const pathname = usePathname();
   const router = useRouter();
@@ -101,6 +103,17 @@ export function OnboardingCardsView({
             className="mt-3 rounded-lg bg-white px-3 py-2 text-[13px] font-medium text-k-navy hover:bg-k-light-bg"
           >
             {t('welcomeCard.ok')}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setShowWelcome(false);
+              close({ welcomeSeen: true });
+              startTour();
+            }}
+            className="ml-2 mt-3 rounded-lg bg-k-navy px-3 py-2 text-[13px] font-medium text-white hover:bg-k-navy/90"
+          >
+            {tourT('welcomeCta')}
           </button>
         </section>
       )}

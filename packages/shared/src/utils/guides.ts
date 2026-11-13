@@ -165,3 +165,19 @@ export function helpEntries(ctx: Pick<GuideContext, 'visibleNavKeys'>): HelpEntr
     ],
   }));
 }
+
+// ── «Seguir donde lo dejé» (P9) ──────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * ¿Desde qué paso se retoma el recorrido? Solo si quedó a medias con la MISMA versión del catálogo y todavía hay pasos por
+ * delante (el catálogo o los permisos pudieron cambiar entre tanto). `null` = no hay nada que retomar.
+ */
+export function tourResumeIndex(
+  tour: { status: string; step: number; catalogVersion: number },
+  totalSteps: number,
+): number | null {
+  if (tour.status !== 'inProgress') return null;
+  if (tour.catalogVersion !== GUIDE_CATALOG_VERSION) return null;
+  if (!Number.isInteger(tour.step) || tour.step <= 0 || tour.step >= totalSteps) return null;
+  return tour.step;
+}

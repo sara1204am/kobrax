@@ -5121,5 +5121,146 @@
       "button": "Review with the wizard",
       "hint": "Go through the setup step by step."
     }
+  },
+  "guides": {
+    "tour": {
+      "nav": {
+        "home": {
+          "title": "Home",
+          "what": "Your summary of the day.",
+          "does": "Shows the key portfolio numbers and what needs attention now.",
+          "startWith": "Start here every morning."
+        },
+        "portfolio": {
+          "title": "Portfolio",
+          "what": "Your clients and their credits.",
+          "does": "Search, filter and open each client's file; this is where you create clients and credits.",
+          "startWith": "Create your first client."
+        },
+        "import": {
+          "title": "Import",
+          "what": "Bulk upload from a spreadsheet.",
+          "does": "Upload clients and credits from a file and review errors before confirming.",
+          "startWith": "Download the template and try it with a few rows."
+        },
+        "mora": {
+          "title": "Arrears",
+          "what": "Overdue credits.",
+          "does": "Lists what is overdue by priority and category, and lets you log each collection action.",
+          "startWith": "Sort by priority and open the first one."
+        },
+        "agenda": {
+          "title": "Agenda",
+          "what": "Your pending actions.",
+          "does": "Gathers overdue and today's items: calls, visits and payment promises.",
+          "startWith": "Handle the overdue ones first."
+        },
+        "routes": {
+          "title": "Routes",
+          "what": "Field visit planning.",
+          "does": "Groups visits into a route and orders them to travel less.",
+          "startWith": "Pick a day and build the first route."
+        },
+        "payments": {
+          "title": "Payments",
+          "what": "Payments received.",
+          "does": "Record and review payments; each one updates the credit's balance and arrears.",
+          "startWith": "Record a test payment on a credit."
+        },
+        "export": {
+          "title": "Export",
+          "what": "Your data outside Kobrax.",
+          "does": "Generates files with the information your role can see.",
+          "startWith": "Choose what to export and the date range."
+        },
+        "organization": {
+          "title": "Organization",
+          "what": "Offices and who sees what.",
+          "does": "Create offices and assign people and portfolios to each.",
+          "startWith": "Create your first office."
+        },
+        "team": {
+          "title": "Team",
+          "what": "The people in your organization.",
+          "does": "Invite users, give them a role and suspend access.",
+          "startWith": "Invite your first teammate."
+        },
+        "accessSecurity": {
+          "title": "Security",
+          "what": "Access and account protection.",
+          "does": "Manage roles and permissions, open sessions and support access.",
+          "startWith": "Review roles before inviting people."
+        },
+        "activity": {
+          "title": "Activity",
+          "what": "The record of what happened.",
+          "does": "Shows who did what and when in your organization.",
+          "startWith": "Filter by person to review a change."
+        },
+        "account": {
+          "title": "Account",
+          "what": "Your company's details.",
+          "does": "Tax data, branding, plan and the workspace: which modules and options you see.",
+          "startWith": "Complete the billing details."
+        },
+        "profile": {
+          "title": "My profile",
+          "what": "Your personal details.",
+          "does": "Change your name, photo, password and two-step verification.",
+          "startWith": "Turn on two-step verification."
+        }
+      },
+      "topbar": {
+        "language": {
+          "title": "Language",
+          "what": "Spanish or English.",
+          "does": "Switches the language of the whole panel instantly.",
+          "startWith": "Pick the one you prefer."
+        },
+        "help": {
+          "title": "Help",
+          "what": "This button is always here.",
+          "does": "Use it to repeat this tour whenever you want or pick up where you left off.",
+          "startWith": "Come back whenever you need."
+        },
+        "notifications": {
+          "title": "Notices",
+          "what": "The notification bell.",
+          "does": "Shows what was newly assigned to you or changed; one click takes you there.",
+          "startWith": "Mark them as read once reviewed."
+        },
+        "sessionMenu": {
+          "title": "Your session",
+          "what": "Who you are and your role.",
+          "does": "Shows your name and role, and below it you can sign out.",
+          "startWith": "Sign out on a shared computer."
+        },
+        "accountSwitcher": {
+          "title": "Organization",
+          "what": "Switch company.",
+          "does": "If you belong to several organizations, move between them without signing in again.",
+          "startWith": "Choose the organization you'll work with."
+        }
+      }
+    }
+  },
+  "tour": {
+    "label": "General tour",
+    "progress": "Step {current} of {total}",
+    "back": "Back",
+    "next": "Next",
+    "finish": "Finish",
+    "skip": "Skip tour",
+    "close": "Close",
+    "startWith": "To get started:",
+    "noAnchor": "This element is not in view on your screen right now.",
+    "wizardCta": "Take the tour now",
+    "welcomeCta": "Take the tour"
+  },
+  "help": {
+    "button": "Help",
+    "menuTitle": "Help",
+    "tour": "General tour",
+    "resume": "Pick up where I left off"
   }
 }

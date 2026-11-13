@@ -40,6 +40,7 @@ import {
   type WizardStep,
 } from '@/lib/onboarding-wizard';
 import { Button, Switch } from '@/components/ui';
+import { startTour } from '@/components/tour';
 
 const PRESET_ORDER: WorkspacePresetKey[] = ['independent', 'team', 'complete'];
 const CLIENT_SECTIONS: WorkspaceOptionKey[] = [
@@ -124,6 +125,7 @@ export function OnboardingWizard({
   onClose?: () => void;
 }) {
   const t = useTranslations('onboarding');
+  const tourT = useTranslations('tour');
   const nav = useTranslations('panel.nav');
   const router = useRouter();
   const base = account.workspace ?? emptyWorkspace();
@@ -166,12 +168,13 @@ export function OnboardingWizard({
   }
 
   /** Sale del asistente y vuelve a pedir la sesión: el layout ya no lo monta (estado `done`/`skipped`). */
-  async function leave() {
+  async function leave(thenTour = false) {
     // Quien configuró la cuenta ya conoce el espacio: no hace falta darle además la tarjeta de bienvenida. Se espera el
     // guardado antes de refrescar: si no, el panel podría leer el estado viejo y mostrársela igual.
     if (!onClose) await sendJson('/api/users/me/guides', { welcomeSeen: true }, 'PATCH');
     onClose?.();
     router.refresh();
+    if (thenTour) startTour();
   }
 
   // Abierto desde Cuenta (`onClose`) cerrar no resuelve nada; montado por el panel, «después» marca el asistente como omitido.
@@ -471,9 +474,14 @@ export function OnboardingWizard({
       <footer className="sticky bottom-0 border-t border-k-border bg-white px-5 py-3">
         <div className="mx-auto flex w-full max-w-2xl flex-wrap items-center justify-between gap-2">
           {step === 'done' ? (
-            <Button variant="cta" className="ml-auto !w-auto" onClick={() => void leave()}>
-              {t('done.enter')}
-            </Button>
+            <div className="ml-auto flex flex-wrap gap-2">
+              <Button variant="ghost" className="!w-auto" onClick={() => void leave()}>
+                {t('done.enter')}
+              </Button>
+              <Button variant="cta" className="!w-auto" onClick={() => void leave(true)}>
+                {tourT('wizardCta')}
+              </Button>
+            </div>
           ) : (
             <>
               <div className="flex flex-wrap items-center gap-2">

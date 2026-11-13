@@ -5121,5 +5121,146 @@
       "button": "Revisar con el asistente",
       "hint": "Recorre la configuración paso a paso."
     }
+  },
+  "guides": {
+    "tour": {
+      "nav": {
+        "home": {
+          "title": "Inicio",
+          "what": "Tu resumen del día.",
+          "does": "Muestra los números clave de la cartera y lo que requiere atención ahora.",
+          "startWith": "Empieza aquí cada mañana."
+        },
+        "portfolio": {
+          "title": "Cartera",
+          "what": "Tus clientes y sus créditos.",
+          "does": "Busca, filtra y abre la ficha de cada cliente; desde aquí das de alta clientes y créditos.",
+          "startWith": "Crea tu primer cliente."
+        },
+        "import": {
+          "title": "Importar",
+          "what": "Carga masiva desde una hoja.",
+          "does": "Sube clientes y créditos desde un archivo y revisa los errores antes de confirmar.",
+          "startWith": "Descarga la plantilla y pruébala con pocas filas."
+        },
+        "mora": {
+          "title": "Mora",
+          "what": "Los créditos atrasados.",
+          "does": "Lista lo que está en mora, por prioridad y categoría, y permite registrar cada gestión de cobro.",
+          "startWith": "Ordena por prioridad y abre el primero."
+        },
+        "agenda": {
+          "title": "Agenda",
+          "what": "Tus gestiones pendientes.",
+          "does": "Reúne las vencidas y las de hoy: llamadas, visitas y promesas de pago.",
+          "startWith": "Atiende primero las vencidas."
+        },
+        "routes": {
+          "title": "Rutas",
+          "what": "Planificación de visitas en campo.",
+          "does": "Agrupa visitas en una ruta y las ordena para recorrer menos.",
+          "startWith": "Elige un día y arma la primera ruta."
+        },
+        "payments": {
+          "title": "Pagos",
+          "what": "Los pagos recibidos.",
+          "does": "Registra y consulta pagos; cada pago actualiza el saldo y la mora del crédito.",
+          "startWith": "Registra un pago de prueba en un crédito."
+        },
+        "export": {
+          "title": "Exportar",
+          "what": "Tus datos fuera de Kobrax.",
+          "does": "Genera archivos con la información que tu rol puede ver.",
+          "startWith": "Elige qué exportar y el rango de fechas."
+        },
+        "organization": {
+          "title": "Organización",
+          "what": "Oficinas y quién ve qué.",
+          "does": "Crea oficinas y asigna personas y carteras a cada una.",
+          "startWith": "Crea tu primera oficina."
+        },
+        "team": {
+          "title": "Equipo",
+          "what": "Las personas de tu organización.",
+          "does": "Invita usuarios, asígnales un rol y suspende accesos.",
+          "startWith": "Invita a tu primer compañero."
+        },
+        "accessSecurity": {
+          "title": "Seguridad",
+          "what": "Accesos y protección de la cuenta.",
+          "does": "Gestiona roles y permisos, sesiones abiertas y accesos de soporte.",
+          "startWith": "Revisa los roles antes de invitar gente."
+        },
+        "activity": {
+          "title": "Actividad",
+          "what": "El registro de lo que pasó.",
+          "does": "Muestra quién hizo qué y cuándo en tu organización.",
+          "startWith": "Filtra por persona para revisar un cambio."
+        },
+        "account": {
+          "title": "Cuenta",
+          "what": "Los datos de tu empresa.",
+          "does": "Datos fiscales, marca, plan y el espacio de trabajo: qué módulos y opciones ves.",
+          "startWith": "Completa los datos de facturación."
+        },
+        "profile": {
+          "title": "Mi perfil",
+          "what": "Tus datos personales.",
+          "does": "Cambia tu nombre, foto, contraseña y la verificación en dos pasos.",
+          "startWith": "Activa la verificación en dos pasos."
+        }
+      },
+      "topbar": {
+        "language": {
+          "title": "Idioma",
+          "what": "Español o inglés.",
+          "does": "Cambia el idioma de todo el panel al instante.",
+          "startWith": "Elige el que prefieras."
+        },
+        "help": {
+          "title": "Ayuda",
+          "what": "Este botón siempre está aquí.",
+          "does": "Desde él repites este recorrido cuando quieras o retomas donde lo dejaste.",
+          "startWith": "Vuelve cuando lo necesites."
+        },
+        "notifications": {
+          "title": "Avisos",
+          "what": "La campana de notificaciones.",
+          "does": "Muestra lo nuevo que te asignaron o que cambió; un clic te lleva a ello.",
+          "startWith": "Márcalas como leídas al revisarlas."
+        },
+        "sessionMenu": {
+          "title": "Tu sesión",
+          "what": "Quién eres y con qué rol.",
+          "does": "Aquí ves tu nombre y rol, y abajo puedes cerrar sesión.",
+          "startWith": "Cierra sesión al usar un equipo compartido."
+        },
+        "accountSwitcher": {
+          "title": "Organización",
+          "what": "Cambiar de empresa.",
+          "does": "Si perteneces a varias organizaciones, pasas de una a otra sin volver a entrar.",
+          "startWith": "Elige la organización con la que vas a trabajar."
+        }
+      }
+    }
+  },
+  "tour": {
+    "label": "Recorrido general",
+    "progress": "Paso {current} de {total}",
+    "back": "Atrás",
+    "next": "Siguiente",
+    "finish": "Terminar",
+    "skip": "Omitir recorrido",
+    "close": "Cerrar",
+    "startWith": "Para empezar:",
+    "noAnchor": "Este elemento no está a la vista en tu pantalla ahora mismo.",
+    "wizardCta": "Hacer el recorrido ahora",
+    "welcomeCta": "Hacer el recorrido"
+  },
+  "help": {
+    "button": "Ayuda",
+    "menuTitle": "Ayuda",
+    "tour": "Recorrido general",
+    "resume": "Seguir donde lo dejé"
   }
 }

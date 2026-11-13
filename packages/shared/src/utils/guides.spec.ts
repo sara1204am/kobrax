@@ -6,6 +6,7 @@ import {
   guideSteps,
   helpEntries,
   screenGuideSteps,
+  tourResumeIndex,
   type ScreenGuideModule,
 } from './guides.js';
 import {
@@ -182,5 +183,23 @@ describe('centro de ayuda (misma fuente)', () => {
   it('no ofrece ayuda de un módulo oculto', () => {
     const keys = helpEntries({ visibleNavKeys: keysOf('independent') }).map((e) => e.module);
     expect(keys).not.toContain('routes');
+  });
+});
+
+describe('tourResumeIndex (F15 · P9)', () => {
+  const ok = { status: 'inProgress', step: 3, catalogVersion: GUIDE_CATALOG_VERSION };
+  it('retoma a medias con la misma versión del catálogo', () => {
+    expect(tourResumeIndex(ok, 10)).toBe(3);
+  });
+  it('no retoma si terminó, se omitió o no empezó', () => {
+    for (const status of ['none', 'done', 'skipped']) expect(tourResumeIndex({ ...ok, status }, 10)).toBeNull();
+  });
+  it('no retoma en el primer paso ni más allá del último (los pasos cambiaron)', () => {
+    expect(tourResumeIndex({ ...ok, step: 0 }, 10)).toBeNull();
+    expect(tourResumeIndex({ ...ok, step: 10 }, 10)).toBeNull();
+    expect(tourResumeIndex({ ...ok, step: 3 }, 3)).toBeNull();
+  });
+  it('no retoma si el catálogo cambió de versión', () => {
+    expect(tourResumeIndex({ ...ok, catalogVersion: GUIDE_CATALOG_VERSION + 1 }, 10)).toBeNull();
   });
 });
