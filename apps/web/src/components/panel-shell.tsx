@@ -352,10 +352,10 @@ function HelpMenu() {
   const t = useTranslations('help');
   const tour = useTour();
   const ref = useRef<HTMLDivElement>(null);
-  const begin = (resume: boolean) => {
+  const begin = (resume: boolean, screen = false) => {
     // Cierra el desplegable (<details>) antes de que el spotlight tome la pantalla.
     ref.current?.querySelector('details')?.removeAttribute('open');
-    window.dispatchEvent(new CustomEvent(TOUR_START_EVENT, { detail: { resume } }));
+    window.dispatchEvent(new CustomEvent(TOUR_START_EVENT, { detail: { resume, screen } }));
   };
   return (
     <div ref={ref} data-tour="topbar.help" onClick={() => tour.refresh()}>
@@ -373,6 +373,14 @@ function HelpMenu() {
         <button type="button" className={MENU_ITEM} onClick={() => begin(false)}>
           {t('tour')}
         </button>
+        {tour.screenModule !== null && (
+          <button type="button" className={MENU_ITEM} onClick={() => begin(false, true)}>
+            {t('screen')}
+          </button>
+        )}
+        <Link href="/ayuda" className={MENU_ITEM}>
+          {t('center')}
+        </Link>
         {tour.resumeAt !== null && (
           <button type="button" className={MENU_ITEM} onClick={() => begin(true)}>
             {t('resume')}

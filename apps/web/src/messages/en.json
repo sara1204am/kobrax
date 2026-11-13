@@ -5242,6 +5242,204 @@
           "startWith": "Choose the organization you'll work with."
         }
       }
+    },
+    "screen": {
+      "portfolio": {
+        "newClient": {
+          "title": "New client",
+          "what": "Register someone who owes you.",
+          "does": "It asks only the basics; the rest can wait.",
+          "startWith": "Start with the name and ID."
+        },
+        "filters": {
+          "title": "Filters",
+          "what": "Narrow down the list.",
+          "does": "Search by name, status or office.",
+          "startWith": "Combine two filters to find someone fast."
+        },
+        "clientCard": {
+          "title": "The client list",
+          "what": "Each row is a client.",
+          "does": "Open it to see the file: credits, payments and log.",
+          "startWith": "Open a client to see their file."
+        }
+      },
+      "mora": {
+        "list": {
+          "title": "Overdue credits",
+          "what": "Everything that is late, in one list.",
+          "does": "Sorted by priority, with the days overdue.",
+          "startWith": "Open the most urgent credit."
+        },
+        "filters": {
+          "title": "Filters",
+          "what": "Reduce the list to what is yours.",
+          "does": "Filter by category, collector or office.",
+          "startWith": "Filter by your portfolio."
+        },
+        "registerActivity": {
+          "title": "Log an action",
+          "what": "Keep a record of every collection attempt.",
+          "does": "Call, visit or promise: it goes into the credit log.",
+          "startWith": "Log the action as soon as you finish."
+        }
+      },
+      "agenda": {
+        "today": {
+          "title": "Your day",
+          "what": "What you have to do today and what's overdue.",
+          "does": "Overdue items come first; check each one off when done.",
+          "startWith": "Handle the overdue ones first."
+        },
+        "promises": {
+          "title": "Payment promises",
+          "what": "What people promised to pay.",
+          "does": "Each promise has a date; if missed, it returns to the agenda.",
+          "startWith": "Review the ones due today."
+        }
+      },
+      "payments": {
+        "list": {
+          "title": "Payments received",
+          "what": "The list of all payments.",
+          "does": "Filter by period or collector and open any to see its detail.",
+          "startWith": "Filter by the period you need."
+        },
+        "register": {
+          "title": "Record a payment",
+          "what": "Enter a payment received.",
+          "does": "Updates the credit's balance and arrears right away.",
+          "startWith": "Pick the credit and the amount."
+        }
+      },
+      "routes": {
+        "plan": {
+          "title": "Plan routes",
+          "what": "Build the day's itinerary here.",
+          "does": "Switch between the day view and the work summary.",
+          "startWith": "Pick a day and build a route."
+        },
+        "visits": {
+          "title": "The visits",
+          "what": "The day's routes and stops.",
+          "does": "Each collector sees their own; admins see all.",
+          "startWith": "Open a route to see its stops."
+        }
+      },
+      "team": {
+        "invite": {
+          "title": "Invite someone",
+          "what": "Add a person to your team.",
+          "does": "They get a code and join with the role you choose.",
+          "startWith": "Choose the role with the least access they need."
+        },
+        "roles": {
+          "title": "Your team",
+          "what": "Everyone in the organization.",
+          "does": "You see each person's role and can suspend or change access.",
+          "startWith": "Check that everyone has the right role."
+        }
+      },
+      "organization": {
+        "offices": {
+          "title": "Offices",
+          "what": "Your organization's structure.",
+          "does": "Create offices and move people and portfolios between them.",
+          "startWith": "Create your first office."
+        },
+        "assign": {
+          "title": "Assign",
+          "what": "Decide who handles what.",
+          "does": "Assign people and portfolios to each office.",
+          "startWith": "Assign a person to their office."
+        }
+      }
+    },
+    "help": {
+      "home": {
+        "title": "Home",
+        "what": "Your summary of the day.",
+        "does": "Shows the key portfolio numbers and what needs attention now.",
+        "startWith": "Start here every morning."
+      },
+      "portfolio": {
+        "title": "Portfolio",
+        "what": "Your clients and their credits.",
+        "does": "Search, filter and open each client's file; this is where you create clients and credits.",
+        "startWith": "Create your first client."
+      },
+      "import": {
+        "title": "Import",
+        "what": "Bulk upload from a spreadsheet.",
+        "does": "Upload clients and credits from a file and review errors before confirming.",
+        "startWith": "Download the template and try it with a few rows."
+      },
+      "mora": {
+        "title": "Arrears",
+        "what": "Overdue credits.",
+        "does": "Lists what is overdue by priority and category, and lets you log each collection action.",
+        "startWith": "Sort by priority and open the first one."
+      },
+      "agenda": {
+        "title": "Agenda",
+        "what": "Your pending actions.",
+        "does": "Gathers overdue and today's items: calls, visits and payment promises.",
+        "startWith": "Handle the overdue ones first."
+      },
+      "routes": {
+        "title": "Routes",
+        "what": "Field visit planning.",
+        "does": "Groups visits into a route and orders them to travel less.",
+        "startWith": "Pick a day and build the first route."
+      },
+      "payments": {
+        "title": "Payments",
+        "what": "Payments received.",
+        "does": "Record and review payments; each one updates the credit's balance and arrears.",
+        "startWith": "Record a test payment on a credit."
+      },
+      "export": {
+        "title": "Export",
+        "what": "Your data outside Kobrax.",
+        "does": "Generates files with the information your role can see.",
+        "startWith": "Choose what to export and the date range."
+      },
+      "organization": {
+        "title": "Organization",
+        "what": "Offices and who sees what.",
+        "does": "Create offices and assign people and portfolios to each.",
+        "startWith": "Create your first office."
+      },
+      "team": {
+        "title": "Team",
+        "what": "The people in your organization.",
+        "does": "Invite users, give them a role and suspend access.",
+        "startWith": "Invite your first teammate."
+      },
+      "accessSecurity": {
+        "title": "Security",
+        "what": "Access and account protection.",
+        "does": "Manage roles and permissions, open sessions and support access.",
+        "startWith": "Review roles before inviting people."
+      },
+      "activity": {
+        "title": "Activity",
+        "what": "The record of what happened.",
+        "does": "Shows who did what and when in your organization.",
+        "startWith": "Filter by person to review a change."
+      },
+      "account": {
+        "title": "Account",
+        "what": "Your company's details.",
+        "does": "Tax data, branding, plan and the workspace: which modules and options you see.",
+        "startWith": "Complete the billing details."
+      },
+      "profile": {
+        "title": "My profile",
+        "what": "Your personal details.",
+        "does": "Change your name, photo, password and two-step verification.",
+        "startWith": "Turn on two-step verification."
+      }
     }
   },
   "tour": {
@@ -5261,6 +5459,17 @@
     "button": "Help",
     "menuTitle": "Help",
     "tour": "General tour",
-    "resume": "Pick up where I left off"
+    "resume": "Pick up where I left off",
+    "screen": "Guide to this screen",
+    "center": "Help center"
+  },
+  "helpCenter": {
+    "title": "Help center",
+    "subtitle": "What each part of Kobrax does and where to start.",
+    "search": "Search help",
+    "empty": "Nothing matches that search.",
+    "open": "Go to {name}",
+    "actions": "What you can do here",
+    "tour": "Take the general tour"
   }
 }

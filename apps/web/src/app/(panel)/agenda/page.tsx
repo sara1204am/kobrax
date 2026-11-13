@@ -68,6 +68,7 @@ export default async function AgendaPage({
   const supervises = canAssign && members.length > 0;
 
   return (
+    <div data-tour="screen.agenda.today">
     <AgendaConnector
       day={day}
       today={today}
@@ -79,5 +80,6 @@ export default async function AgendaPage({
       supervises={supervises}
       assign={canAssign && me.body.data ? { meId: me.body.data.userId } : undefined}
     />
+    </div>
   );
 }

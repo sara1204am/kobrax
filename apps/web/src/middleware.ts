@@ -183,6 +183,7 @@ export const config = {
     '/equipo/:path*',
     '/organizacion/:path*', // F14 · F6: Oficinas salió de /cuenta
     '/actividad/:path*',
+    '/ayuda/:path*', // F15 · P10
     '/seguridad/:path*',
     '/cartera/:path*',
     '/import/:path*',

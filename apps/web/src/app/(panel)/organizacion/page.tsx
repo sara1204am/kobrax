@@ -41,7 +41,9 @@ export default async function CuentaOficinasPage() {
   return (
     <>
       <PageHeader title={tp('title')} subtitle={tp('subtitle')} />
-      {isMultiOffice(rows) ? <OfficesView {...props} /> : <SingleOffice {...props} />}
+      <div data-tour="screen.organization.offices">
+        {isMultiOffice(rows) ? <OfficesView {...props} /> : <SingleOffice {...props} />}
+      </div>
     </>
   );
 }

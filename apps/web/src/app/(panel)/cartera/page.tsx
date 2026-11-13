@@ -71,6 +71,7 @@ export default async function CarteraPage({
           26 px empuja la tabla —que es a lo que se viene— media pantalla hacia abajo. Queda la
           bajada, que sí dice algo que el menú no dice. */}
       <p className="mb-4 text-[14px] text-k-text-2">{t('subtitle')}</p>
+      <div data-tour="screen.portfolio.clientCard">
       <PortfolioTable
         rows={list.body.data}
         meta={pageMeta(list.body, searchParams.page, Number(query.get('limit')) || DEFAULT_PAGE_SIZE)}
@@ -79,6 +80,7 @@ export default async function CarteraPage({
         userId={me.body.data?.userId}
         collectors={team.body.data ?? []}
         action={
+          <span data-tour="screen.portfolio.newClient" className="inline-block">
           <NewClientButton
             currency={account.body.data?.currencyCode ?? 'BOB'}
             collateralTypes={collateralTypes.body.data ?? []}
@@ -89,10 +91,12 @@ export default async function CarteraPage({
             offices={registerOffices}
             defaultOfficeId={defaultCreditOffice(registerOffices, (team.body.data ?? []).find((m) => m.userId === me.body.data?.userId)?.branchId)}
           />
+          </span>
         }
         // F13: el selector de oficina (árbol, con ruta completa). Sólo existe si la cuenta tiene más de una.
         branches={offices.options}
       />
+      </div>
     </>
   );
 }

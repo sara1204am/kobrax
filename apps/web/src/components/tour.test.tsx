@@ -1,10 +1,13 @@
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { emptyGuideState, GUIDE_CATALOG_VERSION, type GuideState } from '@kobrax/shared';
 import { server } from '@/test/msw-server';
 import { TOUR_MENU_EVENT, TourProvider, startTour, useTour } from './tour';
+
+const nav = vi.hoisted(() => ({ path: '/dashboard' }));
+vi.mock('next/navigation', () => ({ usePathname: () => nav.path }));
 
 // jsdom no implementa <dialog> modal ni el layout: se simulan lo justo.
 beforeAll(() => {
@@ -25,10 +28,11 @@ beforeAll(() => {
   };
 });
 
-let patches: Array<{ tour?: Partial<GuideState['tour']> }>;
+let patches: Array<{ tour?: Partial<GuideState['tour']>; screens?: Record<string, string> }>;
 let stored: GuideState;
 
 beforeEach(() => {
+  nav.path = '/dashboard';
   patches = [];
   stored = emptyGuideState();
   server.use(
@@ -195,5 +199,99 @@ describe('Recorrido con spotlight (F15 · P9)', () => {
     expect(events).toContain(true);
     // el ítem sigue sin verse (jsdom): la tarjeta sale centrada y lo dice
     expect(await screen.findByText(/no está a la vista/)).toBeInTheDocument();
+  });
+
+  describe('guías de pantalla (P10)', () => {
+    function Screen({ withRegister = true }: { withRegister?: boolean }) {
+      const tour = useTour();
+      return (
+        <>
+          <span data-testid="mod">{String(tour.screenModule)}</span>
+          <button onClick={() => tour.startScreen()}>screen</button>
+          <div data-tour="screen.payments.list">lista</div>
+          {withRegister && <div data-tour="screen.payments.register">registrar</div>}
+        </>
+      );
+    }
+    const mountScreen = (
+      props: Partial<React.ComponentProps<typeof TourProvider>> = {},
+      withRegister = true,
+    ) =>
+      render(
+        <TourProvider visibleNavKeys={['payments']} multipleAccounts={false} {...props}>
+          <Screen withRegister={withRegister} />
+        </TourProvider>,
+      );
+
+    it('desde «?» recorre la guía de la pantalla y la marca como vista', async () => {
+      const user = userEvent.setup();
+      nav.path = '/pagos';
+      mountScreen();
+      expect(screen.getByTestId('mod')).toHaveTextContent('payments');
+      await user.click(screen.getByText('screen'));
+      expect(screen.getByText('Paso 1 de 2')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Pagos recibidos' })).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Siguiente' }));
+      await user.click(screen.getByRole('button', { name: 'Terminar' }));
+      await waitFor(() => expect(patches.at(-1)?.screens).toEqual({ 'screen.payments': 'seen' }));
+    });
+
+    it('un botón que la pantalla no muestra no se enseña', async () => {
+      const user = userEvent.setup();
+      nav.path = '/pagos/123';
+      mountScreen({}, false);
+      await user.click(screen.getByText('screen'));
+      expect(screen.getByText('Paso 1 de 1')).toBeInTheDocument();
+    });
+
+    it('🔴 R1: sin el módulo en el menú no hay guía de pantalla', () => {
+      nav.path = '/pagos';
+      mountScreen({ visibleNavKeys: ['home'] });
+      expect(screen.getByTestId('mod')).toHaveTextContent('null');
+    });
+
+    it('«Omitir» la guarda como descartada', async () => {
+      const user = userEvent.setup();
+      nav.path = '/pagos';
+      mountScreen();
+      await user.click(screen.getByText('screen'));
+      await user.click(screen.getByRole('button', { name: 'Omitir recorrido' }));
+      await waitFor(() =>
+        expect(patches.at(-1)?.screens).toEqual({ 'screen.payments': 'dismissed' }),
+      );
+    });
+
+    it('en una cuenta nueva con el recorrido resuelto, sale sola la primera vez', async () => {
+      nav.path = '/pagos';
+      stored = {
+        ...emptyGuideState(),
+        tour: { status: 'done', step: 0, catalogVersion: GUIDE_CATALOG_VERSION },
+      };
+      mountScreen({ autoScreens: true });
+      expect(await screen.findByText('Paso 1 de 2', {}, { timeout: 3000 })).toBeInTheDocument();
+    });
+
+    it.each([
+      ['recorrido aún sin hacer', { tour: { status: 'none', step: 0, catalogVersion: 0 } }, true],
+      [
+        'guía ya vista',
+        {
+          tour: { status: 'done', step: 0, catalogVersion: GUIDE_CATALOG_VERSION },
+          screens: { 'screen.payments': 'seen' },
+        },
+        true,
+      ],
+      [
+        'cuenta anterior',
+        { tour: { status: 'done', step: 0, catalogVersion: GUIDE_CATALOG_VERSION } },
+        false,
+      ],
+    ])('no sale sola: %s', async (_n, patch, auto) => {
+      nav.path = '/pagos';
+      stored = { ...emptyGuideState(), ...patch } as GuideState;
+      mountScreen({ autoScreens: auto });
+      await new Promise((r) => setTimeout(r, 1200));
+      expect(screen.queryByText('Paso 1 de 2')).toBeNull();
+    });
   });
 });

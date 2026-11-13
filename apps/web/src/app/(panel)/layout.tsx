@@ -93,6 +93,8 @@ export default async function PanelLayout({ children }: { children: ReactNode })
             key={user.accountId}
             visibleNavKeys={visibleNavKeys}
             multipleAccounts={(accounts.body.data ?? []).length > 1}
+            // Solo las cuentas nuevas reciben la guía de pantalla sola; las anteriores la piden desde «?».
+            autoScreens={user.account?.onboarding?.status !== undefined}
           >
             <PanelShell
               user={{

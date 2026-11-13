@@ -5242,6 +5242,204 @@
           "startWith": "Elige la organización con la que vas a trabajar."
         }
       }
+    },
+    "screen": {
+      "portfolio": {
+        "newClient": {
+          "title": "Nuevo cliente",
+          "what": "Aquí registras a una persona que te debe.",
+          "does": "Pide lo básico y deja el resto para después.",
+          "startWith": "Empieza por el nombre y el documento."
+        },
+        "filters": {
+          "title": "Filtros",
+          "what": "Acota la lista.",
+          "does": "Busca por nombre, estado u oficina.",
+          "startWith": "Combina dos filtros para encontrar a alguien rápido."
+        },
+        "clientCard": {
+          "title": "La lista de clientes",
+          "what": "Cada fila es un cliente.",
+          "does": "Ábrela para ver su ficha: créditos, pagos y bitácora.",
+          "startWith": "Abre un cliente para conocer la ficha."
+        }
+      },
+      "mora": {
+        "list": {
+          "title": "Créditos en mora",
+          "what": "Todo lo que está atrasado, en una lista.",
+          "does": "Se ordena por prioridad y muestra los días de atraso.",
+          "startWith": "Abre el crédito más urgente."
+        },
+        "filters": {
+          "title": "Filtros",
+          "what": "Reduce la lista a lo que te toca.",
+          "does": "Filtra por categoría, cobrador u oficina.",
+          "startWith": "Filtra por tu cartera."
+        },
+        "registerActivity": {
+          "title": "Registrar gestión",
+          "what": "Deja constancia de cada intento de cobro.",
+          "does": "Llamada, visita o promesa: queda en la bitácora del crédito.",
+          "startWith": "Registra la gestión apenas termines."
+        }
+      },
+      "agenda": {
+        "today": {
+          "title": "Tu día",
+          "what": "Lo que tienes que hacer hoy y lo atrasado.",
+          "does": "Las vencidas van primero; marca cada una al cumplirla.",
+          "startWith": "Atiende primero lo vencido."
+        },
+        "promises": {
+          "title": "Promesas de pago",
+          "what": "Lo que te prometieron pagar.",
+          "does": "Cada promesa tiene fecha; si no se cumple, vuelve a la agenda.",
+          "startWith": "Revisa las que vencen hoy."
+        }
+      },
+      "payments": {
+        "list": {
+          "title": "Pagos recibidos",
+          "what": "La lista de todos los pagos.",
+          "does": "Filtra por período o cobrador y abre cualquiera para ver su detalle.",
+          "startWith": "Filtra por el período que necesitas."
+        },
+        "register": {
+          "title": "Registrar un pago",
+          "what": "Anota un pago recibido.",
+          "does": "Actualiza el saldo y la mora del crédito al instante.",
+          "startWith": "Elige el crédito y el monto."
+        }
+      },
+      "routes": {
+        "plan": {
+          "title": "Planificar rutas",
+          "what": "Aquí armas el recorrido del día.",
+          "does": "Cambia entre la vista del día y el resumen de trabajo.",
+          "startWith": "Elige un día y arma una ruta."
+        },
+        "visits": {
+          "title": "Las visitas",
+          "what": "Las rutas y paradas del día.",
+          "does": "Cada cobrador ve la suya; quien administra ve todas.",
+          "startWith": "Abre una ruta para ver sus paradas."
+        }
+      },
+      "team": {
+        "invite": {
+          "title": "Invitar a alguien",
+          "what": "Suma a una persona a tu equipo.",
+          "does": "Le llega un código y entra con el rol que elijas.",
+          "startWith": "Elige el rol con el menor acceso que necesite."
+        },
+        "roles": {
+          "title": "Tu equipo",
+          "what": "Todas las personas de la organización.",
+          "does": "Ves el rol de cada una y puedes suspender o cambiar accesos.",
+          "startWith": "Revisa que cada quien tenga el rol correcto."
+        }
+      },
+      "organization": {
+        "offices": {
+          "title": "Oficinas",
+          "what": "La estructura de tu organización.",
+          "does": "Crea oficinas y mueve personas y carteras entre ellas.",
+          "startWith": "Crea tu primera oficina."
+        },
+        "assign": {
+          "title": "Asignar",
+          "what": "Decide quién atiende qué.",
+          "does": "Asigna personas y carteras a cada oficina.",
+          "startWith": "Asigna a una persona a su oficina."
+        }
+      }
+    },
+    "help": {
+      "home": {
+        "title": "Inicio",
+        "what": "Tu resumen del día.",
+        "does": "Muestra los números clave de la cartera y lo que requiere atención ahora.",
+        "startWith": "Empieza aquí cada mañana."
+      },
+      "portfolio": {
+        "title": "Cartera",
+        "what": "Tus clientes y sus créditos.",
+        "does": "Busca, filtra y abre la ficha de cada cliente; desde aquí das de alta clientes y créditos.",
+        "startWith": "Crea tu primer cliente."
+      },
+      "import": {
+        "title": "Importar",
+        "what": "Carga masiva desde una hoja.",
+        "does": "Sube clientes y créditos desde un archivo y revisa los errores antes de confirmar.",
+        "startWith": "Descarga la plantilla y pruébala con pocas filas."
+      },
+      "mora": {
+        "title": "Mora",
+        "what": "Los créditos atrasados.",
+        "does": "Lista lo que está en mora, por prioridad y categoría, y permite registrar cada gestión de cobro.",
+        "startWith": "Ordena por prioridad y abre el primero."
+      },
+      "agenda": {
+        "title": "Agenda",
+        "what": "Tus gestiones pendientes.",
+        "does": "Reúne las vencidas y las de hoy: llamadas, visitas y promesas de pago.",
+        "startWith": "Atiende primero las vencidas."
+      },
+      "routes": {
+        "title": "Rutas",
+        "what": "Planificación de visitas en campo.",
+        "does": "Agrupa visitas en una ruta y las ordena para recorrer menos.",
+        "startWith": "Elige un día y arma la primera ruta."
+      },
+      "payments": {
+        "title": "Pagos",
+        "what": "Los pagos recibidos.",
+        "does": "Registra y consulta pagos; cada pago actualiza el saldo y la mora del crédito.",
+        "startWith": "Registra un pago de prueba en un crédito."
+      },
+      "export": {
+        "title": "Exportar",
+        "what": "Tus datos fuera de Kobrax.",
+        "does": "Genera archivos con la información que tu rol puede ver.",
+        "startWith": "Elige qué exportar y el rango de fechas."
+      },
+      "organization": {
+        "title": "Organización",
+        "what": "Oficinas y quién ve qué.",
+        "does": "Crea oficinas y asigna personas y carteras a cada una.",
+        "startWith": "Crea tu primera oficina."
+      },
+      "team": {
+        "title": "Equipo",
+        "what": "Las personas de tu organización.",
+        "does": "Invita usuarios, asígnales un rol y suspende accesos.",
+        "startWith": "Invita a tu primer compañero."
+      },
+      "accessSecurity": {
+        "title": "Seguridad",
+        "what": "Accesos y protección de la cuenta.",
+        "does": "Gestiona roles y permisos, sesiones abiertas y accesos de soporte.",
+        "startWith": "Revisa los roles antes de invitar gente."
+      },
+      "activity": {
+        "title": "Actividad",
+        "what": "El registro de lo que pasó.",
+        "does": "Muestra quién hizo qué y cuándo en tu organización.",
+        "startWith": "Filtra por persona para revisar un cambio."
+      },
+      "account": {
+        "title": "Cuenta",
+        "what": "Los datos de tu empresa.",
+        "does": "Datos fiscales, marca, plan y el espacio de trabajo: qué módulos y opciones ves.",
+        "startWith": "Completa los datos de facturación."
+      },
+      "profile": {
+        "title": "Mi perfil",
+        "what": "Tus datos personales.",
+        "does": "Cambia tu nombre, foto, contraseña y la verificación en dos pasos.",
+        "startWith": "Activa la verificación en dos pasos."
+      }
     }
   },
   "tour": {
@@ -5261,6 +5459,17 @@
     "button": "Ayuda",
     "menuTitle": "Ayuda",
     "tour": "Recorrido general",
-    "resume": "Seguir donde lo dejé"
+    "resume": "Seguir donde lo dejé",
+    "screen": "Guía de esta pantalla",
+    "center": "Centro de ayuda"
+  },
+  "helpCenter": {
+    "title": "Centro de ayuda",
+    "subtitle": "Qué hace cada parte de Kobrax y por dónde empezar.",
+    "search": "Buscar en la ayuda",
+    "empty": "No encontramos nada con esa búsqueda.",
+    "open": "Ir a {name}",
+    "actions": "Qué puedes hacer aquí",
+    "tour": "Hacer el recorrido general"
   }
 }

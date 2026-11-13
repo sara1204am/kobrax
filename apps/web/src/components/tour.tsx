@@ -14,13 +14,17 @@ import {
 import { useTranslations } from 'next-intl';
 import {
   GUIDE_CATALOG_VERSION,
+  SCREEN_GUIDES,
+  WORKSPACE_MODULES,
   guideSteps,
   parseGuideState,
+  screenGuideSteps,
   tourResumeIndex,
   type GuideState,
-  type TourStep,
+  type ScreenGuideModule,
   type WorkspaceNavKey,
 } from '@kobrax/shared';
+import { usePathname } from 'next/navigation';
 import { sendJson } from '@/lib/client';
 
 /** Eventos del navegador: desacoplan el motor de quien lo lanza (asistente, bienvenida) y del cajón del menú. */
@@ -31,15 +35,32 @@ export function startTour(): void {
   window.dispatchEvent(new CustomEvent(TOUR_START_EVENT, { detail: { resume: false } }));
 }
 
+/** Un paso que el motor sabe pintar: del recorrido general (`nav`/`topbar`) o de una guía de pantalla (`screen`). */
+export interface SpotStep {
+  id: string;
+  kind: 'nav' | 'topbar' | 'screen';
+  target: string;
+  textKey: string;
+}
+
 interface TourApi {
   /** Empieza desde el primer paso, o desde donde se quedó si `resume`. */
   start: (resume?: boolean) => void;
   /** Paso desde el que se puede retomar, o `null`. Se actualiza al abrir el menú de ayuda (`refresh`). */
   resumeAt: number | null;
   refresh: () => void;
+  /** El módulo de la pantalla actual si tiene guía de pantalla (y la persona lo ve); `null` si no. */
+  screenModule: ScreenGuideModule | null;
+  startScreen: () => void;
 }
 
-const NOOP: TourApi = { start: () => undefined, resumeAt: null, refresh: () => undefined };
+const NOOP: TourApi = {
+  start: () => undefined,
+  resumeAt: null,
+  refresh: () => undefined,
+  screenModule: null,
+  startScreen: () => undefined,
+};
 const TourContext = createContext<TourApi>(NOOP);
 export const useTour = (): TourApi => useContext(TourContext);
 
@@ -53,13 +74,30 @@ function findAnchor(target: string): HTMLElement | null {
   return null;
 }
 
+/** El módulo de guía de pantalla al que pertenece una ruta (`/cartera/123` → `portfolio`), o `null`. */
+export function screenModuleForPath(pathname: string | null): ScreenGuideModule | null {
+  if (!pathname) return null;
+  const mod = WORKSPACE_MODULES.find((m) =>
+    m.routes.some((r) => pathname === r || pathname.startsWith(`${r}/`)),
+  );
+  return mod && mod.key in SCREEN_GUIDES ? (mod.key as ScreenGuideModule) : null;
+}
+
 const PAD = 6;
 const CARD_W = 340;
 
+type Run =
+  | { kind: 'tour'; index: number }
+  | { kind: 'screen'; module: ScreenGuideModule; steps: SpotStep[]; index: number };
+
 /**
- * Motor del recorrido con spotlight (F15 · P9, D-18): oscurece la pantalla, enfoca el elemento real y muestra una tarjeta
- * con Atrás / Siguiente / Omitir. Los pasos salen de `guideSteps` (plan ∧ permiso ∧ workspace); el progreso se guarda en
- * el servidor por persona y organización, sin bloquear nunca la pantalla.
+ * Motor de guías con spotlight (F15 · P9/P10, D-18): oscurece la pantalla, enfoca el elemento real y muestra una tarjeta
+ * con Atrás / Siguiente / Omitir. Dos usos, un solo motor y un solo catálogo (`shared/guides`):
+ * - **Recorrido general** (P9): los pasos salen de `guideSteps` (plan ∧ permiso ∧ workspace).
+ * - **Guía de pantalla** (P10): los pasos de `screenGuideSteps` cuya ancla existe en la pantalla (un botón que el permiso
+ *   no muestra no se enseña). Sale sola la primera vez que se entra a un módulo, solo en cuentas nuevas y una vez resuelto
+ *   el recorrido general; se repite desde «?».
+ * El progreso se guarda en el servidor por persona y organización, sin bloquear nunca la pantalla.
  *
  * - Va dentro de un `<dialog>` modal: foco atrapado y `Esc` salen gratis. `Esc` deja el recorrido a medias (se puede retomar);
  *   «Omitir recorrido» lo da por omitido.
@@ -69,40 +107,52 @@ const CARD_W = 340;
 export function TourProvider({
   visibleNavKeys,
   multipleAccounts,
+  autoScreens = false,
   children,
 }: {
   visibleNavKeys: readonly WorkspaceNavKey[];
   multipleAccounts: boolean;
+  /** Cuenta nueva: la guía de pantalla sale sola la primera vez. Una cuenta anterior no recibe nada que no pida. */
+  autoScreens?: boolean;
   children: ReactNode;
 }) {
+  const pathname = usePathname();
   const steps = useMemo(
     () => guideSteps({ visibleNavKeys, multipleAccounts }),
     [visibleNavKeys, multipleAccounts],
   );
-  const [index, setIndex] = useState<number | null>(null);
+  const [run, setRun] = useState<Run | null>(null);
   const [resumeAt, setResumeAt] = useState<number | null>(null);
-  const stateRef = useRef<GuideState | null>(null);
+  const screenModule = useMemo(() => {
+    const m = screenModuleForPath(pathname);
+    return m && screenGuideSteps(m, { visibleNavKeys }).length > 0 ? m : null;
+  }, [pathname, visibleNavKeys]);
 
   const save = useCallback((tour: Partial<GuideState['tour']>) => {
     void sendJson('/api/users/me/guides', { tour }, 'PATCH');
   }, []);
 
+  const readState = useCallback(async (): Promise<GuideState | null> => {
+    try {
+      const r = await fetch('/api/users/me/guides');
+      if (!r.ok) return null;
+      const json = (await r.json()) as { data?: unknown };
+      return parseGuideState(json.data);
+    } catch {
+      return null;
+    }
+  }, []);
+
   const refresh = useCallback(() => {
-    void fetch('/api/users/me/guides')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((json: { data?: unknown } | null) => {
-        if (!json) return;
-        const st = parseGuideState(json.data);
-        stateRef.current = st;
-        setResumeAt(tourResumeIndex(st.tour, steps.length));
-      })
-      .catch(() => undefined);
-  }, [steps.length]);
+    void readState().then((st) => {
+      if (st) setResumeAt(tourResumeIndex(st.tour, steps.length));
+    });
+  }, [readState, steps.length]);
 
   const open = useCallback(
     (from: number) => {
       if (steps.length === 0) return;
-      setIndex(from);
+      setRun({ kind: 'tour', index: from });
       save({ status: 'inProgress', step: from, catalogVersion: GUIDE_CATALOG_VERSION });
     },
     [steps.length, save],
@@ -116,47 +166,109 @@ export function TourProvider({
     [open, resumeAt],
   );
 
+  /** Abre la guía de pantalla del módulo con los pasos cuya ancla está en la página. `false` si no queda ninguno. */
+  const openScreen = useCallback(
+    (module: ScreenGuideModule): boolean => {
+      const present: SpotStep[] = screenGuideSteps(module, { visibleNavKeys })
+        .filter((s) => findAnchor(s.target) !== null)
+        .map((s) => ({ id: s.id, kind: 'screen', target: s.target, textKey: s.textKey }));
+      if (present.length === 0) return false;
+      setRun({ kind: 'screen', module, steps: present, index: 0 });
+      return true;
+    },
+    [visibleNavKeys],
+  );
+
+  const startScreen = useCallback(() => {
+    if (screenModule) openScreen(screenModule);
+  }, [screenModule, openScreen]);
+
   useEffect(() => {
     const onStart = (e: Event) => {
-      const wantsResume = (e as CustomEvent<{ resume?: boolean }>).detail?.resume === true;
-      start(wantsResume);
+      const detail = (e as CustomEvent<{ resume?: boolean; screen?: boolean }>).detail;
+      if (detail?.screen) startScreen();
+      else start(detail?.resume === true);
     };
     window.addEventListener(TOUR_START_EVENT, onStart);
     return () => window.removeEventListener(TOUR_START_EVENT, onStart);
-  }, [start]);
+  }, [start, startScreen]);
+
+  // Primera visita a un módulo (cuenta nueva, con el recorrido general ya resuelto y nada abierto): la guía de pantalla sale sola.
+  useEffect(() => {
+    if (!autoScreens || !screenModule || run) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void readState().then((st) => {
+        if (cancelled || !st) return;
+        if (st.tour.status !== 'done' && st.tour.status !== 'skipped') return;
+        if (st.screens[`screen.${screenModule}`]) return;
+        openScreen(screenModule);
+      });
+    }, 700);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // Solo al cambiar de pantalla: abrir/cerrar una guía no debe volver a evaluarla.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, autoScreens, screenModule]);
+
+  const markScreen = (module: ScreenGuideModule, value: 'seen' | 'dismissed') => {
+    void sendJson('/api/users/me/guides', { screens: { [`screen.${module}`]: value } }, 'PATCH');
+  };
+
+  const current: { steps: SpotStep[]; index: number } | null =
+    run === null
+      ? null
+      : run.kind === 'tour'
+        ? { steps, index: run.index }
+        : { steps: run.steps, index: run.index };
 
   const go = (to: number) => {
-    if (to < 0) return;
-    if (to >= steps.length) {
-      save({ status: 'done', step: 0, catalogVersion: GUIDE_CATALOG_VERSION });
-      setResumeAt(null);
-      return setIndex(null);
+    if (!run || to < 0 || !current) return;
+    if (to >= current.steps.length) {
+      if (run.kind === 'screen') markScreen(run.module, 'seen');
+      else {
+        save({ status: 'done', step: 0, catalogVersion: GUIDE_CATALOG_VERSION });
+        setResumeAt(null);
+      }
+      return setRun(null);
     }
-    setIndex(to);
-    save({ status: 'inProgress', step: to, catalogVersion: GUIDE_CATALOG_VERSION });
+    setRun({ ...run, index: to });
+    if (run.kind === 'tour')
+      save({ status: 'inProgress', step: to, catalogVersion: GUIDE_CATALOG_VERSION });
   };
 
   const skip = () => {
-    save({ status: 'skipped', step: 0, catalogVersion: GUIDE_CATALOG_VERSION });
-    setResumeAt(null);
-    setIndex(null);
+    if (run?.kind === 'screen') markScreen(run.module, 'dismissed');
+    else {
+      save({ status: 'skipped', step: 0, catalogVersion: GUIDE_CATALOG_VERSION });
+      setResumeAt(null);
+    }
+    setRun(null);
   };
 
-  // `Esc`/cerrar: queda a medias y «Seguir donde lo dejé» lo retoma.
+  // `Esc`/cerrar: el recorrido queda a medias y «Seguir donde lo dejé» lo retoma; la guía de pantalla se da por vista.
   const leave = () => {
-    if (index !== null && index > 0) setResumeAt(index);
-    setIndex(null);
+    if (run?.kind === 'screen') markScreen(run.module, 'seen');
+    else if (run && run.index > 0) setResumeAt(run.index);
+    setRun(null);
   };
 
-  const api = useMemo<TourApi>(() => ({ start, resumeAt, refresh }), [start, resumeAt, refresh]);
+  const api = useMemo<TourApi>(
+    () => ({ start, resumeAt, refresh, screenModule, startScreen }),
+    [start, resumeAt, refresh, screenModule, startScreen],
+  );
 
   return (
     <TourContext.Provider value={api}>
       {children}
-      {index !== null && steps[index] && (
+      {current && current.steps[current.index] && (
         <SpotlightTour
-          steps={steps}
-          index={Math.min(index, steps.length - 1)}
+          // Una guía nueva monta un motor nuevo (cajón, foco y medidas desde cero).
+          key={run?.kind === 'screen' ? run.module : 'tour'}
+          steps={current.steps}
+          index={Math.min(current.index, current.steps.length - 1)}
           onGo={go}
           onSkip={skip}
           onLeave={leave}
@@ -180,7 +292,7 @@ function SpotlightTour({
   onSkip,
   onLeave,
 }: {
-  steps: TourStep[];
+  steps: SpotStep[];
   index: number;
   onGo: (to: number) => void;
   onSkip: () => void;
