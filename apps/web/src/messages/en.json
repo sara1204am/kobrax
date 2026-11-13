@@ -5098,6 +5098,25 @@
       "invalid": "The configuration isn't valid. Check your choices.",
       "generic": "Couldn't save. Please try again."
     },
+    "welcomeCard": {
+      "title": "Welcome to {org}",
+      "role": "Your role is {role}.",
+      "can": "From the menu you can work with:",
+      "help": "If you need something you can't see, ask whoever administers your organization.",
+      "ok": "Got it"
+    },
+    "firstSteps": {
+      "title": "First steps",
+      "intro": "Three things to get started. They check off by themselves as you do them.",
+      "close": "Close",
+      "done": "Done",
+      "pending": "Pending",
+      "items": {
+        "createClient": "Register your first client",
+        "createCredit": "Create your first credit",
+        "registerPayment": "Register your first payment"
+      }
+    },
     "launcher": {
       "button": "Review with the wizard",
       "hint": "Go through the setup step by step."

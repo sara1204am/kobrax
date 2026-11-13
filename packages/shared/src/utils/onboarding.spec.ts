@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   GUIDE_STATE_MAX_SCREENS,
+  mergeGuideState,
+  sanitizeGuidePatch,
   emptyGuideState,
   newAccountOnboarding,
   parseGuideState,
@@ -156,5 +158,70 @@ describe('estado de guías por persona', () => {
     const huge = validateGuideStateInput({ ...emptyGuideState(), pad: 'x'.repeat(5000) });
     expect(huge.ok).toBe(false);
     if (!huge.ok) expect(huge.errors[0]?.code).toBe('TOO_LARGE');
+  });
+});
+
+describe('mergeGuideState (parche parcial)', () => {
+  const base = {
+    ...emptyGuideState(),
+    screens: { 'screen.portfolio': 'seen' as const },
+    welcomeSeen: true,
+  };
+  it('lo que el parche no menciona se conserva', () => {
+    const next = mergeGuideState(base, { firstStepsClosed: true });
+    expect(next.welcomeSeen).toBe(true);
+    expect(next.firstStepsClosed).toBe(true);
+    expect(next.screens).toEqual({ 'screen.portfolio': 'seen' });
+  });
+  it('las pantallas se mezclan, no se reemplazan', () => {
+    expect(mergeGuideState(base, { screens: { 'screen.mora': 'dismissed' } }).screens).toEqual({
+      'screen.portfolio': 'seen',
+      'screen.mora': 'dismissed',
+    });
+  });
+  it('el recorrido se actualiza campo a campo', () => {
+    const t = mergeGuideState(base, { tour: { status: 'inProgress', step: 3 } }).tour;
+    expect(t).toEqual({ status: 'inProgress', step: 3, catalogVersion: 0 });
+  });
+  it('el resultado siempre es un estado válido para el servidor', () => {
+    expect(
+      validateGuideStateInput(mergeGuideState(base, { welcomeSeen: false, screens: { x: 'seen' } }))
+        .ok,
+    ).toBe(true);
+  });
+  it('no modifica el estado original', () => {
+    const copy = JSON.parse(JSON.stringify(base));
+    mergeGuideState(base, { screens: { z: 'seen' }, welcomeSeen: false });
+    expect(base).toEqual(copy);
+  });
+});
+
+describe('sanitizeGuidePatch (lo que el navegador puede pedir)', () => {
+  it('nunca lanza: null, texto, números o listas dan un parche vacío', () => {
+    for (const bad of [null, undefined, 'x', 5, [], true])
+      expect(sanitizeGuidePatch(bad)).toEqual({});
+  });
+  it('conserva solo lo que está bien tipado y descarta el resto', () => {
+    expect(
+      sanitizeGuidePatch({
+        welcomeSeen: true,
+        firstStepsClosed: 'si',
+        tour: { status: 'inProgress', step: 'a', catalogVersion: 2, extra: 1 },
+        screens: { 'screen.portfolio': 'seen', 'a b': 'seen', 'screen.mora': 'raro' },
+        evil: 1,
+      }),
+    ).toEqual({
+      welcomeSeen: true,
+      tour: { status: 'inProgress', catalogVersion: 2 },
+      screens: { 'screen.portfolio': 'seen' },
+    });
+  });
+  it('una propiedad `undefined` del parche no pisa lo guardado', () => {
+    const base = {
+      ...emptyGuideState(),
+      tour: { status: 'inProgress' as const, step: 4, catalogVersion: 1 },
+    };
+    const next = mergeGuideState(base, { tour: { status: undefined, step: 5 } });
+    expect(next.tour).toEqual({ status: 'inProgress', step: 5, catalogVersion: 1 });
   });
 });

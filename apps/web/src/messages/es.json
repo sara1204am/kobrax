@@ -5098,6 +5098,25 @@
       "invalid": "La configuración no es válida. Revisa tus elecciones.",
       "generic": "No se pudo guardar. Inténtalo de nuevo."
     },
+    "welcomeCard": {
+      "title": "Te damos la bienvenida a {org}",
+      "role": "Tu rol es {role}.",
+      "can": "Desde el menú puedes trabajar con:",
+      "help": "Si necesitas algo que no ves, pídeselo a quien administra tu organización.",
+      "ok": "Entendido"
+    },
+    "firstSteps": {
+      "title": "Primeros pasos",
+      "intro": "Tres cosas para empezar. Se marcan solas cuando las haces.",
+      "close": "Cerrar",
+      "done": "Hecho",
+      "pending": "Pendiente",
+      "items": {
+        "createClient": "Registra tu primer cliente",
+        "createCredit": "Crea tu primer crédito",
+        "registerPayment": "Registra tu primer pago"
+      }
+    },
     "launcher": {
       "button": "Revisar con el asistente",
       "hint": "Recorre la configuración paso a paso."

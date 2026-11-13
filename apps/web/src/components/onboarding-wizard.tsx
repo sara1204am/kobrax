@@ -162,11 +162,14 @@ export function OnboardingWizard({
     setSaving(false);
     if (!res.ok) return setFailure(failureOf(res.data));
     if (to) setStep(to);
-    else leave();
+    else await leave();
   }
 
   /** Sale del asistente y vuelve a pedir la sesión: el layout ya no lo monta (estado `done`/`skipped`). */
-  function leave() {
+  async function leave() {
+    // Quien configuró la cuenta ya conoce el espacio: no hace falta darle además la tarjeta de bienvenida. Se espera el
+    // guardado antes de refrescar: si no, el panel podría leer el estado viejo y mostrársela igual.
+    if (!onClose) await sendJson('/api/users/me/guides', { welcomeSeen: true }, 'PATCH');
     onClose?.();
     router.refresh();
   }
@@ -468,7 +471,7 @@ export function OnboardingWizard({
       <footer className="sticky bottom-0 border-t border-k-border bg-white px-5 py-3">
         <div className="mx-auto flex w-full max-w-2xl flex-wrap items-center justify-between gap-2">
           {step === 'done' ? (
-            <Button variant="cta" className="ml-auto !w-auto" onClick={leave}>
+            <Button variant="cta" className="ml-auto !w-auto" onClick={() => void leave()}>
               {t('done.enter')}
             </Button>
           ) : (

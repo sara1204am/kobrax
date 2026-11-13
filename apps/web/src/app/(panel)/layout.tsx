@@ -13,6 +13,7 @@ import { WorkspaceProvider } from '@/components/workspace';
 import { HiddenModuleNotice } from '@/components/hidden-module-notice';
 import { ToastProvider } from '@/components/toast';
 import { OnboardingWizard } from '@/components/onboarding-wizard';
+import { OnboardingCards } from '@/components/onboarding-cards';
 import { visibleNav } from '@/lib/nav';
 
 /**
@@ -109,6 +110,8 @@ export default async function PanelLayout({ children }: { children: ReactNode })
                 // `key` = `rev`: tras «Recargar» por un conflicto el asistente vuelve a montarse con lo último guardado.
                 <OnboardingWizard key={account.workspace?.rev ?? 0} account={account} />
               )}
+              {/* F15 · P8: bienvenida del primer ingreso y «primeros pasos», solo en las pantallas de aterrizaje y en cuentas nuevas. */}
+              <OnboardingCards me={user} />
               {children}
             </ToastProvider>
           </PanelShell>

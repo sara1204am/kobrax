@@ -225,3 +225,66 @@ export function validateGuideStateInput(input: unknown): GuideStateValidation {
   if (errors.length > 0) return { ok: false, errors };
   return { ok: true, state: parseGuideState(input) };
 }
+
+/** Un parche parcial del estado de guías: lo que la pantalla quiere cambiar, sin releer ni reenviar el resto. */
+export interface GuideStatePatch {
+  tour?: Partial<GuideState['tour']>;
+  /** Se MEZCLA con las pantallas que ya había (no las reemplaza). */
+  screens?: Record<string, ScreenGuideStatus>;
+  welcomeSeen?: boolean;
+  firstStepsClosed?: boolean;
+}
+
+/**
+ * Aplica un parche al estado guardado. Lo que el parche no menciona se conserva: dos pestañas que marcan cosas distintas no
+ * se borran entre sí (el servidor reemplaza el documento entero, así que la mezcla se hace antes de enviarlo).
+ */
+export function mergeGuideState(current: GuideState, patch: GuideStatePatch): GuideState {
+  // Una propiedad con valor `undefined` en el parche no pisa lo guardado.
+  const tour = Object.fromEntries(
+    Object.entries(patch.tour ?? {}).filter(([, v]) => v !== undefined),
+  );
+  return {
+    v: GUIDE_STATE_VERSION,
+    tour: { ...current.tour, ...tour },
+    screens: { ...current.screens, ...(patch.screens ?? {}) },
+    welcomeSeen: patch.welcomeSeen ?? current.welcomeSeen,
+    firstStepsClosed: patch.firstStepsClosed ?? current.firstStepsClosed,
+  };
+}
+
+/**
+ * Lo único que un cliente puede pedir cambiar, con sus tipos comprobados. Lo que no se reconoce o viene mal tipado se
+ * descarta (el parche es de la propia persona sobre su propia fila: no hay nada que proteger más que la forma). Nunca lanza,
+ * ni con `null` ni con un cuerpo que no es un objeto.
+ */
+export function sanitizeGuidePatch(raw: unknown): GuideStatePatch {
+  const out: GuideStatePatch = {};
+  if (!isRecord(raw)) return out;
+  if (typeof raw.welcomeSeen === 'boolean') out.welcomeSeen = raw.welcomeSeen;
+  if (typeof raw.firstStepsClosed === 'boolean') out.firstStepsClosed = raw.firstStepsClosed;
+  if (isRecord(raw.tour)) {
+    const t = raw.tour;
+    const tour: Partial<GuideState['tour']> = {};
+    if (typeof t.status === 'string' && (TOUR_STATUSES as readonly string[]).includes(t.status))
+      tour.status = t.status as TourStatus;
+    if (typeof t.step === 'number' && Number.isInteger(t.step) && t.step >= 0 && t.step < 1000)
+      tour.step = t.step;
+    if (
+      typeof t.catalogVersion === 'number' &&
+      Number.isInteger(t.catalogVersion) &&
+      t.catalogVersion >= 0
+    )
+      tour.catalogVersion = t.catalogVersion;
+    if (Object.keys(tour).length > 0) out.tour = tour;
+  }
+  if (isRecord(raw.screens)) {
+    const screens: Record<string, ScreenGuideStatus> = {};
+    for (const [k, v] of Object.entries(raw.screens).slice(0, GUIDE_STATE_MAX_SCREENS)) {
+      if (SCREEN_KEY.test(k) && typeof v === 'string' && SCREEN_VALUES.includes(v))
+        screens[k] = v as ScreenGuideStatus;
+    }
+    if (Object.keys(screens).length > 0) out.screens = screens;
+  }
+  return out;
+}

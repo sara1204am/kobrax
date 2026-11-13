@@ -122,6 +122,11 @@ describe('OnboardingWizard (F15 · P7)', () => {
     expect(body.onboarding.status).toBe('done');
     expect(await screen.findByRole('heading', { name: 'Listo' })).toBeInTheDocument();
     await click('Entrar a Kobrax');
+    expect(sendJson).toHaveBeenLastCalledWith(
+      '/api/users/me/guides',
+      { welcomeSeen: true },
+      'PATCH',
+    );
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 
@@ -155,8 +160,13 @@ describe('OnboardingWizard (F15 · P7)', () => {
     await next();
     await userEvent.click(sw('Rutas'));
     await click('Hacerlo después');
-    expect(sendJson).toHaveBeenCalledTimes(1);
     expect(sendJson.mock.calls[0]![1]).toEqual({ onboarding: { status: 'skipped' } });
+    // Quien configuró la cuenta ya conoce el espacio: se da por vista la tarjeta de bienvenida (P8).
+    expect(sendJson).toHaveBeenLastCalledWith(
+      '/api/users/me/guides',
+      { welcomeSeen: true },
+      'PATCH',
+    );
     expect(refresh).toHaveBeenCalled();
   });
 
