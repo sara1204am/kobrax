@@ -153,6 +153,22 @@ export function initialCreditForm(todayIso: string): CreditForm {
   };
 }
 
+/**
+ * ¿Este formulario ya trae algo distinto de los valores de fábrica en lo que el bloque «avanzado» deja elegir (tipo de interés,
+ * convención, base, seguro y cargos)? F15 · R7: si la organización lo ocultó pero el crédito que se abre ya tiene un valor ahí, el
+ * bloque se muestra igual: lo guardado nunca se esconde.
+ */
+export function creditFormHasAdvanced(f: CreditForm): boolean {
+  const d = initialCreditForm('');
+  return (
+    f.interestType !== d.interestType ||
+    f.rateConvention !== d.rateConvention ||
+    f.rateBase !== d.rateBase ||
+    f.insuranceMonthlyPercent.trim() !== '' ||
+    f.charges.length > 0
+  );
+}
+
 /** Texto → número; vacío o ilegible → `NaN`, que el motor reporta como dato inválido (nunca un 0 inventado). */
 const num = (s: string): number => (s.trim() === '' ? Number.NaN : Number(s));
 

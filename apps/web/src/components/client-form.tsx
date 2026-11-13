@@ -7,14 +7,15 @@ import { CollectionFields } from '@/components/collection-fields';
 import { IncomeFields } from '@/components/income-fields';
 import { LocationPhotos } from '@/components/location-photos';
 import {
-  PHONE_PATTERN,
-  SUPPORTED_CURRENCIES,
   emptyCollateral,
   emptyCollectionForm,
   emptyContact,
   emptyLocation,
   emptyRelation,
+  hasIncomeData,
   locationTypeChoices,
+  PHONE_PATTERN,
+  SUPPORTED_CURRENCIES,
   type ClienteForm,
   type CollateralRow,
   type ContactRow,
@@ -24,12 +25,15 @@ import {
   type RelationRow,
 } from '@kobrax/shared';
 import { Field, Input, Select } from '@/components/ui';
+import { useWorkspace } from '@/components/workspace';
 
 /**
  * MapLibre son ~250 kB y el formulario se abre mucho más de lo que se marca un punto: el chunk baja
  * cuando alguien elige el modo «Mapa». `ssr: false` porque necesita `window`.
  */
-const MapPicker = dynamic(() => import('@/components/map-picker').then((m) => m.MapPicker), { ssr: false });
+const MapPicker = dynamic(() => import('@/components/map-picker').then((m) => m.MapPicker), {
+  ssr: false,
+});
 
 const CONTACT_TYPES = ['PHONE', 'EMAIL'] as const;
 // Los tipos de dirección salen de `shared` (`locationTypeChoices`): la regla de cuáles se ofrecen es
@@ -42,7 +46,10 @@ const GENDERS = [{ value: '' }, { value: 'M' }, { value: 'F' }, { value: 'O' }] 
  * y se **conserva** cualquier otro valor ya guardado, para que abrir y guardar no lo borre (decisión D-14).
  */
 const KNOWN_CHANNELS = ['PHONE', 'WHATSAPP', 'VISIT'] as const;
-const channelChoices = (current: string): string[] => (current && !KNOWN_CHANNELS.includes(current as (typeof KNOWN_CHANNELS)[number]) ? [...KNOWN_CHANNELS, current] : [...KNOWN_CHANNELS]);
+const channelChoices = (current: string): string[] =>
+  current && !KNOWN_CHANNELS.includes(current as (typeof KNOWN_CHANNELS)[number])
+    ? [...KNOWN_CHANNELS, current]
+    : [...KNOWN_CHANNELS];
 const STATUSES = ['ACTIVE', 'INACTIVE', 'BLOCKED'] as const;
 const CURRENCIES = Object.keys(SUPPORTED_CURRENCIES);
 
@@ -55,7 +62,7 @@ export interface CatalogOption {
 }
 
 /** Id de una fila nueva. Sólo vive en el navegador: la fila sin `serverId` es la que se crea. */
-const newId = () => (globalThis.crypto?.randomUUID?.() ?? `r${Date.now()}${Math.random()}`);
+const newId = () => globalThis.crypto?.randomUUID?.() ?? `r${Date.now()}${Math.random()}`;
 
 function replaceAt<T>(rows: T[], i: number, row: T): T[] {
   return rows.map((r, j) => (j === i ? row : r));
@@ -88,6 +95,11 @@ export function IdentityFields({
   documentNotice?: ReactNode;
 }) {
   const t = useTranslations('portfolio');
+  // F15 · P3: género y canal preferido se pueden ocultar; un cliente que ya trae un valor lo sigue mostrando (R7). Se decide con lo que
+  // el registro traía AL ABRIR y no con lo que se está editando: si no, vaciar el valor haría desaparecer el campo bajo el cursor.
+  const workspace = useWorkspace();
+  const [hadGender] = useState(() => form.gender !== '');
+  const [hadChannel] = useState(() => form.preferredContactChannel !== '');
   const set = (patch: Partial<ClienteForm>) => onChange({ ...form, ...patch });
 
   return (
@@ -119,15 +131,30 @@ export function IdentityFields({
       {form.clientType === 'PERSON' ? (
         <>
           <Field label={t('form.firstName')}>
-            <Input value={form.firstName} onChange={(e) => set({ firstName: e.target.value })} disabled={disabled} required />
+            <Input
+              value={form.firstName}
+              onChange={(e) => set({ firstName: e.target.value })}
+              disabled={disabled}
+              required
+            />
           </Field>
           <Field label={t('form.lastName')}>
-            <Input value={form.lastName} onChange={(e) => set({ lastName: e.target.value })} disabled={disabled} required />
+            <Input
+              value={form.lastName}
+              onChange={(e) => set({ lastName: e.target.value })}
+              disabled={disabled}
+              required
+            />
           </Field>
         </>
       ) : (
         <Field label={t('form.businessName')}>
-          <Input value={form.businessName} onChange={(e) => set({ businessName: e.target.value })} disabled={disabled} required />
+          <Input
+            value={form.businessName}
+            onChange={(e) => set({ businessName: e.target.value })}
+            disabled={disabled}
+            required
+          />
         </Field>
       )}
 
@@ -138,9 +165,13 @@ export function IdentityFields({
        * viajaba de ida y vuelta **sin que nadie pudiera verlo ni corregirlo**: un cliente
        * cargado con el género mal desde el móvil no tenía forma de arreglarse desde el panel.
        */}
-      {form.clientType === 'PERSON' && (
+      {form.clientType === 'PERSON' && (workspace.shows('client.gender') || hadGender) && (
         <Field label={t('form.gender')}>
-          <Select value={form.gender} onChange={(e) => set({ gender: e.target.value })} disabled={disabled}>
+          <Select
+            value={form.gender}
+            onChange={(e) => set({ gender: e.target.value })}
+            disabled={disabled}
+          >
             {GENDERS.map((g) => (
               <option key={g.value} value={g.value}>
                 {g.value ? t(`gender.${g.value}`) : t('gender.unset')}
@@ -151,20 +182,32 @@ export function IdentityFields({
       )}
 
       <Field label={t('fields.risk')}>
-        <Input value={form.riskSegment} onChange={(e) => set({ riskSegment: e.target.value })} disabled={disabled} />
+        <Input
+          value={form.riskSegment}
+          onChange={(e) => set({ riskSegment: e.target.value })}
+          disabled={disabled}
+        />
       </Field>
 
       {/* F4/13 · E2: el campo existía en la base y en la API, pero ninguna pantalla lo mostraba. */}
-      <Field label={t('form.preferredChannel')}>
-        <Select value={form.preferredContactChannel} onChange={(e) => set({ preferredContactChannel: e.target.value })} disabled={disabled}>
-          <option value="">{t('channel.unset')}</option>
-          {channelChoices(form.preferredContactChannel).map((c) => (
-            <option key={c} value={c}>
-              {KNOWN_CHANNELS.includes(c as (typeof KNOWN_CHANNELS)[number]) ? t(`channel.${c}`) : c}
-            </option>
-          ))}
-        </Select>
-      </Field>
+      {(workspace.shows('client.preferredChannel') || hadChannel) && (
+        <Field label={t('form.preferredChannel')}>
+          <Select
+            value={form.preferredContactChannel}
+            onChange={(e) => set({ preferredContactChannel: e.target.value })}
+            disabled={disabled}
+          >
+            <option value="">{t('channel.unset')}</option>
+            {channelChoices(form.preferredContactChannel).map((c) => (
+              <option key={c} value={c}>
+                {KNOWN_CHANNELS.includes(c as (typeof KNOWN_CHANNELS)[number])
+                  ? t(`channel.${c}`)
+                  : c}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      )}
 
       <Field label={t('form.status')}>
         <Select
@@ -205,13 +248,20 @@ export function ContactRows({
      */
     <ul className="space-y-3">
       {rows.map((c, i) => {
-        const set = (patch: Partial<ContactRow>) => onChange(replaceAt(rows, i, { ...c, ...patch }));
+        const set = (patch: Partial<ContactRow>) =>
+          onChange(replaceAt(rows, i, { ...c, ...patch }));
         const esMail = c.contactType === 'EMAIL';
         return (
           <li key={c.id} className="rounded-xl border border-k-border bg-k-bg p-4">
             <div className="grid gap-4 sm:grid-cols-[160px,1fr]">
               <Field label={t('form.contactType')}>
-                <Select value={c.contactType} onChange={(e) => set({ contactType: e.target.value as ContactRow['contactType'] })} disabled={disabled}>
+                <Select
+                  value={c.contactType}
+                  onChange={(e) =>
+                    set({ contactType: e.target.value as ContactRow['contactType'] })
+                  }
+                  disabled={disabled}
+                >
                   {CONTACT_TYPES.map((v) => (
                     <option key={v} value={v}>
                       {t(`contactType.${v}`)}
@@ -246,7 +296,12 @@ export function ContactRows({
                 {/* WhatsApp es un `ContactType` propio en el servidor; acá es un switch porque
                     para quien carga es el mismo número. */}
                 {c.contactType === 'PHONE' && (
-                  <Check label="WhatsApp" checked={c.hasWhatsApp} disabled={disabled} onChange={(hasWhatsApp) => set({ hasWhatsApp })} />
+                  <Check
+                    label="WhatsApp"
+                    checked={c.hasWhatsApp}
+                    disabled={disabled}
+                    onChange={(hasWhatsApp) => set({ hasWhatsApp })}
+                  />
                 )}
                 <Check
                   label={t('primary')}
@@ -254,11 +309,19 @@ export function ContactRows({
                   disabled={disabled}
                   // Principal hay uno solo: marcar uno desmarca al resto.
                   onChange={(isPrimary) =>
-                    onChange(isPrimary ? rows.map((row, j) => ({ ...row, isPrimary: j === i })) : replaceAt(rows, i, { ...c, isPrimary: false }))
+                    onChange(
+                      isPrimary
+                        ? rows.map((row, j) => ({ ...row, isPrimary: j === i }))
+                        : replaceAt(rows, i, { ...c, isPrimary: false }),
+                    )
                   }
                 />
               </div>
-              <RemoveButton onClick={() => onChange(rows.filter((_, j) => j !== i))} disabled={disabled} label={t('form.remove')} />
+              <RemoveButton
+                onClick={() => onChange(rows.filter((_, j) => j !== i))}
+                disabled={disabled}
+                label={t('form.remove')}
+              />
             </div>
           </li>
         );
@@ -291,12 +354,19 @@ export function LocationRows({
     // cuál es la latitud y cuál la longitud hasta escribir en la equivocada.
     <ul className="space-y-3">
       {rows.map((l, i) => {
-        const set = (patch: Partial<LocationRow>) => onChange(replaceAt(rows, i, { ...l, ...patch }));
+        const set = (patch: Partial<LocationRow>) =>
+          onChange(replaceAt(rows, i, { ...l, ...patch }));
         return (
           <li key={l.id} className="rounded-xl border border-k-border bg-k-bg p-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label={t('form.locationType')}>
-                <Select value={l.locationType} onChange={(e) => set({ locationType: e.target.value as LocationRow['locationType'] })} disabled={disabled}>
+                <Select
+                  value={l.locationType}
+                  onChange={(e) =>
+                    set({ locationType: e.target.value as LocationRow['locationType'] })
+                  }
+                  disabled={disabled}
+                >
                   {locationTypeChoices(l.locationType).map((v) => (
                     <option key={v} value={v}>
                       {t(`locationType.${v}`)}
@@ -305,28 +375,53 @@ export function LocationRows({
                 </Select>
               </Field>
               <Field label={t('form.zone')}>
-                <Input value={l.zone} onChange={(e) => set({ zone: e.target.value })} disabled={disabled} />
+                <Input
+                  value={l.zone}
+                  onChange={(e) => set({ zone: e.target.value })}
+                  disabled={disabled}
+                />
               </Field>
               <div className="sm:col-span-2">
                 <Field label={t('form.address')}>
-                  <Input value={l.address} onChange={(e) => set({ address: e.target.value })} disabled={disabled} />
+                  <Input
+                    value={l.address}
+                    onChange={(e) => set({ address: e.target.value })}
+                    disabled={disabled}
+                  />
                 </Field>
               </div>
               <div className="sm:col-span-2">
                 <Field label={t('form.reference')}>
-                  <Input value={l.referenceNotes} onChange={(e) => set({ referenceNotes: e.target.value })} disabled={disabled} />
+                  <Input
+                    value={l.referenceNotes}
+                    onChange={(e) => set({ referenceNotes: e.target.value })}
+                    disabled={disabled}
+                  />
                 </Field>
               </div>
             </div>
             <CoordFields row={l} onChange={set} disabled={disabled} />
             {modalities && (
-              <CollectionFields value={l.collection ?? emptyCollectionForm()} onChange={(collection) => set({ collection })} modalities={modalities} disabled={disabled} />
+              <CollectionFields
+                value={l.collection ?? emptyCollectionForm()}
+                onChange={(collection) => set({ collection })}
+                modalities={modalities}
+                disabled={disabled}
+              />
             )}
             <div className="mt-4">
-              <LocationPhotos value={l.photoUrls} onChange={(photoUrls) => set({ photoUrls })} disabled={disabled} />
+              <LocationPhotos
+                value={l.photoUrls}
+                onChange={(photoUrls) => set({ photoUrls })}
+                disabled={disabled}
+              />
             </div>
             <div className="mt-3 flex justify-end">
-              <RemoveButton onClick={() => onChange(rows.filter((_, j) => j !== i))} disabled={disabled} label={t('form.removeLocation')} />
+              <RemoveButton
+                onClick={() => onChange(rows.filter((_, j) => j !== i))}
+                disabled={disabled}
+                label={t('form.removeLocation')}
+              />
             </div>
           </li>
         );
@@ -386,7 +481,10 @@ function CoordFields({
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setUbicando(false);
-        onChange({ latitude: pos.coords.latitude.toFixed(6), longitude: pos.coords.longitude.toFixed(6) });
+        onChange({
+          latitude: pos.coords.latitude.toFixed(6),
+          longitude: pos.coords.longitude.toFixed(6),
+        });
       },
       () => {
         setUbicando(false);
@@ -401,8 +499,14 @@ function CoordFields({
   return (
     <div className="mt-4 space-y-3">
       <div>
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{t('form.coordMode')}</p>
-        <div role="radiogroup" aria-label={t('form.coordMode')} className="inline-flex rounded-xl border border-k-border bg-white p-1">
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-k-text-2">
+          {t('form.coordMode')}
+        </p>
+        <div
+          role="radiogroup"
+          aria-label={t('form.coordMode')}
+          className="inline-flex rounded-xl border border-k-border bg-white p-1"
+        >
           {COORD_MODES.map((m) => (
             <button
               key={m.value}
@@ -415,7 +519,9 @@ function CoordFields({
                 onChange({ coordMode: m.value });
               }}
               className={`rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors disabled:opacity-50 ${
-                row.coordMode === m.value ? 'bg-k-highlight text-k-periwinkle' : 'text-k-text-2 hover:text-k-text'
+                row.coordMode === m.value
+                  ? 'bg-k-highlight text-k-periwinkle'
+                  : 'text-k-text-2 hover:text-k-text'
               }`}
             >
               {t(`form.${m.label}`)}
@@ -459,7 +565,11 @@ function CoordFields({
             disabled={disabled || ubicando}
             className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg bg-k-highlight px-3 text-[13px] font-medium text-k-periwinkle hover:bg-k-light-bg disabled:opacity-50"
           >
-            {ubicando ? t('form.locating') : conPunto ? t('form.recaptureLocation') : t('form.captureLocation')}
+            {ubicando
+              ? t('form.locating')
+              : conPunto
+                ? t('form.recaptureLocation')
+                : t('form.captureLocation')}
           </button>
           {punto && <span className="text-[12px] text-k-text-2">{punto}</span>}
         </div>
@@ -470,7 +580,12 @@ function CoordFields({
           <MapPicker
             latitude={lat}
             longitude={lng}
-            onChange={disabled ? undefined : ({ latitude, longitude }) => onChange({ latitude: latitude.toFixed(6), longitude: longitude.toFixed(6) })}
+            onChange={
+              disabled
+                ? undefined
+                : ({ latitude, longitude }) =>
+                    onChange({ latitude: latitude.toFixed(6), longitude: longitude.toFixed(6) })
+            }
             height={240}
             label={t('form.mapPick')}
           />
@@ -601,60 +716,111 @@ export function ClientFormFields({
   documentNotice?: ReactNode;
 }) {
   const t = useTranslations('portfolio');
+  // F15 · P3: Ingresos, Garantes y Garantías se pueden ocultar. Lo que el cliente ya tiene cargado se muestra igual (R7), decidido al
+  // abrir: quitar la última fila de garantes no hace desaparecer la sección (no habría cómo volver a agregar una).
+  const workspace = useWorkspace();
+  const [had] = useState(() => ({
+    income: hasIncomeData(form.income),
+    relations: form.relations.length > 0,
+    collaterals: form.collaterals.length > 0,
+  }));
   const set = (patch: Partial<ClienteForm>) => onChange({ ...form, ...patch });
 
   return (
     <div className="space-y-3">
       <Acordeon title={t('sections.identity')} open>
-        <IdentityFields form={form} onChange={onChange} disabled={disabled} documentNotice={documentNotice} />
+        <IdentityFields
+          form={form}
+          onChange={onChange}
+          disabled={disabled}
+          documentNotice={documentNotice}
+        />
       </Acordeon>
 
-      <Acordeon title={t('sections.income')}>
-        <IncomeFields value={form.income} onChange={(income) => set({ income })} sources={incomeSources} occupations={occupations} disabled={disabled} />
-      </Acordeon>
+      {(workspace.shows('client.income') || had.income) && (
+        <Acordeon title={t('sections.income')}>
+          <IncomeFields
+            value={form.income}
+            onChange={(income) => set({ income })}
+            sources={incomeSources}
+            occupations={occupations}
+            disabled={disabled}
+          />
+        </Acordeon>
+      )}
 
       <Acordeon
         title={t('sections.contacts')}
         count={form.contacts.length}
-        onAdd={disabled ? undefined : () => set({ contacts: [...form.contacts, nuevaFila.contact()] })}
+        onAdd={
+          disabled ? undefined : () => set({ contacts: [...form.contacts, nuevaFila.contact()] })
+        }
         addLabel={t('form.addContact')}
       >
-        <ContactRows rows={form.contacts} onChange={(contacts) => set({ contacts })} disabled={disabled} />
+        <ContactRows
+          rows={form.contacts}
+          onChange={(contacts) => set({ contacts })}
+          disabled={disabled}
+        />
       </Acordeon>
 
       <Acordeon
         title={t('sections.locations')}
         count={form.locations.length}
-        onAdd={disabled ? undefined : () => set({ locations: [...form.locations, nuevaFila.location()] })}
+        onAdd={
+          disabled ? undefined : () => set({ locations: [...form.locations, nuevaFila.location()] })
+        }
         addLabel={t('form.addLocation')}
       >
-        <LocationRows rows={form.locations} onChange={(locations) => set({ locations })} disabled={disabled} modalities={collectionModalities} />
-      </Acordeon>
-
-      <Acordeon
-        title={t('sections.guarantors')}
-        count={form.relations.length}
-        onAdd={disabled ? undefined : () => set({ relations: [...form.relations, nuevaFila.relation()] })}
-        addLabel={t('form.addRelation')}
-      >
-        <GuarantorRows rows={form.relations} onChange={(relations) => set({ relations })} credits={credits} disabled={disabled} />
-      </Acordeon>
-
-      <Acordeon
-        title={t('sections.collaterals')}
-        count={form.collaterals.length}
-        onAdd={disabled ? undefined : () => set({ collaterals: [...form.collaterals, nuevaFila.collateral()] })}
-        addLabel={t('form.addCollateral')}
-      >
-        <CollateralRows
-          rows={form.collaterals}
-          onChange={(collaterals) => set({ collaterals })}
-          credits={credits}
-          types={collateralTypes}
-          currency={currency}
+        <LocationRows
+          rows={form.locations}
+          onChange={(locations) => set({ locations })}
           disabled={disabled}
+          modalities={collectionModalities}
         />
       </Acordeon>
+
+      {(workspace.shows('client.guarantors') || had.relations) && (
+        <Acordeon
+          title={t('sections.guarantors')}
+          count={form.relations.length}
+          onAdd={
+            disabled
+              ? undefined
+              : () => set({ relations: [...form.relations, nuevaFila.relation()] })
+          }
+          addLabel={t('form.addRelation')}
+        >
+          <GuarantorRows
+            rows={form.relations}
+            onChange={(relations) => set({ relations })}
+            credits={credits}
+            disabled={disabled}
+          />
+        </Acordeon>
+      )}
+
+      {(workspace.shows('client.collateral') || had.collaterals) && (
+        <Acordeon
+          title={t('sections.collaterals')}
+          count={form.collaterals.length}
+          onAdd={
+            disabled
+              ? undefined
+              : () => set({ collaterals: [...form.collaterals, nuevaFila.collateral()] })
+          }
+          addLabel={t('form.addCollateral')}
+        >
+          <CollateralRows
+            rows={form.collaterals}
+            onChange={(collaterals) => set({ collaterals })}
+            credits={credits}
+            types={collateralTypes}
+            currency={currency}
+            disabled={disabled}
+          />
+        </Acordeon>
+      )}
     </div>
   );
 }
@@ -681,7 +847,8 @@ function CreditPicker({
 }) {
   const t = useTranslations('portfolio');
   const format = useFormatter();
-  if (credits.length === 0) return <p className="text-[13px] text-k-muted">{t('form.noCreditsYet')}</p>;
+  if (credits.length === 0)
+    return <p className="text-[13px] text-k-muted">{t('form.noCreditsYet')}</p>;
 
   const toggle = (id: string) =>
     onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
@@ -700,7 +867,8 @@ function CreditPicker({
           {/* El código no alcanza para distinguirlos: dos créditos del mismo deudor se parecen, y
               el saldo es lo que la persona reconoce. */}
           <span>
-            {c.code || t('form.creditNoCode')} · {format.number(c.outstandingBalance, { style: 'currency', currency: c.currency })}
+            {c.code || t('form.creditNoCode')} ·{' '}
+            {format.number(c.outstandingBalance, { style: 'currency', currency: c.currency })}
           </span>
         </label>
       ))}
@@ -732,11 +900,13 @@ function CollateralFields({
    * direcciones (`locationTypeChoices`). Sin esto, abrir la garantía la re-etiquetaría con la primera
    * opción de la lista y guardar pisaría el dato sin que nadie tocara ese campo.
    */
-  const opciones = row.type && !types.some((c) => c.code === row.type)
-    ? [...types, { code: row.type, label: row.type }]
-    : types;
+  const opciones =
+    row.type && !types.some((c) => c.code === row.type)
+      ? [...types, { code: row.type, label: row.type }]
+      : types;
   // Ídem para la moneda: una fila guardada en una moneda que ya no ofrecemos no se re-etiqueta sola.
-  const monedas = row.currency && !CURRENCIES.includes(row.currency) ? [...CURRENCIES, row.currency] : CURRENCIES;
+  const monedas =
+    row.currency && !CURRENCIES.includes(row.currency) ? [...CURRENCIES, row.currency] : CURRENCIES;
 
   return (
     <div className="rounded-xl border border-k-border bg-k-bg p-4">
@@ -745,7 +915,11 @@ function CollateralFields({
             un campo que no se puede llenar, y el catálogo del tenant arranca vacío. */}
         <Field label={t('form.collateralType')}>
           {opciones.length > 0 ? (
-            <Select value={row.type} onChange={(e) => set({ type: e.target.value })} disabled={disabled}>
+            <Select
+              value={row.type}
+              onChange={(e) => set({ type: e.target.value })}
+              disabled={disabled}
+            >
               <option value="">{t('form.collateralTypeUnset')}</option>
               {opciones.map((c) => (
                 <option key={c.code} value={c.code}>
@@ -754,7 +928,12 @@ function CollateralFields({
               ))}
             </Select>
           ) : (
-            <Input value={row.type} onChange={(e) => set({ type: e.target.value })} disabled={disabled} maxLength={64} />
+            <Input
+              value={row.type}
+              onChange={(e) => set({ type: e.target.value })}
+              disabled={disabled}
+              maxLength={64}
+            />
           )}
         </Field>
         <div className="sm:col-span-2">
@@ -808,8 +987,15 @@ function CollateralFields({
       </div>
 
       <div className="mt-4 border-t border-k-border pt-4">
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{t('form.appliesTo')}</p>
-        <CreditPicker credits={credits} selected={row.creditIds} onChange={(creditIds) => set({ creditIds })} disabled={disabled} />
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-k-text-2">
+          {t('form.appliesTo')}
+        </p>
+        <CreditPicker
+          credits={credits}
+          selected={row.creditIds}
+          onChange={(creditIds) => set({ creditIds })}
+          disabled={disabled}
+        />
       </div>
 
       <div className="mt-3 flex justify-end">
@@ -839,10 +1025,21 @@ function RelationFields({
     <div className="rounded-xl border border-k-border bg-k-bg p-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label={t('form.relatedName')}>
-          <Input value={row.relatedName} onChange={(e) => set({ relatedName: e.target.value })} disabled={disabled} required />
+          <Input
+            value={row.relatedName}
+            onChange={(e) => set({ relatedName: e.target.value })}
+            disabled={disabled}
+            required
+          />
         </Field>
         <Field label={t('form.relationType')}>
-          <Select value={row.relationshipType} onChange={(e) => set({ relationshipType: e.target.value as RelationRow['relationshipType'] })} disabled={disabled}>
+          <Select
+            value={row.relationshipType}
+            onChange={(e) =>
+              set({ relationshipType: e.target.value as RelationRow['relationshipType'] })
+            }
+            disabled={disabled}
+          >
             {RELATION_TYPES.map((v) => (
               <option key={v} value={v}>
                 {t(`relationType.${v}`)}
@@ -852,7 +1049,11 @@ function RelationFields({
         </Field>
         {/* Ídem el del cliente: se cargaba y se devolvía sin que nadie pudiera corregirlo. */}
         <Field label={t('form.gender')}>
-          <Select value={row.gender} onChange={(e) => set({ gender: e.target.value })} disabled={disabled}>
+          <Select
+            value={row.gender}
+            onChange={(e) => set({ gender: e.target.value })}
+            disabled={disabled}
+          >
             {GENDERS.map((g) => (
               <option key={g.value} value={g.value}>
                 {g.value ? t(`gender.${g.value}`) : t('gender.unset')}
@@ -862,7 +1063,11 @@ function RelationFields({
         </Field>
         <div className="sm:col-span-2">
           <Field label={t('form.notes')}>
-            <Input value={row.notes} onChange={(e) => set({ notes: e.target.value })} disabled={disabled} />
+            <Input
+              value={row.notes}
+              onChange={(e) => set({ notes: e.target.value })}
+              disabled={disabled}
+            />
           </Field>
         </div>
       </div>
@@ -870,21 +1075,55 @@ function RelationFields({
       {/* A qué créditos responde. Va acá arriba, junto a quién es, y no al final entre sus
           teléfonos: es lo que distingue a un garante de un contacto cualquiera. */}
       <div className="mt-3 border-t border-k-border pt-3">
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{t('form.guarantees')}</p>
-        <CreditPicker credits={credits} selected={row.creditIds} onChange={(creditIds) => set({ creditIds })} disabled={disabled} />
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-k-text-2">
+          {t('form.guarantees')}
+        </p>
+        <CreditPicker
+          credits={credits}
+          selected={row.creditIds}
+          onChange={(creditIds) => set({ creditIds })}
+          disabled={disabled}
+        />
       </div>
 
       <div className="mt-3 flex items-center justify-between">
-        <Check label={t('form.contactable')} checked={row.isContactable} disabled={disabled} onChange={(isContactable) => set({ isContactable })} />
+        <Check
+          label={t('form.contactable')}
+          checked={row.isContactable}
+          disabled={disabled}
+          onChange={(isContactable) => set({ isContactable })}
+        />
         <RemoveButton onClick={onRemove} disabled={disabled} label={t('form.removeRelation')} />
       </div>
 
       <div className="mt-4 space-y-4 border-t border-k-border pt-4">
-        <Sub title={t('form.relationContacts')} onAdd={disabled ? undefined : () => set({ contacts: [...row.contacts, nuevaFila.contact()] })} addLabel={t('form.addContact')}>
-          <ContactRows rows={row.contacts} onChange={(contacts) => set({ contacts })} disabled={disabled} />
+        <Sub
+          title={t('form.relationContacts')}
+          onAdd={
+            disabled ? undefined : () => set({ contacts: [...row.contacts, nuevaFila.contact()] })
+          }
+          addLabel={t('form.addContact')}
+        >
+          <ContactRows
+            rows={row.contacts}
+            onChange={(contacts) => set({ contacts })}
+            disabled={disabled}
+          />
         </Sub>
-        <Sub title={t('form.relationLocations')} onAdd={disabled ? undefined : () => set({ locations: [...row.locations, nuevaFila.location()] })} addLabel={t('form.addLocation')}>
-          <LocationRows rows={row.locations} onChange={(locations) => set({ locations })} disabled={disabled} />
+        <Sub
+          title={t('form.relationLocations')}
+          onAdd={
+            disabled
+              ? undefined
+              : () => set({ locations: [...row.locations, nuevaFila.location()] })
+          }
+          addLabel={t('form.addLocation')}
+        >
+          <LocationRows
+            rows={row.locations}
+            onChange={(locations) => set({ locations })}
+            disabled={disabled}
+          />
         </Sub>
       </div>
     </div>
@@ -925,13 +1164,19 @@ function Acordeon({
         </span>
         <span className="flex-1 text-[14px] font-semibold text-k-navy">
           {title}
-          {count != null && count > 0 && <span className="ml-1.5 font-normal text-k-muted">({count})</span>}
+          {count != null && count > 0 && (
+            <span className="ml-1.5 font-normal text-k-muted">({count})</span>
+          )}
         </span>
       </summary>
       <div className="border-t border-k-border p-4">
         {onAdd && (
           <div className="mb-3 flex justify-end">
-            <button type="button" onClick={onAdd} className="text-[13px] font-medium text-k-periwinkle hover:underline">
+            <button
+              type="button"
+              onClick={onAdd}
+              className="text-[13px] font-medium text-k-periwinkle hover:underline"
+            >
               + {addLabel}
             </button>
           </div>
@@ -942,13 +1187,27 @@ function Acordeon({
   );
 }
 
-function Sub({ title, onAdd, addLabel, children }: { title: string; onAdd?: () => void; addLabel?: string; children: ReactNode }) {
+function Sub({
+  title,
+  onAdd,
+  addLabel,
+  children,
+}: {
+  title: string;
+  onAdd?: () => void;
+  addLabel?: string;
+  children: ReactNode;
+}) {
   return (
     <>
       <div className="mb-4 flex items-center justify-between gap-3">
         <h2 className="text-[16px] font-semibold text-k-navy">{title}</h2>
         {onAdd && (
-          <button type="button" onClick={onAdd} className="text-[13px] font-medium text-k-purple hover:underline">
+          <button
+            type="button"
+            onClick={onAdd}
+            className="text-[13px] font-medium text-k-purple hover:underline"
+          >
             {addLabel}
           </button>
         )}
@@ -958,19 +1217,47 @@ function Sub({ title, onAdd, addLabel, children }: { title: string; onAdd?: () =
   );
 }
 
-function Check({ label, checked, onChange, disabled }: { label: string; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+function Check({
+  label,
+  checked,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+}) {
   return (
     <label className="flex items-center gap-2 whitespace-nowrap text-[13px] text-k-text-2">
-      <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} className="h-4 w-4 accent-k-purple" />
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.checked)}
+        className="h-4 w-4 accent-k-purple"
+      />
       {label}
     </label>
   );
 }
 
-function RemoveButton({ onClick, label, disabled }: { onClick: () => void; label: string; disabled?: boolean }) {
+function RemoveButton({
+  onClick,
+  label,
+  disabled,
+}: {
+  onClick: () => void;
+  label: string;
+  disabled?: boolean;
+}) {
   if (disabled) return null;
   return (
-    <button type="button" onClick={onClick} className="text-[13px] font-medium text-k-danger hover:underline">
+    <button
+      type="button"
+      onClick={onClick}
+      className="text-[13px] font-medium text-k-danger hover:underline"
+    >
       {label}
     </button>
   );

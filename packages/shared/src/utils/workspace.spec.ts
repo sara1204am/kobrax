@@ -256,3 +256,29 @@ describe('workspaceDefaults (R6: lo que se fija es válido para el motor)', () =
     for (const f of OFFERED_FREQUENCIES) expect(Object.values(PaymentFrequency)).toContain(f);
   });
 });
+
+describe('F15 · P3: frecuencia por defecto y `creditDefaults()`', () => {
+  it('si la mensual no está permitida, el alta arranca en la primera frecuencia que la app ofrece y que sí está permitida (no en la primera de la lista guardada)', () => {
+    const d = workspaceDefaults(ws({ options: { 'credit.frequencies': ['WEEKLY', 'DAILY'] } }));
+    expect(d.frequency).toBe(PaymentFrequency.DAILY);
+    expect(workspaceDefaults(ws({ options: { 'credit.frequencies': ['BIWEEKLY', 'WEEKLY'] } })).frequency).toBe(PaymentFrequency.WEEKLY);
+  });
+
+  it('si la mensual SÍ está permitida, no se toca la frecuencia', () => {
+    expect('frequency' in workspaceDefaults(ws({ options: { 'credit.frequencies': ['WEEKLY', 'MONTHLY'] } }))).toBe(false);
+  });
+
+  it('la frecuencia inicial elegida es una que el motor acepta (R6) para cada lista permitida posible', () => {
+    for (const f of OFFERED_FREQUENCIES) {
+      const d = workspaceDefaults(ws({ options: { 'credit.frequencies': [f] } }));
+      const form: CreditForm = { ...initialCreditForm('2026-12-15'), ...d, principal: '1000', ratePercent: '24', installmentsCount: '1' };
+      expect(buildNewCreditPayload(form, 'c1'), f).not.toBeNull();
+    }
+  });
+
+  it('lo resuelto expone los mismos defaults que `workspaceDefaults`', () => {
+    const w = ws({ options: { 'credit.definition': 'agreed_installment', 'credit.frequencies': ['WEEKLY'] } });
+    expect(resolveWorkspace(w).creditDefaults()).toEqual(workspaceDefaults(w));
+    expect(resolveWorkspace(emptyWorkspace()).creditDefaults()).toEqual({});
+  });
+});

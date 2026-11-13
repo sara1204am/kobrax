@@ -12,7 +12,7 @@
  *  - R6 todo valor fijo lleva un default que el motor de créditos acepta (lo prueba `workspace.spec.ts`).
  *  - R7 una opción oculta nunca esconde un valor ya guardado: eso lo decide la pantalla con `shows`, no este módulo.
  */
-import { CreditDefinition, OFFERED_FREQUENCIES, TermUnit } from '../enums/credit.enum.js';
+import { CreditDefinition, OFFERED_FREQUENCIES, PaymentFrequency, TermUnit } from '../enums/credit.enum.js';
 
 /** Versión del contrato. Un documento con una versión MAYOR se trata como «Completo» y no se modifica. */
 export const WORKSPACE_VERSION = 1;
@@ -304,6 +304,8 @@ export interface ResolvedWorkspace {
   fixed(key: WorkspaceOptionKey): string | undefined;
   /** La lista permitida de una opción `choices`, o `undefined` si no hay restricción. */
   choices(key: WorkspaceOptionKey): string[] | undefined;
+  /** Lo que el alta de un crédito pone por quien no ve el campo (ver `workspaceDefaults`). */
+  creditDefaults(): WorkspaceCreditDefaults;
 }
 
 /**
@@ -332,6 +334,7 @@ export function resolveWorkspace(workspace: Workspace, _ctx: { planCode?: string
       const v = workspace.options[key];
       return OPTION_BY_KEY.get(key)?.kind === 'choices' && Array.isArray(v) ? [...v] : undefined;
     },
+    creditDefaults: () => workspaceDefaults(workspace),
   };
 }
 
@@ -343,6 +346,8 @@ export interface WorkspaceCreditDefaults {
   definition?: CreditDefinition;
   /** Con una modalidad de cuota o total acordado el plazo se cuenta en cuotas: el valor inicial `years` convertiría «12» en 12 años (C-3). */
   termUnit?: TermUnit;
+  /** Si la lista de frecuencias permitidas no incluye la inicial del formulario (mensual), la primera permitida. */
+  frequency?: PaymentFrequency;
 }
 
 /**
@@ -350,8 +355,16 @@ export interface WorkspaceCreditDefaults {
  * **Nunca sobrescribe un valor existente**: lo usa el alta, no la edición de un crédito que ya tiene su modalidad (R7).
  */
 export function workspaceDefaults(workspace: Workspace): WorkspaceCreditDefaults {
+  const out: WorkspaceCreditDefaults = {};
+  // La frecuencia inicial del formulario es mensual: si la organización no la permite, arranca en la primera que sí.
+  const allowed = workspace.options['credit.frequencies'];
+  if (Array.isArray(allowed) && allowed.length > 0 && !allowed.includes(PaymentFrequency.MONTHLY)) {
+    // La primera de las que la app ofrece (en su orden) y la organización permite: no «la primera de la lista guardada».
+    const first = OFFERED_FREQUENCIES.find((f) => allowed.includes(f));
+    if (first) out.frequency = first;
+  }
   const fixed = workspace.options['credit.definition'];
-  if (typeof fixed !== 'string') return {};
+  if (typeof fixed !== 'string') return out;
   const definition = fixed as CreditDefinition;
   // Una tabla por modalidad (y no un `else` genérico): al añadir una modalidad nueva el compilador obliga a decidir su plazo.
   const unit: Record<CreditDefinition, TermUnit | undefined> = {
@@ -360,5 +373,5 @@ export function workspaceDefaults(workspace: Workspace): WorkspaceCreditDefaults
     [CreditDefinition.AGREED_TOTAL]: TermUnit.INSTALLMENTS,
   };
   const termUnit = unit[definition];
-  return termUnit ? { definition, termUnit } : { definition };
+  return termUnit ? { ...out, definition, termUnit } : { ...out, definition };
 }
