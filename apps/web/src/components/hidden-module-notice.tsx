@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense } from 'react';
+import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { HIDEABLE_MODULES } from '@kobrax/shared';
@@ -22,9 +23,21 @@ function Notice({ canManage }: { canManage: boolean }) {
   if (!key || !(HIDEABLE_MODULES as readonly string[]).includes(key)) return null;
 
   return (
-    <div role="status" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-k-border bg-k-highlight/40 px-4 py-3 text-[14px] text-k-text">
+    <div
+      role="status"
+      className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-k-border bg-k-highlight/40 px-4 py-3 text-[14px] text-k-text"
+    >
       <p>
-        <span className="font-semibold">{t('title', { module: tNav(key) })}</span> {canManage ? t('textAdmin') : t('textMember')}
+        <span className="font-semibold">{t('title', { module: tNav(key) })}</span>{' '}
+        {canManage ? t('textAdmin') : t('textMember')}{' '}
+        {canManage && (
+          <Link
+            href="/cuenta/espacio-de-trabajo"
+            className="font-semibold text-k-periwinkle hover:underline"
+          >
+            {t('goTo')}
+          </Link>
+        )}
       </p>
       <button
         type="button"

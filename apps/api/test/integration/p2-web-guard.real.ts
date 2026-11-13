@@ -125,6 +125,29 @@ async function main() {
   const back = await get('/rutas');
   check('reversible: vuelve a abrir /rutas', back.status === 200, `HTTP ${back.status}`);
 
+  // ── P4: la pestaña «Espacio de trabajo» y el guardado por el BFF ──
+  const pageWs = await get('/cuenta/espacio-de-trabajo');
+  check('P4 la pestaña abre (200) con el formulario', pageWs.status === 200 && pageWs.body.includes('Punto de partida') && pageWs.body.includes('Guardar cambios'), `HTTP ${pageWs.status}`);
+  // (La lista de pestañas de Cuenta se verifica en `cuenta-tabs.test.ts`: el HTML del servidor no trae esos enlaces, tampoco los de las demás pestañas.)
+
+  const patchBff = (body: unknown, origin = WEB) =>
+    fetch(`${WEB}/api/account/me`, { method: 'PATCH', headers: { Cookie: `k_access=${token}`, Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const saved1 = await patchBff({ workspace: { version: 1, rev, hiddenModules: ['import'], options: { 'client.income': false } } });
+  const saved1Body = (await saved1.json()) as { workspace?: { rev: number; hiddenModules: string[] } };
+  check('P4 guardar por el BFF (200) y sube el rev', saved1.status === 200 && saved1Body.workspace?.rev === rev + 1 && saved1Body.workspace.hiddenModules.join() === 'import', `HTTP ${saved1.status} rev ${saved1Body.workspace?.rev}`);
+  const importHidden = await get('/import');
+  check('P4 lo guardado ya se aplica: /import oculto', redirectsTo(importHidden, '/dashboard?oculto=import'), `HTTP ${importHidden.status}`);
+
+  const stale = await patchBff({ workspace: { version: 1, rev, hiddenModules: [], options: {} } });
+  const staleBody = (await stale.json()) as { error?: { code: string; details?: { reason: string; currentRev: number } } };
+  check('P4 un rev viejo por el BFF → 409 con el código y el rev vigente', stale.status === 409 && staleBody.error?.code === 'WORKSPACE_CONFLICT' && staleBody.error.details?.currentRev === rev + 1, `HTTP ${stale.status} ${JSON.stringify(staleBody.error)}`);
+
+  const foreign = await patchBff({ workspace: { version: 1, rev: rev + 1, hiddenModules: [], options: {} } }, 'https://otro-sitio.example');
+  check('P4 un origen ajeno se rechaza (CSRF)', foreign.status === 403, `HTTP ${foreign.status}`);
+
+  const reset = await patchBff({ workspace: { version: 1, rev: rev + 1, hiddenModules: [], options: {} } });
+  check('P4 «Restablecer a Completo» guarda y reabre todo', reset.status === 200 && (await get('/import')).status === 200, `HTTP ${reset.status}`);
+
   console.log(out.join('\n'));
   await prisma.$disconnect();
 }

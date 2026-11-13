@@ -10,7 +10,7 @@ describe('visibleCuentaTabs', () => {
   });
 
   it('el administrador ve todas', () => {
-    expect(keys(ROLE_PERMISSIONS[RoleType.ACCOUNT_ADMIN])).toEqual(['general', 'plan', 'cobranza', 'mensajes', 'catalogos', 'facturacion', 'avanzado']);
+    expect(keys(ROLE_PERMISSIONS[RoleType.ACCOUNT_ADMIN])).toEqual(['general', 'plan', 'cobranza', 'mensajes', 'catalogos', 'facturacion', 'espacio-de-trabajo', 'avanzado']);
   });
 
   it('sin catalog:read no hay «Mensajes» ni «Catálogos»', () => {
@@ -25,7 +25,8 @@ describe('visibleCuentaTabs', () => {
 
   it('sin account:read no hay ninguna que dependa de la cuenta', () => {
     expect(keys(['catalog:read'])).toEqual(['mensajes', 'catalogos']);
-    expect(keys(['account:write'])).toEqual(['avanzado']);
+    // F15 · P4: «Espacio de trabajo» y «Avanzado» piden `account:write` (la configuración de la organización).
+    expect(keys(['account:write'])).toEqual(['espacio-de-trabajo', 'avanzado']);
     expect(keys([])).toEqual([]);
   });
 });

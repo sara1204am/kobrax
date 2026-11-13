@@ -6,6 +6,8 @@ import {
   WORKSPACE_MAX_OPTIONS,
   WORKSPACE_MODULES,
   WORKSPACE_OPTIONS,
+  WORKSPACE_PRESETS,
+  presetOf,
   WORKSPACE_VERSION,
   emptyWorkspace,
   parseWorkspace,
@@ -280,5 +282,45 @@ describe('F15 · P3: frecuencia por defecto y `creditDefaults()`', () => {
     const w = ws({ options: { 'credit.definition': 'agreed_installment', 'credit.frequencies': ['WEEKLY'] } });
     expect(resolveWorkspace(w).creditDefaults()).toEqual(workspaceDefaults(w));
     expect(resolveWorkspace(emptyWorkspace()).creditDefaults()).toEqual({});
+  });
+});
+
+describe('presets (F15 · P4)', () => {
+  const doc = (key: keyof typeof WORKSPACE_PRESETS, rev = 0): Workspace => ({ version: 1, rev, ...WORKSPACE_PRESETS[key] });
+
+  it('🔴 cada preset es un documento VÁLIDO para el servidor (sin troncales, valores del catálogo)', () => {
+    for (const key of Object.keys(WORKSPACE_PRESETS) as (keyof typeof WORKSPACE_PRESETS)[]) {
+      const r = validateWorkspaceInput(doc(key));
+      expect(r.ok, key).toBe(true);
+    }
+  });
+
+  it('«Completo» no oculta nada y es el documento vacío', () => {
+    expect(WORKSPACE_PRESETS.complete).toEqual({ hiddenModules: [], options: {} });
+    expect(presetOf(emptyWorkspace())).toBe('complete');
+  });
+
+  it('D-12 / plan §4: «Independiente» baja el menú a 8 ítems y fija la modalidad con defaults válidos para el motor', () => {
+    const r = resolveWorkspace(doc('independent'));
+    expect(r.visibleNavKeys()).toEqual(['home', 'portfolio', 'mora', 'agenda', 'payments', 'accessSecurity', 'account', 'profile']);
+    expect(r.fixed('credit.definition')).toBe('agreed_installment');
+    expect(r.creditDefaults()).toEqual({ definition: CreditDefinition.AGREED_INSTALLMENT, termUnit: TermUnit.INSTALLMENTS });
+  });
+
+  it('«Equipo» oculta Organización, Importar y Exportar y deja las opciones como están', () => {
+    expect(WORKSPACE_PRESETS.team.hiddenModules).toEqual(['import', 'export', 'organization']);
+    expect(WORKSPACE_PRESETS.team.options).toEqual({});
+  });
+
+  it('presetOf reconoce un preset sin importar el rev, el orden de los módulos ni el de las claves', () => {
+    expect(presetOf(doc('independent', 7))).toBe('independent');
+    expect(presetOf({ hiddenModules: ['organization', 'export', 'import'], options: {} })).toBe('team');
+    const reordenado = { hiddenModules: [...WORKSPACE_PRESETS.independent.hiddenModules].reverse(), options: Object.fromEntries(Object.entries(WORKSPACE_PRESETS.independent.options).reverse()) };
+    expect(presetOf(reordenado)).toBe('independent');
+  });
+
+  it('un ajuste a mano sobre un preset es «custom»', () => {
+    expect(presetOf({ ...doc('independent'), hiddenModules: ['routes'] })).toBe('custom');
+    expect(presetOf({ hiddenModules: [], options: { 'client.income': false } })).toBe('custom');
   });
 });

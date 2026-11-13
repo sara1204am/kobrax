@@ -55,4 +55,14 @@ describe('HiddenModuleNotice (F15 · A-4)', () => {
     screen.getByRole('button', { name: 'Cerrar aviso' }).click();
     expect(replace).toHaveBeenCalledWith('/dashboard?view=abc&edit=1');
   });
+
+  it('F15 · P4: quien puede editar la cuenta tiene un enlace directo a Espacio de trabajo; el resto no', () => {
+    query = 'oculto=routes';
+    const { unmount } = render(<HiddenModuleNotice canManage />);
+    expect(screen.getByRole('link', { name: 'Ir a Espacio de trabajo' })).toHaveAttribute('href', '/cuenta/espacio-de-trabajo');
+    unmount();
+    render(<HiddenModuleNotice canManage={false} />);
+    expect(screen.queryByRole('link', { name: 'Ir a Espacio de trabajo' })).not.toBeInTheDocument();
+  });
 });
+

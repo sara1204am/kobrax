@@ -319,6 +319,7 @@
         "title": "{module} está oculto para tu organización.",
         "textAdmin": "Puedes volver a mostrarlo en Cuenta › Espacio de trabajo.",
         "textMember": "Pídele a quien administra la cuenta que lo muestre.",
+        "goTo": "Ir a Espacio de trabajo",
         "dismiss": "Cerrar aviso"
       }
     },
@@ -2396,6 +2397,7 @@
       "facturacion": "Facturación",
       "billingPending": "Faltan datos de facturación",
       "actividad": "Actividad",
+      "espacio-de-trabajo": "Espacio de trabajo",
       "avanzado": "Avanzado",
       "soporte": "Accesos de soporte"
     },
@@ -2618,6 +2620,115 @@
       "empty_value": "vacío",
       "more": "Cargar más",
       "loadError": "No se pudo cargar la actividad"
+    },
+    "workspace": {
+      "title": "Espacio de trabajo",
+      "intro": "Elige qué ves en Kobrax. Lo que ocultes sigue guardado y no cambia lo que cada persona puede hacer: ocultar no es autorizar. Puedes volver a «Completo» cuando quieras.",
+      "presets": {
+        "title": "Punto de partida",
+        "independent": {
+          "title": "Independiente",
+          "text": "Trabajo solo. Menú de 8 ítems y altas simples."
+        },
+        "team": {
+          "title": "Equipo",
+          "text": "Varias personas en una oficina. Sin Organización, Importar ni Exportar."
+        },
+        "complete": {
+          "title": "Completo",
+          "text": "Todo visible, como hoy. Es el valor de una cuenta nueva."
+        },
+        "custom": "Personalizado: es un ajuste a mano sobre uno de los puntos de partida."
+      },
+      "modules": {
+        "title": "Módulos del menú",
+        "text": "Se quitan del menú, de las migas y de los enlaces. Si alguien entra por una dirección guardada, vuelve a Inicio con un aviso.",
+        "hints": {
+          "routes": "Planificar y seguir rutas de visita.",
+          "team": "Invitar y administrar personas. Solo se puede ocultar si eres la única persona de la cuenta.",
+          "organization": "Oficinas y jerarquía. Solo se puede ocultar con una oficina activa.",
+          "import": "Cargar cartera desde un archivo.",
+          "export": "Descargar datos y el respaldo.",
+          "activity": "Registro de auditoría. Solo se oculta la pantalla: la auditoría sigue registrando todo."
+        }
+      },
+      "locked": {
+        "title": "Siempre visibles",
+        "text": "Seguridad incluye Roles y Accesos de soporte: sin ella nadie podría editar permisos."
+      },
+      "credit": {
+        "title": "Créditos",
+        "text": "Simplifica el alta. Los créditos que ya existen se abren y se guardan igual que antes.",
+        "fixed": {
+          "label": "Mis créditos son de cuota acordada",
+          "hint": "Oculta tasa, tipo de interés, amortización, seguro y cargos. El alta pide monto, cuota, frecuencia y primer vencimiento."
+        },
+        "advanced": {
+          "label": "Mostrar opciones avanzadas del crédito",
+          "hint": "Tipo de interés, convención, base, seguro y cargos."
+        },
+        "arrears": {
+          "label": "Preguntar cómo se cuenta la mora",
+          "hint": "Si lo ocultas, cada crédito usa el método de tu cuenta (Cuenta › Cobranza)."
+        },
+        "frequencies": {
+          "label": "Frecuencias de pago que ofrezco",
+          "hint": "Debe quedar al menos una. Un crédito que ya usa otra frecuencia la sigue mostrando."
+        }
+      },
+      "client": {
+        "title": "Fichas de clientes",
+        "text": "Secciones y campos que se muestran. Nombre, teléfonos, correos y direcciones no se pueden ocultar.",
+        "income": {
+          "label": "Ingresos",
+          "hint": "Ingresos del cliente y motivos de no pago."
+        },
+        "guarantors": {
+          "label": "Garantes",
+          "hint": "Personas que respaldan el crédito."
+        },
+        "collateral": {
+          "label": "Garantías no personales",
+          "hint": "Bienes dados en garantía."
+        },
+        "attachments": {
+          "label": "Adjuntos",
+          "hint": "Documentos y fotos de la ficha. Los archivos ya subidos se conservan."
+        },
+        "gender": {
+          "label": "Género",
+          "hint": "Un campo del alta que casi nunca se usa."
+        },
+        "preferredChannel": {
+          "label": "Canal de contacto preferido",
+          "hint": "Teléfono, WhatsApp o visita."
+        },
+        "keepNote": "Si un cliente ya tiene un garante o un adjunto guardado, lo verás aunque hayas ocultado la sección. Nada se borra."
+      },
+      "blocked": {
+        "members": "Tu cuenta tiene {count} personas: solo se puede ocultar si eres la única.",
+        "offices": "Tu cuenta tiene {count} oficinas activas: solo se puede ocultar con una."
+      },
+      "menuPreview": "{shown} de {total} ítems en el menú",
+      "actions": {
+        "save": "Guardar cambios",
+        "saving": "Guardando…",
+        "reset": "Restablecer a Completo",
+        "unsaved": "Hay cambios sin guardar. Se aplican a toda la organización.",
+        "clean": "Sin cambios."
+      },
+      "saved": "Espacio de trabajo guardado. Las demás sesiones lo verán al recargar.",
+      "errors": {
+        "conflict": "El espacio de trabajo cambió mientras lo editabas. Recarga para ver lo último y vuelve a aplicar tu cambio.",
+        "reload": "Recargar",
+        "version": "Lo guardó una versión más nueva de Kobrax y esta no lo puede modificar. Actualiza la aplicación.",
+        "blocked": "Hay módulos que todavía se usan en tu organización y no se pueden ocultar:",
+        "blockedMembers": "{module}: tu cuenta tiene {count} personas.",
+        "blockedOffices": "{module}: tu cuenta tiene {count} oficinas activas.",
+        "blockedRoutes": "{module}: hay {count} rutas en curso.",
+        "invalid": "Esa configuración no es válida.",
+        "generic": "No se pudo guardar. Inténtalo de nuevo."
+      }
     },
     "advanced": {
       "backup": {

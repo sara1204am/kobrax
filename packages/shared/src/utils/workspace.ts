@@ -375,3 +375,59 @@ export function workspaceDefaults(workspace: Workspace): WorkspaceCreditDefaults
   const termUnit = unit[definition];
   return termUnit ? { ...out, definition, termUnit } : { ...out, definition };
 }
+
+// ── Presets ──────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+export type WorkspacePresetKey = 'independent' | 'team' | 'complete';
+
+export interface WorkspacePreset {
+  hiddenModules: WorkspaceModuleKey[];
+  options: Workspace['options'];
+}
+
+/**
+ * Los tres puntos de partida de la pestaña «Espacio de trabajo» (D-12). Son solo una forma rápida de rellenar el formulario:
+ * el documento que se guarda es el de siempre y la persona puede ajustarlo a mano. «Completo» no oculta nada.
+ *
+ * `client.taxId` no va en ninguno: en la web el NIT es solo de lectura y un NIT guardado nunca se oculta (R7).
+ */
+export const WORKSPACE_PRESETS: Record<WorkspacePresetKey, WorkspacePreset> = {
+  independent: {
+    hiddenModules: ['import', 'routes', 'export', 'organization', 'team', 'activity'],
+    options: {
+      'credit.definition': 'agreed_installment',
+      'credit.advanced': false,
+      'credit.arrearsMethod': false,
+      'client.income': false,
+      'client.guarantors': false,
+      'client.collateral': false,
+      'client.attachments': false,
+      'client.gender': false,
+      'client.preferredChannel': false,
+    },
+  },
+  team: { hiddenModules: ['import', 'export', 'organization'], options: {} },
+  complete: { hiddenModules: [], options: {} },
+};
+
+const canonical = (hiddenModules: readonly string[], options: Workspace['options']): string =>
+  JSON.stringify([
+    [...hiddenModules].sort(),
+    Object.entries(options)
+      .map(([k, v]) => [k, Array.isArray(v) ? [...v].sort() : v] as const)
+      .sort(([a], [b]) => a.localeCompare(b)),
+  ]);
+
+/** ¿Con cuál preset coincide exactamente este documento? `'custom'` si con ninguno. Ignora `rev` y `version`. */
+export function presetOf(workspace: Pick<Workspace, 'hiddenModules' | 'options'>): WorkspacePresetKey | 'custom' {
+  for (const key of Object.keys(WORKSPACE_PRESETS) as WorkspacePresetKey[]) {
+    if (sameWorkspace(workspace, WORKSPACE_PRESETS[key])) return key;
+  }
+  return 'custom';
+}
+
+/** ¿Dos documentos dicen lo mismo? Compara módulos y opciones sin importar el orden; ignora `rev` y `version`. */
+export function sameWorkspace(a: Pick<Workspace, 'hiddenModules' | 'options'>, b: Pick<Workspace, 'hiddenModules' | 'options'>): boolean {
+  return canonical(a.hiddenModules, a.options) === canonical(b.hiddenModules, b.options);
+}
+
