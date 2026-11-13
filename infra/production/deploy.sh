@@ -41,7 +41,11 @@ echo "==> 2. Dependencias"
 # --frozen-lockfile: si el lockfile no coincide con los package.json, FALLA en
 # vez de resolver versiones nuevas por su cuenta. Un despliegue no es el momento
 # de descubrir que una dependencia cambio de version.
-pnpm install --frozen-lockfile
+#
+# --prod=false: /opt/kobrax/.env exporta NODE_ENV=production y, con eso, pnpm OMITE las
+# devDependencies (turbo, typescript, @nestjs/cli, tsx...), que son las que hacen falta para
+# construir y para el seed. Sin el flag el build muere con "turbo: not found".
+pnpm install --frozen-lockfile --prod=false
 
 echo "==> 3. Cliente de Prisma"
 pnpm db:generate
