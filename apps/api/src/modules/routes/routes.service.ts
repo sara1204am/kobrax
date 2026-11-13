@@ -20,6 +20,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { TenantClockService, civilDayStartInstant } from '../../common/context/tenant-clock.service';
 import { AuditService } from '../../common/audit/audit.service';
+import { OfficeScopeService } from '../../common/office-scope/office-scope.service';
 import { ROUTE_CLOSE_REASON_MIN_APP_VERSION, legacyClientReason, type LegacyClientReason } from '../../common/app-version';
 import { EventBusService, DomainEvent, type RouteNoticePayload } from '../../common/events/event-bus.service';
 import { CryptoService } from '../../common/crypto/crypto.service';
@@ -51,6 +52,7 @@ import {
   stopStatusNotAllowed,
   stopsWithoutPoint,
 } from './routes.errors';
+import { AuthorizationService } from '../../common/authz/authorization.service';
 
 /**
  * Lo que la parada necesita del cliente para poder pintarse: nombre, dirección y **el punto en el
@@ -130,14 +132,25 @@ export class RoutesService {
     private readonly crypto: CryptoService,
     private readonly osrm: OsrmService,
     private readonly clock: TenantClockService,
+    private readonly office: OfficeScopeService,
+    private readonly authz: AuthorizationService = new AuthorizationService(tenant),
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
     return this.prisma.withTenant(this.tenant.accountId, fn);
   }
 
+  /**
+   * La oficina de la ruta (A-6): la que se pide se VALIDA (de esta cuenta, activa, dentro del alcance de quien la pide); si no se
+   * pide, la de la ÚNICA asignación vigente del cobrador, o ninguna. Antes se guardaba el `branchId` del cuerpo sin mirarlo.
+   */
+  private async routeBranch(tx: PrismaClient, requested: string | undefined, collectorId: string): Promise<string | undefined> {
+    if (requested) return (await this.office.assertBranchUsable(tx, requested)).id;
+    return (await this.office.soleOfficeOf(tx, collectorId)) ?? undefined;
+  }
+
   private get actor() {
-    return { userId: this.tenant.userId, can: (p: string) => this.tenant.can(p) };
+    return { userId: this.tenant.userId, can: (p: string) => this.authz.can(p) };
   }
 
   /** Adjunta a cada parada los datos de su crédito (`creditInfo`): la parada guarda `credit_id` sin relación. */
@@ -172,8 +185,8 @@ export class RoutesService {
    * `collectorId` del body); quien no hace ninguna de las dos, no arma nada.
    */
   private collectorFor(requested: string, action: string): string {
-    if (this.tenant.can(Permission.ROUTE_ASSIGN) || this.tenant.can(Permission.ROUTE_WRITE)) return requested;
-    if (!this.tenant.can(Permission.ROUTE_EXECUTE)) throw routeForbidden(action);
+    if (this.authz.can(Permission.ROUTE_ASSIGN) || this.authz.can(Permission.ROUTE_WRITE)) return requested;
+    if (!this.authz.can(Permission.ROUTE_EXECUTE)) throw routeForbidden(action);
     return this.tenant.userId!;
   }
 
@@ -187,7 +200,7 @@ export class RoutesService {
     if (!route) throw resourceNotFound();
     const roles = routeRoles(this.actor, route);
     if (!roles.manager) {
-      if (!this.tenant.can(Permission.ROUTE_EXECUTE)) throw routeForbidden(action);
+      if (!this.authz.can(Permission.ROUTE_EXECUTE)) throw routeForbidden(action);
       if (!roles.isCollector) throw resourceNotFound();
     }
     return { route, roles };
@@ -287,7 +300,7 @@ export class RoutesService {
       await this.audit.record({ entity: 'route', entityId: route.id, action: 'CREATE', after: { collectorId: route.collectorId } });
       this.notice({ kind: 'ASSIGNED', routeId: route.id, recipientId: route.collectorId, plannedDate: dto.plannedDate });
     }
-    return serializeRoute(route);
+    return serializeRoute(route, undefined, this.contactAllowed());
   }
 
   private createOnce(dto: CreateRouteDto, collectorId: string) {
@@ -297,13 +310,14 @@ export class RoutesService {
       await this.assertCollector(tx, collectorId);
       const already = await this.routeOfDay(tx, collectorId, dayAnchor(dto.plannedDate));
       if (already) throw routeAlreadyForDay(already.id);
+      const branchId = await this.routeBranch(tx, dto.branchId, collectorId);
       const created = await tx.routePlan.create({
         data: {
           ...(dto.id ? { id: dto.id } : {}),
           accountId: this.tenant.accountId,
           collectorId,
           createdBy: this.tenant.userId,
-          branchId: dto.branchId,
+          branchId,
           plannedDate: dayAnchor(dto.plannedDate),
           status: RouteStatus.PLANNED,
         },
@@ -331,7 +345,7 @@ export class RoutesService {
       await this.audit.record({ entity: 'route', entityId: route.id, action: 'GENERATE', after: { collectorId: route.collectorId, totalStops: route.totalCases } });
       this.notice({ kind: 'ASSIGNED', routeId: route.id, recipientId: route.collectorId, plannedDate: dto.plannedDate, stops: route.totalCases });
     }
-    return serializeRoute(route);
+    return serializeRoute(route, undefined, this.contactAllowed());
   }
 
   private generateOnce(dto: GenerateRouteDto, collectorId: string) {
@@ -367,13 +381,14 @@ export class RoutesService {
       // La ubicación concreta de cada parada (F4/12): la elegida, o la principal del cliente.
       const locationOf = await this.resolveLocations(tx, credits, dto.locations ?? {}, dto.requirePoints === true);
 
+      const branchId = await this.routeBranch(tx, dto.branchId, collectorId);
       const created = await tx.routePlan.create({
         data: {
           ...(dto.id ? { id: dto.id } : {}),
           accountId: this.tenant.accountId,
           collectorId,
           createdBy: this.tenant.userId,
-          branchId: dto.branchId,
+          branchId,
           plannedDate,
           status: RouteStatus.PLANNED,
           totalCases: credits.length, // nombre legado de la columna: cuenta paradas
@@ -509,7 +524,7 @@ export class RoutesService {
    * ve las suyas. Un rol read-only de cuenta (auditor/viewer: ROUTE_READ sin execute) NO cae acá.
    */
   private scopedToOwnRoutes(): boolean {
-    return this.tenant.can(Permission.ROUTE_EXECUTE) && !this.tenant.can(Permission.ROUTE_ASSIGN);
+    return this.authz.can(Permission.ROUTE_EXECUTE) && !this.authz.can(Permission.ROUTE_ASSIGN);
   }
 
   async list(query: ListRoutesQueryDto): Promise<ApiResponse<ReturnType<typeof serializeRoute>[]>> {
@@ -520,7 +535,7 @@ export class RoutesService {
     //  - ROUTE_ASSIGN (supervisor/manager): ve todo, filtra por cualquier collectorId.
     //  - ejecutor de campo (ROUTE_EXECUTE sin ROUTE_ASSIGN = cobrador): acotado a sus rutas.
     //  - observador de cuenta (ROUTE_READ sin execute ni assign = auditor/viewer): ve toda la cuenta.
-    if (this.tenant.can(Permission.ROUTE_ASSIGN)) {
+    if (this.authz.can(Permission.ROUTE_ASSIGN)) {
       if (query.collectorId) where.collectorId = query.collectorId;
     } else if (this.scopedToOwnRoutes()) {
       where.collectorId = this.tenant.userId;
@@ -572,7 +587,7 @@ export class RoutesService {
     ]);
     return ResponseDto.paginated(
       rows.map((r) => ({
-        ...serializeRoute(r),
+        ...serializeRoute(r, undefined, this.contactAllowed()),
         visitedCount: visited.get(r.id) ?? 0,
         ...(query.date ? { nextStop: next.get(r.id), collected: collected.get(r.collectorId) ?? 0 } : {}),
       })),
@@ -693,6 +708,11 @@ export class RoutesService {
     return new Map(grouped.flatMap((g) => (g.registeredBy ? [[g.registeredBy, Number(g._sum.amount ?? 0)] as const] : [])));
   }
 
+  /** F14 · F4 (H-5): ¿ve direcciones, GPS y fotos de ubicación? (`client:contact:read`; VIEWER no). */
+  private contactAllowed(): boolean {
+    return this.authz.can(Permission.CLIENT_CONTACT_READ);
+  }
+
   /**
    * Detalle con paradas. Cada parada trae el nombre del deudor y su dirección **en claro**: sin eso
    * la lista dice `Cliente a1b2c3…` y el cobrador no sabe adónde ir. Se audita el revelado, igual que
@@ -731,7 +751,7 @@ export class RoutesService {
       hasVisits: loaded.visitCount > 0,
     });
     return {
-      ...serializeRoute(route, this.crypto),
+      ...serializeRoute(route, this.crypto, this.contactAllowed()),
       capabilities,
       // Los pedidos los resuelve quien arma la ruta: a los demás no les sirve el número.
       pendingRequests: capabilities.isOwner ? loaded.pending : 0,
@@ -825,7 +845,7 @@ export class RoutesService {
       return { route: updated, previous: route, changed: true as const, skipped: skipOpen ? open.length : 0, reason, legacyCompat };
     });
 
-    if (!outcome.changed) return serializeRoute(outcome.route);
+    if (!outcome.changed) return serializeRoute(outcome.route, undefined, this.contactAllowed());
     const { route, skipped } = outcome;
     await this.audit.record({
       entity: 'route',
@@ -849,7 +869,7 @@ export class RoutesService {
         this.notice({ kind: 'CANCELLED', routeId: id, recipientId: route.createdBy, plannedDate: route.plannedDate.toISOString().slice(0, 10), reason: outcome.reason });
       }
     }
-    return serializeRoute(route);
+    return serializeRoute(route, undefined, this.contactAllowed());
   }
 
   /**
@@ -905,7 +925,7 @@ export class RoutesService {
       return withCredit!;
     });
     await this.audit.record({ entity: 'route_stop', entityId: stop.id, action: 'CREATE', after: { routeId, clientId: stop.clientId, locationId: stop.locationId } });
-    return serializeStop(stop, this.crypto);
+    return serializeStop(stop, this.crypto, this.contactAllowed());
   }
 
   /**
@@ -1038,7 +1058,7 @@ export class RoutesService {
       await this.audit.record({ entity: 'route', entityId: routeId, action: 'PII_REVEAL' });
     }
 
-    const stops = route.stops.map((s) => serializeStop(s, this.crypto));
+    const stops = route.stops.map((s) => serializeStop(s, this.crypto, this.contactAllowed()));
     const drawable = stops.filter(hasPoint);
     // En paralelo y no en serie: son dos llamadas independientes de 5 s de timeout cada una, y
     // encadenadas dejaban la pantalla colgada hasta 10 s con OSRM lento. `trip` sólo necesita los
@@ -1085,7 +1105,7 @@ export class RoutesService {
    * Sin motor de ruteo devuelve `null`: el mapa sigue mostrando la ubicación, solo que sin camino.
    */
   async leg(dto: LegDto): Promise<{ geometry: { latitude: number; longitude: number }[]; distanceKm: number; minutes: number } | null> {
-    if (!this.tenant.can(Permission.ROUTE_ASSIGN) && !this.tenant.can(Permission.ROUTE_WRITE) && !this.tenant.can(Permission.ROUTE_EXECUTE)) {
+    if (!this.authz.can(Permission.ROUTE_ASSIGN) && !this.authz.can(Permission.ROUTE_WRITE) && !this.authz.can(Permission.ROUTE_EXECUTE)) {
       throw routeForbidden('calcular un camino');
     }
     const path = await this.osrm.route([dto.from, dto.to]);
@@ -1102,7 +1122,7 @@ export class RoutesService {
    * Sin datos personales: llegan puntos y ids que quien pregunta ya conoce, y no sale ninguna dirección ni nombre.
    */
   async previewPoints(dto: PlanPreviewDto): Promise<RoutePreview> {
-    if (!this.tenant.can(Permission.ROUTE_ASSIGN) && !this.tenant.can(Permission.ROUTE_WRITE) && !this.tenant.can(Permission.ROUTE_EXECUTE)) {
+    if (!this.authz.can(Permission.ROUTE_ASSIGN) && !this.authz.can(Permission.ROUTE_WRITE) && !this.authz.can(Permission.ROUTE_EXECUTE)) {
       throw routeForbidden('previsualizar rutas');
     }
     const points: PlanPoint[] = dto.points.map((p, i) => ({ id: p.id, sequenceOrder: i + 1, latitude: p.latitude, longitude: p.longitude, scheduledTime: p.scheduledTime }));

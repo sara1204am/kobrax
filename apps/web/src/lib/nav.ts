@@ -18,14 +18,30 @@ export type NavKey =
   | 'team'
   | 'account'
   | 'export'
+  | 'organization'
+  | 'activity'
+  | 'accessSecurity'
   | 'profile'
   | 'security';
 
+/** Hijos del menú (clave en `panel.nav`). Sin ícono: cuelgan de su padre. */
+export type NavChildKey = 'roles' | 'supportAccess';
+
+export interface NavChild {
+  label: NavChildKey;
+  href: string;
+  permission: Permission;
+}
+
 export interface NavItem {
   label: NavKey;
+  /** Subpantallas que se despliegan bajo el ítem cuando estás dentro de su sección (cada una con su permiso). */
+  children?: NavChild[];
   href: string;
-  /** Permiso necesario para verlo. `null` = lo ve cualquiera con sesión. */
+  /** Permiso necesario para verlo. `null` = lo ve cualquiera con sesión (salvo que tenga `anyOf`). */
   permission: Permission | null;
+  /** F14 · F6: «cualquiera de» estos permisos (la sección Seguridad). Si está, manda sobre `permission`. */
+  anyOf?: readonly Permission[];
   /** `false` mientras el módulo no exista: se pinta en gris y **no navega**. */
   built: boolean;
   /**
@@ -53,9 +69,24 @@ export const NAV: NavItem[] = [
   { label: 'agenda', href: '/agenda', permission: Permission.AGENDA_READ, built: true },
   { label: 'routes', href: '/rutas', permission: Permission.ROUTE_READ, built: true },
   { label: 'payments', href: '/pagos', permission: Permission.PAYMENT_READ, built: true },
-  { label: 'team', href: '/equipo', permission: Permission.USER_READ, built: true },
-  { label: 'account', href: '/cuenta', permission: Permission.ACCOUNT_READ, built: true },
   { label: 'export', href: '/exportar', permission: Permission.REPORT_EXPORT, built: true },
+  // F14 · F6 (ADR-F14-09): cada sección pide SU permiso; ninguna depende de `account:read` salvo Cuenta.
+  { label: 'organization', href: '/organizacion', permission: Permission.OFFICE_READ, built: true },
+  { label: 'team', href: '/equipo', permission: Permission.USER_READ, built: true },
+  {
+    label: 'accessSecurity',
+    href: '/seguridad',
+    permission: null,
+    anyOf: [Permission.ROLE_READ, Permission.USER_SESSIONS_REVOKE, Permission.SUPPORT_CONSENT],
+    built: true,
+    // Las mismas dos tarjetas del índice de /seguridad, como hijos del menú.
+    children: [
+      { label: 'roles', href: '/seguridad/roles', permission: Permission.ROLE_READ },
+      { label: 'supportAccess', href: '/seguridad/soporte', permission: Permission.SUPPORT_CONSENT },
+    ],
+  },
+  { label: 'activity', href: '/actividad', permission: Permission.AUDIT_READ, built: true },
+  { label: 'account', href: '/cuenta', permission: Permission.ACCOUNT_READ, built: true },
   { label: 'profile', href: '/settings/perfil', permission: null, built: true },
   { label: 'security', href: '/settings/security', permission: null, built: true, hidden: true },
 ];
@@ -69,11 +100,17 @@ export const NAV: NavItem[] = [
  *
  * 🔴 Esto es cosmética. La API valida siempre: ocultar no es autorizar.
  */
+function canSee(item: NavItem, granted: ReadonlySet<string>): boolean {
+  if (item.anyOf) return item.anyOf.some((p) => granted.has(p));
+  return item.permission === null || granted.has(item.permission);
+}
+
 export function visibleNav(permissions: string[]): NavItem[] {
   const granted = new Set(permissions);
-  return NAV.filter(
-    (item) => !item.hidden && (item.permission === null || granted.has(item.permission)),
-  );
+  return NAV.filter((item) => !item.hidden && canSee(item, granted))
+    .map((item) => (item.children ? { ...item, children: item.children.filter((c) => granted.has(c.permission)) } : item))
+    // Un grupo sin ningún hijo visible no lleva a ningún lado: no se dibuja.
+    .filter((item) => !item.children || item.children.length > 0);
 }
 
 /**
@@ -82,6 +119,8 @@ export function visibleNav(permissions: string[]): NavItem[] {
  */
 export interface Crumb {
   label: string;
+  /** La clave de un rol (`ACCOUNT_ADMIN`): es un dato; la pantalla lo traduce con `permissions.roleNames`. */
+  roleKey?: string;
   href?: string;
 }
 
@@ -104,7 +143,11 @@ export function crumbsFor(pathname: string): Crumb[] {
   // Un id no es una clave de i18n: `crumbs.<uuid>` no existe en ningún idioma y la miga terminaba
   // dibujando la ruta cruda de la clave. Se cae la miga, no el rastro: `/cartera/<id>` sigue
   // diciendo «Cartera», y `/cartera/<id>/bitacora`, «Cartera / Bitácora».
-  const rest = segments.filter((segment) => !isUuid(segment));
+  // La clave de un rol (`/seguridad/roles/ACCOUNT_ADMIN`) tampoco es una clave de i18n: se queda como miga
+  // con `roleKey`, y la barra superior pone el nombre traducido del rol.
+  const isRoleKey = (segment: string, i: number) =>
+    segments[i - 1] === 'roles' && match.href === '/seguridad' && segment !== 'comparar';
+  const rest = segments.map((segment, i) => ({ segment, i })).filter(({ segment }) => !isUuid(segment));
 
   return [
     {
@@ -114,11 +157,13 @@ export function crumbsFor(pathname: string): Crumb[] {
        * un detalle es el único camino de vuelta a la lista para quien llegó por un link. Mirar
        * `rest` en vez de `segments` dejaba la miga como texto plano en toda ficha.
        */
-      href: segments.length > 0 ? match.href : undefined,
+      // Un grupo (Seguridad) no tiene pantalla propia: su miga es texto, no enlace.
+      href: segments.length > 0 && !match.children ? match.href : undefined,
     },
-    ...rest.map((segment, i) => ({
-      label: `crumbs.${segment}`,
-      href: i < rest.length - 1 ? `${match.href}/${rest.slice(0, i + 1).join('/')}` : undefined,
+    ...rest.map(({ segment, i: at }, i) => ({
+      label: isRoleKey(segment, at) ? 'crumbs.role' : `crumbs.${segment}`,
+      ...(isRoleKey(segment, at) ? { roleKey: decodeURIComponent(segment) } : {}),
+      href: i < rest.length - 1 ? `${match.href}/${segments.slice(0, at + 1).join('/')}` : undefined,
     })),
   ];
 }

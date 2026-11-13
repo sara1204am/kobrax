@@ -80,12 +80,46 @@ echo "==> 8. Politicas RLS"
 # Ningun script del repo las aplicaba: se venian corriendo a mano. Es el
 # bloqueante §9 #5. Son idempotentes por diseno (DROP FUNCTION ... CASCADE y
 # recrean todo), asi que se aplican en cada despliegue.
-# verify_isolation.sql queda afuera: es una comprobacion, no una politica.
-for sql in $(ls -1 "$APP"/packages/database/prisma/rls/*.sql | grep -v verify_isolation | sort); do
+# Los verify_*.sql quedan afuera: son comprobaciones, no politicas (F14 · F9). Antes
+# solo se excluia verify_isolation y los tres verify_* que agrego F14 se ejecutaban
+# aca como si fueran politicas. Es el mismo criterio de apply-rls.ts. Se corren
+# aparte, en el paso 8b, donde un fallo se explica y detiene el despliegue.
+for sql in $(ls -1 "$APP"/packages/database/prisma/rls/*.sql | grep -v '/verify_' | sort); do
   echo "    $(basename "$sql")"
   docker run --rm -i --network kobrax_default -e PGPASSWORD="$POSTGRES_PASSWORD" \
     postgres:15-alpine psql -h postgres -U postgres -d kobrax -v ON_ERROR_STOP=1 -q -f - < "$sql"
 done
+
+echo "==> 8b. Verificaciones de la base (solo lectura, ANTES de reiniciar)"
+# Cada prisma/rls/verify_*.sql aborta con la causa si algo no esta como debe (RLS forzado,
+# roles, versiones de autorizacion, plataforma, catalogo de permisos, archivos...). Un
+# fallo detiene el despliegue en el mismo punto que una migracion fallida: la base ya se
+# migro, pero los servicios NO se reinician y sigue corriendo la version vieja.
+# verify_isolation.sql no entra: CREA un tenant de prueba, no es de solo lectura.
+# Un archivo que no imprime ninguna comprobacion "OK" tampoco pasa (no verifico nada).
+VERIFICACIONES_FALLARON=0
+for sql in "$APP"/packages/database/prisma/rls/verify_*.sql; do
+  nombre=$(basename "$sql")
+  [ "$nombre" = "verify_isolation.sql" ] && continue
+  salida=$(docker run --rm -i --network kobrax_default -e PGPASSWORD="$POSTGRES_PASSWORD"     postgres:15-alpine psql -h postgres -U postgres -d kobrax -v ON_ERROR_STOP=1 -q -f - < "$sql" 2>&1) && estado=0 || estado=$?
+  comprobaciones=$(printf '%s
+' "$salida" | grep -c 'NOTICE:  OK ' || true)
+  if [ "$estado" -ne 0 ] || [ "$comprobaciones" -eq 0 ]; then
+    echo "    FALLO: $nombre" >&2
+    { printf '%s
+' "$salida" | grep -E 'ERROR|AVISO' | head -5 | sed 's/^/      /' >&2; } || true
+    VERIFICACIONES_FALLARON=1
+  else
+    echo "    $nombre ($comprobaciones comprobaciones)"
+    { printf '%s
+' "$salida" | grep 'AVISO' | sed 's/^/      /'; } || true
+  fi
+done
+if [ "$VERIFICACIONES_FALLARON" -ne 0 ]; then
+  echo "FALLO: hay verificaciones de la base que no pasan. NO se reinician los servicios: sigue corriendo la version vieja." >&2
+  echo "Ver docs/epics/F14/RELEASE-CHECKLIST.md (seccion «Si una verificacion falla»). El respaldo previo esta en $ARCHIVO" >&2
+  exit 1
+fi
 
 echo "==> 9. Reiniciando servicios"
 systemctl restart kobrax-api

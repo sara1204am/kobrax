@@ -1,14 +1,6 @@
-import { getTranslations } from 'next-intl/server';
-import { PageHeader } from '@/components/panel-ui';
-import { SecurityOptions } from '@/components/security-options';
+import { redirect } from 'next/navigation';
 
-export default async function SecurityHub() {
-  const t = await getTranslations('security');
-
-  return (
-    <>
-      <PageHeader title={t('title')} />
-      <SecurityOptions />
-    </>
-  );
+/** Seguridad ahora es una pestaña de Mi perfil; se conserva la ruta por los enlaces viejos. */
+export default function SecurityHub() {
+  redirect('/settings/perfil/seguridad');
 }

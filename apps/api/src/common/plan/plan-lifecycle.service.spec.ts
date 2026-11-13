@@ -46,7 +46,7 @@ function makeService(
       create: async (args: { data: Record<string, unknown> }) => void calls.audits.push(args.data),
     },
   };
-  const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
+  const prisma = { withSystemTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
   const notifications = {
     notifyUser: async (_acc: string, userId: string, data: { title: string }) =>
       void calls.notifs.push({ userId, title: data.title }),

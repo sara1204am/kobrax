@@ -1,12 +1,21 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { server } from '@/test/msw-server';
+import { hardNav } from '@/lib/client';
 import InvitacionPage from './page';
 
 const { replace, push } = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push, replace }) }));
+
+const { hardNavigate } = vi.hoisted(() => ({ hardNavigate: vi.fn() }));
+// El login termina con una carga completa (`window.location.replace`), no con el router.
+beforeEach(() => {
+  hardNavigate.mockClear();
+  vi.spyOn(hardNav, 'replace').mockImplementation(hardNavigate);
+});
+afterEach(() => vi.restoreAllMocks());
 vi.mock('next/link', () => ({
   default: ({ href, children, ...props }: { href: string; children: React.ReactNode }) => (
     <a href={href} {...props}>
@@ -61,7 +70,7 @@ describe('InvitacionPage', () => {
 
     expect(sent).toEqual({ code: 'abcd-1234', password: 'Kobrax123!' });
     expect(loginBody).toEqual({ email: 'ana@kobrax.demo', password: 'Kobrax123!' });
-    expect(replace).toHaveBeenCalledWith('/dashboard');
+    expect(hardNavigate).toHaveBeenCalledWith('/dashboard');
   });
 
   it('un código que no existe se queda en el paso del código con el error del backend', async () => {

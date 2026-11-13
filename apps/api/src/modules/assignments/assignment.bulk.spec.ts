@@ -1,6 +1,9 @@
 import { describe, it } from 'node:test';
+import { fakePolicy } from '../../common/authz/testing';
 import assert from 'node:assert/strict';
 import { Permission, RoleType } from '@kobrax/shared';
+import { OfficeScopeService } from '../../common/office-scope/office-scope.service';
+import { OfficeScopeService } from '../../common/office-scope/office-scope.service';
 import { AssignmentService } from './assignment.service';
 import { rejectsWithCode } from '../auth/auth-test-utils';
 
@@ -24,7 +27,7 @@ function makeService(opts: { permissions?: string[]; userId?: string; credits: C
       findMany: async ({ where }: { where: { id: { in: string[] } } }) =>
         where.id.in.flatMap((id) => {
           const c = credits.get(id);
-          return c && !c.deletedAt ? [{ id: c.id, assignedManagerId: c.assignedManagerId, branchId: c.branchId }] : [];
+          return c && !c.deletedAt ? [{ id: c.id, assignedManagerId: c.assignedManagerId, branchId: c.branchId, branch: c.branchId ? { path: `/${c.branchId}/` } : null }] : [];
         }),
       updateMany: async ({ where, data }: { where: { id: { in: string[] } }; data: { assignedManagerId: string | null } }) => {
         for (const id of where.id.in) credits.get(id)!.assignedManagerId = data.assignedManagerId;
@@ -51,9 +54,13 @@ function makeService(opts: { permissions?: string[]; userId?: string; credits: C
         return { count: 1 };
       },
     },
-    userAccount: {
+    userBranchAssignment: {
       findMany: async ({ where }: { where: { userId: { in: string[] } } }) =>
-        opts.members.filter((m) => where.userId.in.includes(m.userId)).map((m) => ({ userId: m.userId, isActive: m.isActive, branchId: m.branchId, role: { name: m.role } })),
+        opts.members.filter((m) => where.userId.in.includes(m.userId) && m.branchId).map((m) => ({ userId: m.userId, branch: { path: `/${m.branchId}/` } })),
+    },
+    userAccount: {
+      findMany: async ({ where }: { where: { userId: { in: string[] }; isActive?: boolean } }) =>
+        opts.members.filter((m) => where.userId.in.includes(m.userId) && (where.isActive === undefined || m.isActive === where.isActive)).map((m) => ({ userId: m.userId, isActive: m.isActive, branchId: m.branchId, role: { name: m.role } })),
       findFirst: async ({ where }: { where: { userId?: string } }) => {
         const m = opts.members.find((x) => x.userId === where.userId);
         return m ? { branchId: m.branchId } : null;
@@ -64,7 +71,7 @@ function makeService(opts: { permissions?: string[]; userId?: string; credits: C
   const permissions = opts.permissions ?? [Permission.ASSIGNMENT_WRITE, Permission.DATA_SCOPE_ALL];
   const tenant = { accountId: 'acc-A', userId: opts.userId ?? 'boss', can: (p: string) => permissions.includes(p) };
   const audit = { recordMany: async (e: typeof audited) => void audited.push(...e) };
-  const service = new AssignmentService(prisma as never, tenant as never, audit as never);
+  const service = new AssignmentService(prisma as never, tenant as never, audit as never, new OfficeScopeService(tenant as never), undefined, fakePolicy().service);
   return { service, tx: tx as never, credits, perms, agenda, audited, txCount: () => txCount };
 }
 

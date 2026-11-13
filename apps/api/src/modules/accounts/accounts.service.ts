@@ -3,7 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { hash } from 'bcryptjs';
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { DEFAULT_ARREAR_CATEGORIES, KOBRAX, PLANS, TRIAL_DAYS, catalogDefaultRows, isPasswordValid } from '@kobrax/shared';
+import { DEFAULT_ARREAR_CATEGORIES, KOBRAX, PLANS, TRIAL_DAYS, catalogDefaultRows, isPasswordValid, officePath } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
@@ -12,6 +12,7 @@ import { weakPassword } from '../auth/auth.errors';
 import { serializeAccount } from './accounts.serializer';
 import { UpdateAccountDto } from './dto/account.dto';
 import { CreateAccountDto } from './dto/create-account.dto';
+import { DEFAULT_BRANCH_TYPES, ROOT_BRANCH_TYPE_CODE } from '../branches/default-branch-types';
 import { accountNotFound, emailTaken, preferencesInvalid, roleCatalogMissing } from './accounts.errors';
 
 /** Mercado inicial. El registro no los pregunta (S4-D8); se cambian en la pantalla de datos. */
@@ -96,6 +97,26 @@ export class AccountsService {
             settings: trialEndsAt ? { trialEndsAt } : {},
             countryCode: DEFAULT_COUNTRY,
             currencyCode: DEFAULT_CURRENCY,
+          },
+        });
+        /*
+         * F13 (ADR-0004): TODA cuenta nace con su árbol de oficinas — los tipos por defecto (editables) y la oficina RAÍZ con la
+         * razón social. En la MISMA transacción que la cuenta: no existe una cuenta sin raíz. El dueño (ACCOUNT_ADMIN) queda SIN
+         * asignación: ve todo por su capacidad (`data:scope:all`), no por estar en la raíz (A-4). Los créditos que cree sin
+         * indicar oficina caen en la raíz (resolveCreditBranch).
+         */
+        const types = DEFAULT_BRANCH_TYPES.map((t) => ({ id: randomUUID(), accountId, code: t.code, name: t.name, sortOrder: t.sortOrder }));
+        await tx.branchType.createMany({ data: types });
+        const rootId = randomUUID();
+        await tx.branch.create({
+          data: {
+            id: rootId,
+            accountId,
+            name: dto.businessName,
+            typeId: types.find((t) => t.code === ROOT_BRANCH_TYPE_CODE)!.id,
+            path: officePath(null, rootId),
+            depth: 0,
+            isRoot: true,
           },
         });
         // `status` y `requiresPasswordChange` pisan los defaults del schema a propósito:

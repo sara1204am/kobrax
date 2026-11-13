@@ -12,14 +12,10 @@ import {
   Query,
   StreamableFile,
   UploadedFile,
-  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Permission, type ImportAssignments } from '@kobrax/shared';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { TenantGuard } from '../auth/guards/tenant.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { PortfolioImportService } from './portfolio-import.service';
 import type { ImportConfigPatch } from './import-config';
@@ -54,7 +50,6 @@ const ACCEPTED_MIME = new Set([
 ]);
 
 @Controller('imports/portfolio')
-@UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 export class PortfolioImportController {
   constructor(private readonly portfolio: PortfolioImportService) {}
 

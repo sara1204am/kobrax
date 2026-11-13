@@ -1,7 +1,9 @@
 'use client';
 
+import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import type { ClientDuplicateMatch } from '@kobrax/shared';
+import { usePermissions } from '@/components/permissions';
 
 /** Link a la ficha en otra pestaña: el alta a medio cargar no se pierde por ir a mirar. */
 function OpenClient({ id }: { id: string }) {
@@ -19,9 +21,21 @@ function OpenClient({ id }: { id: string }) {
  */
 export function DocumentTaken({ match }: { match: ClientDuplicateMatch }) {
   const t = useTranslations('portfolio.duplicate');
+  const { can } = usePermissions();
   return (
     <div role="alert" className="mt-1.5 text-[13px] text-k-danger">
-      {match.deleted ? (
+      {match.hidden ? (
+        // F14 · F2b (D-6, revisada): el cliente ya existe y lo llevan otras personas; con quien tiene `credit:create` se le ofrece
+        // crear SU crédito sobre él (recién entonces lo ve).
+        <>
+          {t('documentTakenHidden', { name: match.displayName })}{' '}
+          {can('credit:create') && (
+            <Link href={`/cartera/${match.id}/prestamo`} className="font-medium text-k-periwinkle underline">
+              {t('createMyCredit')}
+            </Link>
+          )}
+        </>
+      ) : match.deleted ? (
         t('documentTakenDeleted', { name: match.displayName })
       ) : (
         <>

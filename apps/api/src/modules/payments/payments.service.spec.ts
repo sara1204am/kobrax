@@ -49,7 +49,7 @@ function makeService(opts: { credit?: unknown; idempotentExisting?: unknown; max
     fieldVisit: { findFirst: async () => ('visit' in opts ? opts.visit : { creditId: 'cr1' }) },
   };
   const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
-  const tenant = { accountId: 'acc-A', userId: 'u1' };
+  const tenant = { accountId: 'acc-A', userId: 'u1', can: () => true };
   const audit = { record: async (e: { action: string }) => void calls.audit.push(e.action) };
   const events = { emit: (name: string) => void calls.events.push(name) };
   const clock = { timezone: async () => 'America/La_Paz' };
@@ -260,7 +260,7 @@ function makeLister(rows: unknown[] = [], aggAmount: number | null | (number | n
   };
   const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
   const clock = { timezone: async () => 'America/La_Paz' };
-  const service = new PaymentsService(prisma as never, { accountId: 'acc-A' } as never, {} as never, {} as never, clock as never);
+  const service = new PaymentsService(prisma as never, { accountId: 'acc-A', can: () => true } as never, {} as never, {} as never, clock as never);
   return { service, calls };
 }
 
@@ -389,7 +389,7 @@ describe('PaymentsService.listRequests — la bandeja', () => {
       userAccount: { findMany: async () => [] },
     };
     const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
-    const service = new PaymentsService(prisma as never, { accountId: 'acc-A' } as never, {} as never, {} as never, {} as never);
+    const service = new PaymentsService(prisma as never, { accountId: 'acc-A', can: () => true } as never, {} as never, {} as never, {} as never);
     return { service, calls };
   }
 
@@ -584,7 +584,7 @@ describe('PaymentsService.findOne — quién cobró y la visita', () => {
         },
       },
     };
-    const service = new PaymentsService({ withTenant: async (_a: string, fn: (t: unknown) => unknown) => fn(tx) } as never, { accountId: 'acc-A' } as never, {} as never, {} as never, {} as never);
+    const service = new PaymentsService({ withTenant: async (_a: string, fn: (t: unknown) => unknown) => fn(tx) } as never, { accountId: 'acc-A', can: () => true } as never, {} as never, {} as never, {} as never);
     return { service, lookups };
   }
 
@@ -615,5 +615,81 @@ describe('PaymentsService.findOne — quién cobró y la visita', () => {
   it('404 si el pago no existe', async () => {
     const { service } = makeFinder(null);
     await assert.rejects(() => service.findOne('nope'));
+  });
+});
+
+/** D-7 (F13): las lecturas de pagos se acotan por el crédito visible (regla de Mora); ALL no cambia en nada. */
+describe('PaymentsService — alcance por oficina (D-7)', () => {
+  function makeScoped(can: (p: string) => boolean, visibleIds: string[] = ['cr-vis']) {
+    const seen: { payments: Record<string, unknown>[]; aggs: Record<string, unknown>[]; requests: Record<string, unknown>[]; findFirst: Record<string, unknown>[]; raw: number } = { payments: [], aggs: [], requests: [], findFirst: [], raw: 0 };
+    const tx = {
+      $queryRaw: async () => {
+        seen.raw += 1;
+        return visibleIds.map((id) => ({ id }));
+      },
+      payment: {
+        findMany: async (a: { where: Record<string, unknown> }) => {
+          seen.payments.push(a.where);
+          return [];
+        },
+        count: async () => 0,
+        aggregate: async (a: { where: Record<string, unknown> }) => {
+          seen.aggs.push(a.where);
+          return { _sum: { amount: null } };
+        },
+        findFirst: async (a: { where: Record<string, unknown> }) => {
+          seen.findFirst.push(a.where);
+          // sólo «existe» si el filtro de alcance deja pasar el crédito del pago
+          const c = a.where.creditId as { in: string[] } | undefined;
+          return !c || c.in.includes('cr-vis') ? { id: 'p1', creditId: 'cr-vis', amount: 10, method: 'CASH', paymentDate: new Date(), createdAt: new Date() } : null;
+        },
+      },
+      paymentRequest: {
+        findMany: async (a: { where: Record<string, unknown> }) => {
+          seen.requests.push(a.where);
+          return [];
+        },
+        count: async () => 0,
+        findFirst: async (a: { where: Record<string, unknown> }) => {
+          seen.findFirst.push(a.where);
+          return null;
+        },
+      },
+      credit: { findMany: async () => [] },
+      userAccount: { findMany: async () => [] },
+    };
+    const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
+    const tenant = { accountId: 'acc-A', userId: 'u1', can };
+    const service = new PaymentsService(prisma as never, tenant as never, {} as never, {} as never, { timezone: async () => 'America/La_Paz' } as never);
+    return { service, seen };
+  }
+  const branch = (p: string) => p === 'data:scope:branch';
+  const all = (p: string) => p === 'data:scope:all';
+
+  it('ALL: no consulta ids ni agrega filtro', async () => {
+    const { service, seen } = makeScoped(all);
+    await service.list({ summary: true } as never);
+    await service.listRequests({} as never);
+    assert.equal(seen.raw, 0);
+    for (const w of [...seen.payments, ...seen.aggs, ...seen.requests]) assert.equal('AND' in w, false);
+  });
+
+  it('no-ALL: lista, sumas y resúmenes de hoy/mes salen del mismo conjunto acotado', async () => {
+    const { service, seen } = makeScoped(branch);
+    await service.list({ summary: true } as never);
+    await service.listRequests({} as never);
+    assert.equal(seen.aggs.length, 3, 'total, hoy y mes');
+    for (const w of [...seen.payments, ...seen.aggs, ...seen.requests]) assert.deepEqual(w.AND, [{ creditId: { in: ['cr-vis'] } }]);
+  });
+
+  it('no-ALL: findOne y getRequest fuera de alcance → 404', async () => {
+    const { service } = makeScoped(branch, ['otro']);
+    await rejectsWithCode(service.findOne('p1'), 'RESOURCE_NOT_FOUND');
+    await rejectsWithCode(service.getRequest('r1'), 'RESOURCE_NOT_FOUND');
+  });
+
+  it('no-ALL: findOne de un pago de un crédito visible sí responde', async () => {
+    const { service } = makeScoped(branch);
+    assert.equal((await service.findOne('p1')).id, 'p1');
   });
 });

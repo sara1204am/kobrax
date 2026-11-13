@@ -26,10 +26,13 @@ interface ClientOut {
 }
 
 let token: string;
+/** F14 · F2: el gerente del seed cuelga de la raíz de una cuenta con varias oficinas y el alta ya no se registra en la central: elige una agencia. */
+let oficina: string;
 const PERFIL = { modality: 'PICK_UP', frequency: 'DAILY', window: { from: '08:00', to: '10:00' }, days: [1, 2, 3, 4, 5, 6], handoverBy: 'EMPLOYEE', note: 'Tocar el portón verde' };
 
 const nuevo = (extra: Record<string, unknown> = {}) => ({
   clientType: 'PERSON',
+  branchId: oficina,
   firstName: 'Ana',
   lastName: `Quispe-${randomUUID().slice(0, 6)}`,
   contacts: [{ contactType: 'PHONE', value: '70000001', isPrimary: true }],
@@ -40,6 +43,7 @@ before(async () => {
   await freshDatabase();
   await startApi();
   token = await login('manager@kobrax.demo');
+  oficina = ((await call<{ id: string; isRoot: boolean }[]>(token, 'GET', '/branches')).data ?? []).find((o) => !o.isRoot)!.id;
 });
 
 after(() => stopApi());

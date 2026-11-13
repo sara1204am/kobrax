@@ -6,13 +6,13 @@ import { useTranslations } from 'next-intl';
  *
  * «Lo hago después» deja entrar sin MFA y sin límite de veces (decisión de producto 2026-07-31):
  * el recordatorio es blando y vive en el cliente, a partir del `mfaEnabled` de `GET /auth/me`.
- * Lleva a `/settings/security`, donde ya está la activación. Mismo aviso que el Home del móvil.
+ * Lleva a `/settings/perfil/seguridad`, donde ya está la activación. Mismo aviso que el Home del móvil.
  */
 export function MfaReminder() {
   const t = useTranslations('panel.dashboard.mfaReminder');
   return (
     <Link
-      href="/settings/security"
+      href="/settings/perfil/seguridad"
       className="mb-5 flex flex-wrap items-center gap-3 rounded-xl border border-k-warning bg-k-warning-bg px-4 py-3 text-[13px] text-k-warning-text hover:opacity-90"
     >
       <span className="rounded-full bg-k-warning px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-white">

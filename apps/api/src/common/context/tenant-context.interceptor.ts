@@ -1,6 +1,7 @@
 import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import type { Request } from 'express';
+import { piiChannelOf } from '@kobrax/shared';
 import type { AuthenticatedUser } from '../../modules/auth/guards/jwt-auth.guard';
 import { TenantContextService } from './tenant-context.service';
 
@@ -37,11 +38,16 @@ export class TenantContextInterceptor implements NestInterceptor {
           accountId: user.accountId,
           userId: user.userId,
           permissions: user.permissions ?? [],
+          roleKey: user.roleKey,
+          actorType: user.actorType,
+          supportSessionId: user.supportSessionId,
           sessionId: user.sessionId,
           requestId: req.headers['x-request-id'] as string | undefined,
           ip: req.ip,
           userAgent: req.headers['user-agent'],
           appVersion: clientVersionOf(req.headers['x-app-version']),
+          // F14 · F8 (D-5): el canal de la SESIÓN manda; el encabezado sólo se usa con tokens anteriores que no lo traen.
+          channel: user.channel ?? piiChannelOf(Array.isArray(req.headers['x-client-type']) ? req.headers['x-client-type'][0] : req.headers['x-client-type']),
         },
         () => {
           next.handle().subscribe(subscriber);

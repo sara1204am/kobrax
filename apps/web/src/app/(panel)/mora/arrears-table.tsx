@@ -186,12 +186,17 @@ export function ArrearsTable({
     },
     // Existen pero arrancan apagadas: se prenden con ⚙ Columnas. Dependen de qué trajo el archivo o de
     // cómo se creó el crédito, así que no son lo que una pantalla común a propios e importados necesita.
-    {
-      key: 'branch',
-      header: t('columns.branch'),
-      visibleByDefault: false,
-      render: (c) => c.branchName ?? dash,
-    },
+    // F13: con una sola oficina no hay columna de oficina (RULES C2).
+    ...(branches.length > 1
+      ? [
+          {
+            key: 'branch',
+            header: t('columns.branch'),
+            visibleByDefault: false,
+            render: (c: MoraCreditListItem) => c.branchName ?? dash,
+          },
+        ]
+      : []),
     {
       // Sólo importados que mapearon la columna Estado. En propios, y en importados sin ese dato: «—».
       key: 'originStatus',
@@ -339,6 +344,8 @@ export function ArrearsTable({
       rowKey={(c) => c.creditId}
       meta={meta}
       filters={filters}
+      // Los filtros de Mora arrancan ocultos (como Rutas); si hay uno puesto, se abren solos.
+      filtersOpen={false}
       filtered={filtered}
       entityLabel={t('entity')}
       actions={canExport ? <ExportButtons /> : undefined}

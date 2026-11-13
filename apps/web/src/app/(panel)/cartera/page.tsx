@@ -1,11 +1,14 @@
 import { getTranslations } from 'next-intl/server';
-import { CatalogType, type AccountInfo, type MeInfo, type Member } from '@kobrax/shared';
+import { Permission, CatalogType, type AccountInfo, type MeInfo, type Member } from '@kobrax/shared';
+import { requirePermission } from '@/lib/authz';
 import { apiCall, pageMeta } from '@/lib/bff';
+import { getOffices } from '@/lib/offices-server';
 import { RetryState } from '@/components/retry-state';
 import type { PortfolioRow } from '@/lib/portfolio';
 import { carteraQuery, DEFAULT_PAGE_SIZE, hasCarteraFilters } from '@/lib/cartera-query';
 import { PortfolioTable } from './portfolio-table';
 import { NewClientButton } from './new-client-button';
+import { defaultCreditOffice } from '@/lib/offices';
 
 /**
  * La cartera del negocio.
@@ -22,6 +25,8 @@ export default async function CarteraPage({
 }: {
   searchParams: Record<string, string | undefined>;
 }) {
+  const blocked = await requirePermission(Permission.CLIENT_READ);
+  if (blocked) return blocked;
   const t = await getTranslations('portfolio');
   const query = carteraQuery(searchParams);
 
@@ -30,7 +35,7 @@ export default async function CarteraPage({
    * **ninguno puede tumbar la pantalla**: un rol sin `user:read` recibe 403 en `/users` y la cartera
    * tiene que seguir abriendo igual, con el selector de cobrador vacío.
    */
-  const [list, account, me, team, collateralTypes, collectionModalities, incomeSources, occupations] = await Promise.all([
+  const [list, account, me, team, collateralTypes, collectionModalities, incomeSources, occupations, offices] = await Promise.all([
     apiCall<PortfolioRow[]>(`/clients?${query}`, { method: 'GET', auth: true }),
     apiCall<AccountInfo>('/accounts/me', { method: 'GET', auth: true }),
     apiCall<MeInfo>('/auth/me', { method: 'GET', auth: true }),
@@ -42,6 +47,8 @@ export default async function CarteraPage({
     // F4/13 · E3: de qué vive y cuándo le llega el dinero. Sin catálogo se ofrecen las tres fuentes fijas.
     apiCall<{ code: string; label: string }[]>(`/catalogs/${CatalogType.INCOME_SOURCE}`, { method: 'GET', auth: true }),
     apiCall<{ code: string; label: string }[]>(`/catalogs/${CatalogType.OCCUPATION}`, { method: 'GET', auth: true }),
+    // F13: las oficinas de su alcance, con la ruta completa. Con una sola oficina no hay filtro que dibujar.
+    getOffices(),
   ]);
 
   if (list.status !== 200 || !list.body.data) {
@@ -54,6 +61,9 @@ export default async function CarteraPage({
       </>
     );
   }
+
+  const rootIds = new Set(offices.rows.filter((r) => r.isRoot).map((r) => r.id));
+  const registerOffices = offices.options.filter((o) => !rootIds.has(o.id));
 
   return (
     <>
@@ -75,11 +85,13 @@ export default async function CarteraPage({
             collectionModalities={collectionModalities.body.data ?? []}
             incomeSources={incomeSources.body.data ?? []}
             occupations={occupations.body.data ?? []}
+            // F14 · F2: el cliente se registra en una oficina que NO es la central. Se ofrece sólo lo elegible.
+            offices={registerOffices}
+            defaultOfficeId={defaultCreditOffice(registerOffices, (team.body.data ?? []).find((m) => m.userId === me.body.data?.userId)?.branchId)}
           />
         }
-        // Las sucursales todavía no existen como endpoint: cuando exista, entra acá y el filtro ya
-        // está cableado. Mientras tanto se dibuja apagado en vez de esconderse y reaparecer un día.
-        branches={[]}
+        // F13: el selector de oficina (árbol, con ruta completa). Sólo existe si la cuenta tiene más de una.
+        branches={offices.options}
       />
     </>
   );

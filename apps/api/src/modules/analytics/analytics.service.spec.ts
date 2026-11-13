@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { AGING_BUCKETS } from '@kobrax/shared';
+import { OfficeScopeService } from '../../common/office-scope/office-scope.service';
 import { AnalyticsService } from './analytics.service';
 
 /**
@@ -11,6 +12,7 @@ import { AnalyticsService } from './analytics.service';
 function makeService(
   rowsFor: (sql: string) => unknown[] = () => [],
   counts: { payments?: number[]; groups?: Record<string, unknown>[] } = {},
+  who: { permissions?: string[]; assignments?: string[]; branchPath?: string | null } = {},
 ) {
   const sqls: string[] = [];
   const wheres: Record<string, unknown>[] = [];
@@ -37,9 +39,14 @@ function makeService(
       },
     },
     account: { findFirst: async () => ({ currencyCode: 'BOB' }) },
+    // F13: la ruta del nodo pedido y las asignaciones del solicitante.
+    branch: { findFirst: async () => (who.branchPath === null ? null : { path: who.branchPath ?? '/r/n/' }) },
+    userBranchAssignment: { findMany: async () => (who.assignments ?? []).map((path) => ({ userId: 'u1', branch: { path } })) },
   };
   const prisma = { withTenant: <T>(_acc: string, fn: (t: unknown) => Promise<T>) => fn(tx) };
-  const service = new AnalyticsService(prisma as never, { accountId: 'acc-1' } as never);
+  const perms = who.permissions ?? ['data:scope:all'];
+  const tenant = { accountId: 'acc-1', userId: 'u1', can: (p: string) => perms.includes(p) };
+  const service = new AnalyticsService(prisma as never, tenant as never, new OfficeScopeService(tenant as never));
   return { service, sqls, wheres, find: (needle: string) => sqls.find((s) => s.includes(needle)) };
 }
 
@@ -352,5 +359,71 @@ describe('fuente de los créditos (D7)', () => {
     const { service, sqls } = makeService(() => []);
     await service.portfolioAging({});
     assert.doesNotMatch(sqls[0]!, /external_source/);
+  });
+});
+
+/**
+ * F13 · B-S7 — la analítica deja de ver toda la cuenta: aplica el alcance del solicitante (la misma regla que Mora) y
+ * `branchId` pasa a significar «ese nodo y su subárbol».
+ */
+describe('alcance del solicitante (F13)', () => {
+  const AGENCIA = '/r/chq/mv/';
+  const REGIONAL = '/r/chq/';
+
+  it('quien ve todo (ALL) no paga ninguna consulta extra ni condición de alcance: cifras idénticas a las de antes', async () => {
+    const { service, sqls } = makeService(() => []);
+    await service.portfolioAging({});
+    assert.equal(sqls.length, 1);
+    assert.doesNotMatch(sqls[0]!, /user_branch_assignments/);
+  });
+
+  it('🔴 el supervisor (BRANCH) sólo ve lo suyo y el subárbol de su oficina, en créditos, pagos y rutas', async () => {
+    const { service, sqls, wheres } = makeService(() => [], {}, { permissions: ['report:read', 'data:scope:branch'], assignments: [AGENCIA] });
+    await service.summary({});
+    await service.visitMap({ dateFrom: '2026-10-04', dateTo: '2026-10-10' });
+    const credits = sqls.find((q) => q.includes('FROM credits cr'))!;
+    assert.match(credits, /cr\.assigned_manager_id = /);
+    assert.match(credits, /user_branch_assignments ab/);
+    const pagos = sqls.find((q) => q.includes('FROM payments p'))!;
+    assert.match(pagos, /mc.assigned_manager_id/);
+    assert.match(pagos, /ob.path LIKE mine.path/);
+    // El camino de Prisma (los dos agregados de pagos) lleva el mismo alcance.
+    const and = (wheres[0] as { AND: { OR: unknown[] }[] }).AND;
+    assert.deepEqual(and[0]!.OR, [{ credit: { assignedManagerId: 'u1' } }, { branch: { path: { startsWith: AGENCIA } } }]);
+    const stops = sqls.find((q) => q.includes('FROM route_stops'))!;
+    assert.match(stops, /rp\.collector_id = .* OR EXISTS/s);
+  });
+
+  it('el gerente regional (SUBTREE) en una regional queda acotado; asignado a la RAÍZ ve todo sin condiciones', async () => {
+    const reg = makeService(() => [], {}, { permissions: ['report:read', 'data:scope:subtree'], assignments: [REGIONAL] });
+    await reg.service.portfolioAging({});
+    assert.match(reg.sqls.find((q) => q.includes('FROM credits cr'))!, /rb.is_root = true/); // OR raíz: sólo si está asignado a ella
+    const root = makeService(() => [], {}, { permissions: ['report:read', 'data:scope:subtree'], assignments: ['/r/'] });
+    await root.service.portfolioAging({});
+    assert.doesNotMatch(root.sqls.find((q) => q.includes('FROM credits cr'))!, /user_branch_assignments/);
+  });
+
+  it('sin asignaciones, un supervisor no ve más que lo suyo (A-4): nunca toda la cuenta', async () => {
+    const { service, sqls, wheres } = makeService(() => [], {}, { permissions: ['report:read', 'data:scope:branch'], assignments: [] });
+    await service.summary({});
+    assert.match(sqls.find((q) => q.includes('FROM credits cr'))!, /assigned_manager_id/);
+    const and = (wheres[0] as { AND: { OR: unknown[] }[] }).AND;
+    assert.deepEqual(and[0]!.OR, [{ credit: { assignedManagerId: 'u1' } }]);
+  });
+
+  it('branchId = ese nodo y su subárbol (prefijo de ruta), y se compone con el alcance', async () => {
+    const { service, sqls, wheres } = makeService(() => [], {}, { branchPath: REGIONAL });
+    await service.summary({ branchId: '22222222-3333-4444-5555-666666666666' });
+    const credits = sqls.find((q) => q.includes('FROM credits cr'))!;
+    assert.match(credits, /EXISTS \(SELECT 1 FROM branches nb WHERE nb\.id = cr\.branch_id AND nb\.path LIKE/);
+    assert.doesNotMatch(credits, /cr.branch_id = /);
+    assert.deepEqual((wheres[0] as { AND: unknown[] }).AND, [{ branch: { path: { startsWith: REGIONAL } } }]);
+  });
+
+  it('un branchId que no es de esta cuenta no devuelve la cartera de otra: no calza con nada', async () => {
+    const { service, sqls, wheres } = makeService(() => [], {}, { branchPath: null });
+    await service.summary({ branchId: '22222222-3333-4444-5555-666666666666' });
+    assert.ok(sqls.some((q) => q.includes('nb.path LIKE')));
+    assert.deepEqual((wheres[0] as { AND: unknown[] }).AND, [{ branch: { path: { startsWith: '/__sin_oficina__/' } } }]);
   });
 });

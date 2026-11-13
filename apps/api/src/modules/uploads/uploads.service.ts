@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { createReadStream, existsSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type { Readable } from 'node:stream';
 import { TenantContextService } from '../../common/context/tenant-context.service';
@@ -85,7 +85,12 @@ export class UploadsService {
     private readonly audit: AuditService,
   ) {}
 
-  async store(file: UploadedFileLike | undefined): Promise<StoredFile> {
+  /**
+   * `beforeWrite` (F14 · F4): se llama con los datos del archivo ANTES de escribir los bytes en disco. El registro de archivos lo usa para dejar
+   * constancia (y revivir un archivo huérfano) primero: así la limpieza, que borra el físico bajo un bloqueo de fila, nunca puede borrar los
+   * bytes de una subida que ya está en curso.
+   */
+  async store(file: UploadedFileLike | undefined, beforeWrite?: (info: StoredFile) => Promise<void>): Promise<StoredFile> {
     if (!file?.buffer?.length) throw fileRejected('No se recibió ningún archivo');
     const ext = ALLOWED[file.mimetype];
     if (!ext) throw fileRejected(`Tipo no permitido: ${file.mimetype}. Solo JPEG, PNG o WebP.`);
@@ -97,10 +102,12 @@ export class UploadsService {
     const dir = join(this.root, this.tenant.accountId);
     await mkdir(dir, { recursive: true });
     const name = `${hash}.${ext}`;
+    const info: StoredFile = { url: `/api/uploads/${name}`, hash, size: file.size, mimeType: file.mimetype };
+    if (beforeWrite) await beforeWrite(info);
     await writeFile(join(dir, name), file.buffer);
 
     await this.audit.record({ entity: 'upload', entityId: hash, action: 'CREATE', after: { size: file.size, mimeType: file.mimetype } });
-    return { url: `/api/uploads/${name}`, hash, size: file.size, mimeType: file.mimetype };
+    return info;
   }
 
   /**
@@ -124,6 +131,28 @@ export class UploadsService {
     const path = join(this.root, this.tenant.accountId, key);
     if (!existsSync(path)) throw fileNotFound();
     return createReadStream(path);
+  }
+
+  /** La ruta de un archivo ya validada (imagen `<hash>.<ext>` o documento `imports/<hash>.<ext>`), o `null` si no tiene esa forma. */
+  private pathFor(accountId: string, storageKey: string): string | null {
+    if (!/^[0-9a-f]{64}\.(jpg|png|webp)$/.test(storageKey) && !DOCUMENT_KEY.test(storageKey)) return null;
+    return join(this.root, accountId, storageKey);
+  }
+
+  /**
+   * F14 · F4: lee un archivo de una cuenta por su ruta de almacenamiento, sin depender del tenant de la sesión (el enlace firmado no tiene
+   * sesión: la cuenta sale de la firma). Una ruta con otra forma no existe.
+   */
+  streamForAccount(accountId: string, storageKey: string): Readable {
+    const path = this.pathFor(accountId, storageKey);
+    if (!path || !existsSync(path)) throw fileNotFound();
+    return createReadStream(path);
+  }
+
+  /** Borra el archivo físico (la limpieza de huérfanos). No falla si ya no está. */
+  async removeForAccount(accountId: string, storageKey: string): Promise<void> {
+    const path = this.pathFor(accountId, storageKey);
+    if (path) await rm(path, { force: true });
   }
 
   /** Sirve el archivo del tenant en sesión. El nombre es el hash: no hay forma de adivinar otro. */

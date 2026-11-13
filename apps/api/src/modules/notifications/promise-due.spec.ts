@@ -46,7 +46,7 @@ function makeService(opts: Opts = {}) {
     },
   };
   const prisma = {
-    withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
+    withSystemTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
     $queryRaw: async () => {
       if (opts.throwEnumeration) throw new Error('function does not exist');
       return (opts.accountIds ?? ['acc-A']).map((account_id) => ({ account_id }));

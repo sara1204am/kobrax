@@ -1,8 +1,5 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, StreamableFile, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, StreamableFile } from '@nestjs/common';
 import { Permission } from '@kobrax/shared';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { TenantGuard } from '../auth/guards/tenant.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CreateMoraActivityDto, CreateMoraNoteDto, ListMoraQueryDto, SetMoraPriorityDto, UpdateMoraNoteDto } from './dto/mora.dto';
 import { MoraExportService } from './mora-export.service';
@@ -10,7 +7,6 @@ import { MoraService } from './mora.service';
 
 /** Central de Mora: créditos en mora, una fila por crédito. */
 @Controller('mora')
-@UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 export class MoraController {
   constructor(
     private readonly mora: MoraService,

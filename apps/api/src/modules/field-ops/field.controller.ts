@@ -1,14 +1,10 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { Permission } from '@kobrax/shared';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { TenantGuard } from '../auth/guards/tenant.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { Roles, RolesAny } from '../auth/decorators/roles.decorator';
 import { FieldService } from './field.service';
 import { AddEvidenceDto, CreateVisitDto, ListVisitsQueryDto } from './dto/field.dto';
 
 @Controller('visits')
-@UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 export class FieldController {
   constructor(private readonly field: FieldService) {}
 
@@ -18,14 +14,15 @@ export class FieldController {
    * propio— lo decide el service por capacidad, como en rutas.
    */
   @Get()
-  @Roles(Permission.ROUTE_READ)
+  // F14 · F4: las visitas llevan el punto GPS donde está el deudor → hace falta también `client:contact:read` (VIEWER no).
+  @Roles(Permission.ROUTE_READ, Permission.CLIENT_CONTACT_READ)
   list(@Query() query: ListVisitsQueryDto) {
     return this.field.list(query);
   }
 
   /** Una visita con sus evidencias: la foto, el punto y el hash que la sellan. */
   @Get(':id')
-  @Roles(Permission.ROUTE_READ)
+  @Roles(Permission.ROUTE_READ, Permission.CLIENT_CONTACT_READ)
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.field.findOne(id);
   }
@@ -33,13 +30,13 @@ export class FieldController {
   // Puerta mínima: registra el cobrador (ROUTE_EXECUTE) y, desde el panel, quien administra rutas. Quién puede sobre
   // CADA parada lo decide el service (cobrador de la ruta, quien la armó o quien asigna).
   @Post()
-  @Roles(Permission.ROUTE_READ)
+  @RolesAny(Permission.ROUTE_EXECUTE, Permission.ROUTE_WRITE, Permission.ROUTE_ASSIGN)
   createVisit(@Body() dto: CreateVisitDto) {
     return this.field.createVisit(dto);
   }
 
   @Post(':id/evidence')
-  @Roles(Permission.ROUTE_READ)
+  @RolesAny(Permission.ROUTE_EXECUTE, Permission.ROUTE_WRITE, Permission.ROUTE_ASSIGN)
   addEvidence(@Param('id', ParseUUIDPipe) id: string, @Body() dto: AddEvidenceDto) {
     return this.field.addEvidence(id, dto);
   }

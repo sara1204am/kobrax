@@ -16,7 +16,9 @@ import {
   type MemberConnection,
   type MemberDetail,
 } from '@kobrax/shared';
+import { requirePermission } from '@/lib/authz';
 import { apiCall } from '@/lib/bff';
+import { getOffices } from '@/lib/offices-server';
 import { Badge, EmptyState } from '@/components/panel-ui';
 import { date } from '@/lib/format';
 import { isKnownRole } from '@/lib/team';
@@ -43,18 +45,21 @@ export default async function MemberPage({
   params: { userId: string };
   searchParams: { tab?: string; days?: string };
 }) {
+  const blocked = await requirePermission(Permission.USER_READ);
+  if (blocked) return blocked;
   const t = await getTranslations('team');
   const tr = await getTranslations('team.roles');
   const tw = await getTranslations('team.lastAccess');
   const locale = await getLocale();
   const id = params.userId;
 
-  const [me, found, list, roles, account] = await Promise.all([
+  const [me, found, list, roles, account, offices] = await Promise.all([
     apiCall<MeInfo>('/auth/me', { method: 'GET', auth: true }),
     apiCall<MemberDetail>(`/users/${id}`, { method: 'GET', auth: true }),
     apiCall<Member[]>('/users', { method: 'GET', auth: true }),
     apiCall<AssignableRole[]>('/roles', { method: 'GET', auth: true }),
     apiCall<AccountInfo>('/accounts/me', { method: 'GET', auth: true }),
+    getOffices(),
   ]);
 
   // Un id que no existe, que no es de esta cuenta o que ni es un UUID: la misma pantalla de «no existe».
@@ -93,7 +98,7 @@ export default async function MemberPage({
     const res = await apiCall<MemberAuditEvent[]>(`/users/${id}/audit`, { method: 'GET', auth: true });
     body = res.body.data ? <AuditTab events={res.body.data} /> : <EmptyState title={t('noAccess')} text={res.body.error?.message} />;
   } else {
-    body = <InfoTab member={member} />;
+    body = <InfoTab member={member} offices={offices.multi ? offices.rows : []} />;
   }
 
   const status = memberStatus(member);

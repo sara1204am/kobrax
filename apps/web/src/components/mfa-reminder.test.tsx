@@ -15,6 +15,6 @@ describe('MfaReminder (W-LOG-51)', () => {
     render(<MfaReminder />);
     expect(screen.getByText('Pendiente')).toBeInTheDocument();
     expect(screen.getByText('Protege tu cuenta')).toBeInTheDocument();
-    expect(screen.getByRole('link')).toHaveAttribute('href', '/settings/security');
+    expect(screen.getByRole('link')).toHaveAttribute('href', '/settings/perfil/seguridad');
   });
 });

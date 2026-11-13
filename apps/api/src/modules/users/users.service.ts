@@ -1,10 +1,11 @@
-import { branchInactive, branchNotFound } from '../branches/branches.errors';
+import { branchAssignmentExists, branchInactive, branchNotFound } from '../branches/branches.errors';
+import { isUniqueViolation } from '../../common/unique-violation';
 import { Injectable, Logger } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { hash } from 'bcryptjs';
 import type { PrismaClient } from '@prisma/client';
 import { AgendaItemStatus, CreditAssignmentKind, CreditStatus, RouteStatus } from '@prisma/client';
-import { KOBRAX, MOBILE_ROLES, RoleType, isMobileRole } from '@kobrax/shared';
+import { KOBRAX, Permission, RoleType, isMobileRole } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
@@ -13,12 +14,17 @@ import { PlanLimitsService } from '../../common/plan/plan-limits.service';
 import { formatInvitationCode, newInvitationCode, sha256hex } from '../auth/invitation-code';
 import { emailTaken } from '../accounts/accounts.errors';
 import { AssignmentService } from '../assignments/assignment.service';
+import { AuthzVersionService, type PendingVersion } from '../auth/authz-version.service';
+import { SessionService } from '../auth/session.service';
+import { OfficeScopeService } from '../../common/office-scope/office-scope.service';
 import { isAssignable, type AssignmentChange } from '../assignments/assignment-rules';
-import { serializeMember, serializeProfile, serializeRole } from './users.serializer';
+import { serializeMember, serializeProfile } from './users.serializer';
 import { InviteMemberDto, UpdateMemberDto, UpdateProfileDto } from './dto/user.dto';
 import {
   cannotEditSelf,
   lastAdmin,
+  managerNeedsOffice,
+  cannotRevokeSuperior,
   memberNotFound,
   notPending,
   profileNotFound,
@@ -26,6 +32,8 @@ import {
   roleNotAllowed,
   userHasPendingWork,
 } from './users.errors';
+import { AuthorizationService } from '../../common/authz/authorization.service';
+import { PolicyService } from '../../common/authz/policy.service';
 
 const MEMBER_INCLUDE = { user: { include: { profile: true } }, role: true } as const;
 
@@ -51,6 +59,12 @@ export class UsersService {
     private readonly mail: MailService,
     private readonly plan: PlanLimitsService,
     private readonly assignments: AssignmentService,
+    private readonly authz: AuthzVersionService,
+    private readonly sessions: SessionService,
+    private readonly office: OfficeScopeService,
+    private readonly access: AuthorizationService = new AuthorizationService(tenant),
+    /** F14 · F2: `member.invite` / `member.assignRole`. Lo inyecta Nest; los specs que no invitan ni cambian roles no lo necesitan. */
+    private readonly policies: PolicyService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -65,10 +79,13 @@ export class UsersService {
 
   /** Miembros del tenant, activos e inactivos (la lista deja reactivar al desactivado). */
   async list() {
-    const rows = await this.tx((tx) =>
+    const rows = await this.tx(async (tx) => {
       // Sin `where` de tenant: lo pone la RLS. `user_accounts` no tiene deletedAt.
-      tx.userAccount.findMany({ include: MEMBER_INCLUDE, orderBy: { joinedAt: 'asc' } }),
-    );
+      const all = await tx.userAccount.findMany({ include: MEMBER_INCLUDE, orderBy: { joinedAt: 'asc' } });
+      // F14 · F1 (R-02): sólo a quien el actor ve según su alcance por oficina.
+      const visible = await this.office.visibleMemberIds(tx, all.map((m) => m.userId));
+      return all.filter((m) => visible.has(m.userId));
+    });
     return rows.map(serializeMember);
   }
 
@@ -132,9 +149,54 @@ export class UsersService {
     return { changes, routesMoved, routesCancelled };
   }
 
+  /**
+   * Deja la asignación vigente de la persona en `branchId` (o ninguna con `null`). UNA sola vigente por persona y cuenta (índice
+   * temporal): se revoca la anterior y se crea la nueva en la misma transacción. Quien ya estaba ahí no se toca. El espejo
+   * `user_accounts.branch_id` lo escribe quien llama (mismo `UPDATE` que el rol y el estado) para que queden siempre iguales.
+   */
+  private async syncAssignment(tx: PrismaClient, userId: string, branchId: string | null): Promise<void> {
+    const accountId = this.tenant.accountId;
+    const current = await tx.userBranchAssignment.findMany({ where: { accountId, userId, revokedAt: null }, select: { id: true, branchId: true } });
+    const stale = current.filter((a) => a.branchId !== branchId);
+    if (stale.length > 0) await tx.userBranchAssignment.updateMany({ where: { id: { in: stale.map((a) => a.id) } }, data: { revokedAt: new Date() } });
+    if (branchId && !current.some((a) => a.branchId === branchId)) {
+      try {
+        await tx.userBranchAssignment.create({ data: { accountId, userId, branchId, isPrimary: true, createdBy: this.tenant.userId ?? null } });
+      } catch (e) {
+        // El índice único parcial (una vigente por persona y cuenta) ganó una carrera: 409 claro, no 500.
+        if (isUniqueViolation(e)) throw branchAssignmentExists(userId, branchId);
+        throw e;
+      }
+    }
+  }
+
+  /** F14 · F1: cierra las sesiones abiertas de un miembro EN ESTA cuenta (no cambia su rol; tiene que volver a entrar). */
+  async revokeMemberSessions(userId: string): Promise<{ sessions: number }> {
+    if (userId === this.selfId) throw cannotEditSelf();
+    await this.tx(async (tx) => {
+      const member = await tx.userAccount.findFirst({ where: { userId }, select: { userId: true, role: { select: { name: true } } } });
+      if (!member) throw memberNotFound();
+      const visible = await this.office.visibleMemberIds(tx, [userId]);
+      if (!visible.has(userId)) throw memberNotFound();
+      // Ver a alguien no es tener autoridad sobre él: quien no administra la cuenta (el gerente regional) sólo cierra las sesiones
+      // de quienes están por debajo de él, nunca las de un administrador ni las de otro gerente de su subárbol.
+      const superior: string[] = [RoleType.SUPER_ADMIN, RoleType.ACCOUNT_ADMIN, RoleType.MANAGER];
+      if (!this.access.can(Permission.USER_WRITE) && superior.includes(member.role.name)) throw cannotRevokeSuperior();
+    });
+    const sessions = await this.sessions.revokeAccountSessions(userId, this.tenant.accountId);
+    await this.audit.record({
+      entity: 'user_account',
+      entityId: userId,
+      action: 'SESSION_REVOKE',
+      after: { reason: 'ADMIN_REQUEST', sessions },
+    });
+    return { sessions };
+  }
+
   async updateMember(userId: string, dto: UpdateMemberDto) {
     if (userId === this.selfId) throw cannotEditSelf();
 
+    let authzPending: PendingVersion[] = [];
     let handover: { changes: AssignmentChange[]; routesMoved: number; routesCancelled: number; work: { agenda: number; credits: number; routes: number } } | undefined;
     const { before, updated } = await this.tx(async (tx) => {
       const before = await tx.userAccount.findFirst({ where: { userId }, include: MEMBER_INCLUDE });
@@ -164,6 +226,13 @@ export class UsersService {
         if (otherAdmins === 0) throw lastAdmin();
       }
 
+      // F14 · F2 (H-3, H-13): quien edita está por encima de la persona; el rol y la oficina nuevos caen en su jerarquía y alcance.
+      // Sólo si cambia algo de verdad: el formulario reenvía la oficina actual junto con otros campos y eso no es un movimiento jerárquico.
+      const changesBranch = dto.branchId !== undefined && dto.branchId !== before.branchId;
+      if (changesRole || changesBranch) {
+        await this.policies.assert('member.assignRole', { userId, roleId: changesRole ? dto.roleId : undefined, branchId: changesBranch ? dto.branchId : undefined }, tx);
+      }
+
       // Reactivar es la otra puerta al techo del plan: `invite()` frena, pero desactivar y volver
       // a activar entraba sin contar asientos. Mismo criterio que allá y dentro de la transacción,
       // por la misma carrera (S2-D6).
@@ -190,13 +259,45 @@ export class UsersService {
         if (!branch.active) throw branchInactive();
       }
 
+      // Un gerente regional sin oficina no tendría alcance: el rol resultante MANAGER exige una oficina (la que se manda o la vigente).
+      const resultingRoleId = dto.roleId ?? before.roleId;
+      if (dto.roleId !== undefined || dto.branchId !== undefined) {
+        const resulting = changesRole ? await tx.role.findUnique({ where: { id: resultingRoleId }, select: { name: true } }) : before.role;
+        const resultingBranch = dto.branchId !== undefined ? dto.branchId : before.branchId;
+        if (resulting?.name === RoleType.MANAGER && !resultingBranch) throw managerNeedsOffice();
+      }
+
+      // F13: la oficina de la persona vive en `user_branch_assignments` (fuente del alcance) y se espeja en `user_accounts.branch_id`.
+      if (dto.branchId !== undefined) await this.syncAssignment(tx, userId, dto.branchId);
+
       const updated = await tx.userAccount.update({
         where: { id: before.id },
         data: { roleId: dto.roleId, isActive: dto.isActive, branchId: dto.branchId },
         include: MEMBER_INCLUDE,
       });
+      // F14 · F1 (H-2): un cambio de rol, de oficina o de estado sube la versión de ESTA membresía en la misma transacción; el
+      // próximo request con el token viejo recibe AUTHZ_STALE y renueva con lo nuevo.
+      const authzChanged = changesRole || dto.isActive !== undefined && dto.isActive !== before.isActive || dto.branchId !== undefined && dto.branchId !== before.branchId;
+      if (authzChanged) authzPending = await this.authz.bumpInTx(tx, this.tenant.accountId, [before.id]);
       return { before, updated };
     });
+
+    await this.authz.publish(authzPending);
+    if (dto.isActive === false && before.isActive) {
+      // Desactivar la membresía cierra sus sesiones EN ESTA CUENTA (las de otros tenants no se tocan).
+      // Ya está commiteado y la versión de autorización protege el token aunque esto falle: no se convierte en un 500.
+      try {
+        const closed = await this.sessions.revokeAccountSessions(userId, this.tenant.accountId);
+        await this.audit.record({
+          entity: 'user_account',
+          entityId: updated.id,
+          action: 'SESSION_REVOKE',
+          after: { reason: 'MEMBERSHIP_DEACTIVATED', sessions: closed },
+        });
+      } catch (e) {
+        this.logger.error(`Desactivada la membresía ${updated.id} pero no se cerraron sus sesiones: ${(e as Error).message}`);
+      }
+    }
 
     if (handover) {
       await this.assignments.auditChanges(handover.changes, { reason: 'DEACTIVATED_MEMBER', from: userId });
@@ -234,6 +335,8 @@ export class UsersService {
     const role = await this.prisma.role.findUnique({ where: { id: dto.roleId } });
     if (!role || !isMobileRole(role.name)) throw roleNotAllowed();
 
+    if (role.name === RoleType.MANAGER && !dto.branchId) throw managerNeedsOffice();
+
     const code = newInvitationCode();
     // Hash real de un secreto que nadie conoce: el pendiente no puede entrar ni por
     // accidente. `login()` además corta antes por `status !== 'ACTIVE'`.
@@ -252,6 +355,8 @@ export class UsersService {
         // El conteo va DENTRO de la transacción: contar afuera y crear después es una
         // carrera que dos invitaciones simultáneas ganan (S2-D6, README R4).
         await this.plan.assertRoom('users', tx);
+        // F14 · F2 (H-3, H-13): rol de tier estrictamente inferior, oficina dentro del alcance y nunca un rol reservado.
+        await this.policies.assert('member.invite', { roleId: role.id, branchId: dto.branchId }, tx);
 
         const user = await tx.user.create({
           data: {
@@ -261,8 +366,14 @@ export class UsersService {
             profile: { create: { firstName: dto.firstName, lastName: dto.lastName } },
           },
         });
+        if (dto.branchId) {
+          const branch = await tx.branch.findFirst({ where: { id: dto.branchId, deletedAt: null }, select: { active: true } });
+          if (!branch) throw branchNotFound();
+          if (!branch.active) throw branchInactive();
+          await this.syncAssignment(tx, user.id, dto.branchId);
+        }
         const member = await tx.userAccount.create({
-          data: { userId: user.id, accountId, roleId: role.id, isDefault: true },
+          data: { userId: user.id, accountId, roleId: role.id, isDefault: true, branchId: dto.branchId ?? null },
           include: MEMBER_INCLUDE,
         });
         await tx.passwordResetToken.create({
@@ -381,7 +492,7 @@ export class UsersService {
       : (inviter?.email ?? 'Tu equipo');
     const { subject, text } = invitationBody({ businessName, invitedBy, code });
     void this.mail.send(email, subject, text).catch((err: Error) => {
-      this.logger.error(`No se pudo enviar la invitación a ${email}: ${err.message}`);
+      this.logger.error(`No se pudo enviar una invitación de la cuenta ${this.tenant.accountId}: ${err.message}`); // F14 · F4: sin correo en los registros
     });
   }
 
@@ -421,13 +532,5 @@ export class UsersService {
       redactKeys: ['phone', 'documentNumber'],
     });
     return serializeProfile(user);
-  }
-
-  /** Sólo los roles que el móvil administra (D2); el selector necesita los ids reales. */
-  async listRoles() {
-    const roles = await this.tx((tx) =>
-      tx.role.findMany({ where: { name: { in: [...MOBILE_ROLES] } }, orderBy: { level: 'desc' } }),
-    );
-    return roles.map(serializeRole);
   }
 }

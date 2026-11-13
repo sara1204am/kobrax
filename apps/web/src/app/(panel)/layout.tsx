@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import type { ReactNode } from 'react';
 import { Permission, type AuthAccountOption, type MeInfo } from '@kobrax/shared';
+import { getMe } from '@/lib/authz';
 import { apiCall } from '@/lib/bff';
 import { getAgendaSummary } from '@/lib/agenda-summary';
 import { getAccount } from './cuenta/get-account';
@@ -24,7 +25,7 @@ import { visibleNav } from '@/lib/nav';
  */
 export default async function PanelLayout({ children }: { children: ReactNode }) {
   const [me, accounts] = await Promise.all([
-    apiCall<MeInfo>('/auth/me', { method: 'GET', auth: true }),
+    getMe(),
     apiCall<AuthAccountOption[]>('/auth/accounts', { method: 'GET', auth: true }),
   ]);
 
@@ -84,6 +85,7 @@ export default async function PanelLayout({ children }: { children: ReactNode })
         nav={visibleNav(user.permissions)}
         badges={badges}
         billingMissing={billingMissing}
+        supportSession={user.supportSession}
       >
         {/* Los avisos se montan una sola vez acá: un provider por pantalla haría que un toast
             disparado antes de navegar se pierda con el desmontaje. */}

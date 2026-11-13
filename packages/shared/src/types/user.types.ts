@@ -27,12 +27,7 @@ export interface Member {
 /** El alta devuelve además el código, **una sola vez**, para poder compartirlo. */
 export type InvitedMember = Member & { invitationCode: string };
 
-/** Una fila de `GET /roles`. Ojo: el servidor sólo devuelve los roles asignables. */
-export interface AssignableRole {
-  id: string;
-  name: string;
-  level: number;
-}
+/** `AssignableRole` (una fila de `GET /roles` sin parámetros) vive ahora en `role.types.ts` como subconjunto obligatorio de `RoleSummary`. */
 
 /** Lo que devuelve `GET /auth/me`: la identidad de la sesión activa. */
 export interface MeInfo {
@@ -46,6 +41,19 @@ export interface MeInfo {
   requiresPasswordChange?: boolean;
   /** La marca del negocio activo, para que el panel la pinte sin pedir `account:read`. `null` si no se pudo leer. */
   account?: AccountBrand | null;
+  /** F14 · F5: clave del rol de la cuenta (`MANAGER`…). */
+  roleKey?: string;
+  /** F14 · F8 (D-7): las oficinas de esta persona (las de su membresía). El móvil las usa para elegir la oficina de un alta; vacío = sin oficina. */
+  offices?: MeOffice[];
+  /** F14 · F6: sólo en una sesión de soporte de la plataforma; el panel muestra «Sesión de soporte · vence HH:MM». */
+  supportSession?: { id: string; expiresAt: string };
+}
+
+export interface MeOffice {
+  id: string;
+  name: string;
+  /** La oficina central (sin padre): ahí no se registran clientes. */
+  isRoot: boolean;
 }
 
 /** Nombre, teléfono y logo del negocio: lo que ve cualquier miembro (encabezado, variables de las plantillas). */
@@ -53,6 +61,10 @@ export interface AccountBrand {
   name: string;
   phone: string | null;
   logoUrl: string | null;
+  /** Zona horaria de la empresa: las pantallas que no leen la cuenta (Actividad, Accesos de soporte) pintan las horas con ella. */
+  timezone?: string | null;
+  /** F14 · F8 (D-2): la cuenta tiene UNA sola persona activa (el cobrador independiente). La app le conserva la ventana sin conexión de 8 h. */
+  soloUser?: boolean;
   /** Cuándo trabaja el equipo y cómo se muestra la semana: la agenda las respeta. Opcional para no romper a un cliente viejo. */
   preferences?: AccountPreferences;
 }

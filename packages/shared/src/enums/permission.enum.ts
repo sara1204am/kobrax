@@ -36,12 +36,23 @@ export enum Permission {
 
   CLIENT_READ = 'client:read',
   CLIENT_WRITE = 'client:write',
+  /** F14 · F2: dar de alta un cliente (la política `client.create` resuelve la oficina de registro). */
+  CLIENT_CREATE = 'client:create',
+  /** F14 · F2 (H-12): borrado lógico de un cliente; destructivo, sólo ACCOUNT_ADMIN por defecto. */
+  CLIENT_DELETE = 'client:delete',
   CLIENT_PII_READ = 'client:pii:read', // revelar PII en claro (documento/teléfono/dirección)
+  /**
+   * F14 · F4 (ADR-F14-06): ver los datos de contacto y ubicación de un cliente (teléfonos, direcciones, GPS, fotos de ubicación, relaciones,
+   * perfil económico) y pedir el revelado del documento. Todos los roles lo tienen salvo VIEWER; el alcance sigue recortando a qué clientes.
+   */
+  CLIENT_CONTACT_READ = 'client:contact:read',
   CLIENT_IMPORT = 'client:import', // importación masiva (RECONCILE / UPSERT_ONLY)
   CLIENT_IMPORT_REPLACE = 'client:import:replace', // modo destructivo REPLACE
 
   CREDIT_READ = 'credit:read',
   CREDIT_WRITE = 'credit:write',
+  /** F14 · F2: dar de alta un crédito (la política `credit.create` decide el responsable). */
+  CREDIT_CREATE = 'credit:create',
   CREDIT_PII_READ = 'credit:pii:read',
 
   REPORT_READ = 'report:read',
@@ -55,11 +66,29 @@ export enum Permission {
   USER_READ = 'user:read',
   USER_WRITE = 'user:write',
   USER_INVITE = 'user:invite',
+  /** F14 · F1: cerrar las sesiones abiertas de un miembro (cambia nada del rol; fuerza a volver a entrar). */
+  USER_SESSIONS_REVOKE = 'user:sessions:revoke',
 
   ROLE_READ = 'role:read',
   ROLE_WRITE = 'role:write',
+  /**
+   * F14 · F5 (H-11): aceptar, rechazar o revocar los accesos de soporte de la plataforma a esta cuenta (y el consentimiento de escritura sensible).
+   * Sólo el administrador de la cuenta.
+   */
+  SUPPORT_CONSENT = 'support:consent',
 
   AUDIT_READ = 'audit:read',
+
+  /**
+   * F13 · R12: ver el árbol de oficinas, su detalle y sus miembros. Lo traen los roles que hoy ya tienen `user:read`
+   * (la pestaña de Agencias se veía con ese permiso): nadie pierde ni gana vista al migrar.
+   */
+  OFFICE_READ = 'office:read',
+  /**
+   * F13 · R12: crear, renombrar, mover y desactivar oficinas, editar sus tipos y asignar personas. Lo trae quien hoy
+   * tiene `account:write` (el administrador de la cuenta). La delegación a otros roles es de F14.
+   */
+  OFFICE_WRITE = 'office:write',
 
   /**
    * Asignar un crédito a alguien: permanente o temporal (cobertura).
@@ -91,4 +120,12 @@ export enum Permission {
    * Hoy ninguna policy de RLS lo lee: lo aplica `moraAccessConditions` (Mora y Agenda).
    */
   DATA_SCOPE_BRANCH = 'data:scope:branch',
+
+  /**
+   * F13 · R13: ve **todo el subárbol** de las oficinas a las que está asignado —incluidos los créditos que todavía no
+   * tienen responsable—, a diferencia de `data:scope:branch` (supervisor), que exige responsable. Es el alcance del
+   * gerente regional (`MANAGER`). Sin asignación no ve nada ajeno: solo lo suyo (A-4). Si además tiene
+   * `DATA_SCOPE_ALL`, manda el total.
+   */
+  DATA_SCOPE_SUBTREE = 'data:scope:subtree',
 }

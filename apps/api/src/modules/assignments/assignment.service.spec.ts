@@ -1,7 +1,9 @@
 import { describe, it } from 'node:test';
+import { fakePolicy } from '../../common/authz/testing';
 import assert from 'node:assert/strict';
 import { Prisma } from '@prisma/client';
 import { Permission, RoleType } from '@kobrax/shared';
+import { OfficeScopeService } from '../../common/office-scope/office-scope.service';
 import { AssignmentService } from './assignment.service';
 import { agencyViolations, isAssignable, notAssignable } from './assignment-rules';
 import { rejectsWithCode } from '../auth/auth-test-utils';
@@ -71,7 +73,7 @@ function makeService(opts: {
   const permissions = opts.permissions ?? [];
   const tenant = { accountId: 'acc-A', userId: opts.userId ?? 'boss', can: (p: string) => permissions.includes(p) };
   const audit = { recordMany: async (e: typeof audited) => void audited.push(...e) };
-  const service = new AssignmentService({} as never, tenant as never, audit as never);
+  const service = new AssignmentService({} as never, tenant as never, audit as never, new OfficeScopeService(tenant as never), undefined, fakePolicy().service);
   const active = (creditId: string) => rows.filter((r) => r.creditId === creditId && !r.revokedAt).map((r) => r.userId);
   return { service, tx: tx as never, credits, rows, audited, active };
 }
@@ -94,21 +96,23 @@ describe('P3 · a quién se le puede asignar', () => {
   });
 });
 
-describe('D8 · el supervisor reparte sólo dentro de su agencia', () => {
-  const sup = { kind: 'BRANCH' as const, branchId: 'ag-1' };
+describe('D8 · el supervisor reparte sólo dentro de su agencia (F13: por rutas)', () => {
+  const AG1 = '/root/reg/ag-1/';
+  const AG2 = '/root/reg/ag-2/';
+  const sup = { kind: 'OFFICES' as const, paths: [AG1] };
   const credits = [
-    { id: 'c-propio', branchId: 'ag-1' },
-    { id: 'c-ajeno', branchId: 'ag-2' },
-    { id: 'c-sin-agencia', branchId: null },
+    { id: 'c-propio', officePath: AG1 },
+    { id: 'c-ajeno', officePath: AG2 },
+    { id: 'c-sin-agencia', officePath: null },
   ];
   const people = [
-    { userId: 'juan', branchId: 'ag-1' },
-    { userId: 'maria', branchId: 'ag-2' },
-    { userId: 'sin', branchId: null },
+    { userId: 'juan', officePaths: [AG1] },
+    { userId: 'maria', officePaths: [AG2] },
+    { userId: 'sin', officePaths: [] as string[] },
   ];
 
   it('gerente y administrador (ALL) no tienen límite', () => {
-    assert.deepEqual(agencyViolations({ kind: 'ALL', branchId: null }, credits, people), { creditIds: [], userIds: [] });
+    assert.deepEqual(agencyViolations({ kind: 'ALL', paths: [] }, credits, people), { creditIds: [], userIds: [] });
   });
 
   it('el supervisor: créditos de su agencia a gente de su agencia', () => {
@@ -122,9 +126,21 @@ describe('D8 · el supervisor reparte sólo dentro de su agencia', () => {
     });
   });
 
-  it('un supervisor sin agencia no puede repartir nada (null no es igual a ninguna agencia)', () => {
-    const v = agencyViolations({ kind: 'BRANCH', branchId: null }, [{ id: 'c', branchId: null }], [{ userId: 'u', branchId: null }]);
+  it('un supervisor sin agencia no puede repartir nada (sin rutas no hay alcance)', () => {
+    const v = agencyViolations({ kind: 'OFFICES', paths: [] }, [{ id: 'c', officePath: null }], [{ userId: 'u', officePaths: [] }]);
     assert.deepEqual(v, { creditIds: ['c'], userIds: ['u'] });
+  });
+
+  it('F13 · quien está asignado a una regional alcanza las agencias de su subárbol, pero no las de otra regional', () => {
+    const regional = { kind: 'OFFICES' as const, paths: ['/root/reg/'] };
+    const otra = { id: 'c-otra', officePath: '/root/otra/ag-9/' };
+    const v = agencyViolations(regional, [...credits.slice(0, 2), otra], [...people.slice(0, 2), { userId: 'lejos', officePaths: ['/root/otra/ag-9/'] }]);
+    assert.deepEqual(v, { creditIds: ['c-otra'], userIds: ['lejos'] });
+  });
+
+  it('F13 · un destinatario con varias asignaciones basta con que UNA caiga en el alcance', () => {
+    const v = agencyViolations(sup, [], [{ userId: 'doble', officePaths: [AG2, AG1] }]);
+    assert.deepEqual(v, { creditIds: [], userIds: [] });
   });
 });
 

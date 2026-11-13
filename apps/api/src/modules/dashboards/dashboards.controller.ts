@@ -1,8 +1,5 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
 import { Permission } from '@kobrax/shared';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { TenantGuard } from '../auth/guards/tenant.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { DashboardsService } from './dashboards.service';
 import { CreateDashboardDto, UpdateDashboardDto } from './dto/dashboard.dto';
@@ -10,12 +7,10 @@ import { CreateDashboardDto, UpdateDashboardDto } from './dto/dashboard.dto';
 /**
  * Los tableros configurables (W8).
  *
- * Todo pide `report:read` —la misma audiencia que ve el dashboard— y **quién puede modificar cuál
- * lo decide el service**: el que lo creó, o el admin de la cuenta. Un permiso nuevo para esto
- * sería otro concepto que administrar por una regla que se explica en una línea.
+ * Todo pide `report:read` —la misma audiencia que ve el dashboard—. Los tableros son **de cada persona**: el service
+ * filtra por dueño, así que cada quien sólo ve, crea y edita los suyos. Sin permiso nuevo: es una vista personal.
  */
 @Controller('dashboards')
-@UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 @Roles(Permission.REPORT_READ)
 export class DashboardsController {
   constructor(private readonly dashboards: DashboardsService) {}

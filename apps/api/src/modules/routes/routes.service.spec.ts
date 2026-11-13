@@ -196,7 +196,8 @@ function makeService(
     };
   }
   const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
-  const perms = opts.permissions ?? [];
+  // F14 · F4: todos los roles menos VIEWER tienen `client:contact:read` (direcciones y GPS de las paradas); estas pruebas hablan de otra cosa.
+  const perms = ['client:contact:read', ...(opts.permissions ?? [])];
   const tenant = {
     accountId: 'acc-A',
     userId: 'u1',
@@ -221,6 +222,8 @@ function makeService(
     { decrypt: (v: string) => v } as never,
     osrm as never,
     { today: async () => new Date(`${opts.today ?? '2026-06-20'}T00:00:00.000Z`), timezone: async () => 'UTC' } as never,
+    // F13: la oficina de la ruta se valida (si viene) o sale de la única asignación del cobrador (aquí: ninguna).
+    { assertBranchUsable: async (_tx: unknown, id: string) => ({ id, path: `/${id}/` }), soleOfficeOf: async () => null } as never,
   );
   /** El orden real del recorrido, para asertar contra él. */
   const order = () => stops.slice().sort((a, b) => a.sequenceOrder - b.sequenceOrder).map((s) => s.id);

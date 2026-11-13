@@ -209,7 +209,8 @@ describe('Importación de cartera — quién queda responsable', { timeout: 600_
   });
 
   it('11 · sin assignment:write no se cambia el responsable llamando al API directo', async () => {
-    const credit = await prisma.credit.findFirstOrThrow({ where: { accountId, assignedManagerId: id.juan, deletedAt: null } });
+    // Con `externalId`: `owner()` busca por él y un crédito del seed sin número (null) hacía depender el caso del orden físico de las filas.
+    const credit = await prisma.credit.findFirstOrThrow({ where: { accountId, assignedManagerId: id.juan, deletedAt: null, externalId: { not: null } } });
     const cobrador = await call(token.juan, 'PATCH', `/credits/${credit.id}`, { assignedManagerId: id.pedro });
     assert.equal(cobrador.status, 403);
     assert.equal(cobrador.error?.code, 'ASSIGNMENT_FORBIDDEN');

@@ -1,15 +1,23 @@
 import { Injectable } from '@nestjs/common';
 import { gzipSync } from 'node:zlib';
+import { Prisma } from '@prisma/client';
 import type { PrismaClient } from '@kobrax/database';
+import { ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { AuditService } from '../../common/audit/audit.service';
-import { staleAfterDaysOf } from '@kobrax/shared';
+import { OfficeScopeService } from '../../common/office-scope/office-scope.service';
+import { moraScopeOf, seesWholeAccount, visibleClientIdsSql, visibleCreditIdsSql } from '../mora/mora-query';
+import { maskDocument, Permission, PiiCategory, staleAfterDaysOf } from '@kobrax/shared';
 import { safeDecrypt, clientDisplayName } from '../clients/clients.serializer';
 import { moraCsvRow, MORA_CSV_COLUMNS } from '../mora/mora-export';
 import { serializeMoraCredit, type MoraCreditRow } from '../mora/mora.serializer';
 import { toCsv } from './csv';
+
+/** El backup es de toda la cuenta: quien no ve toda la cuenta no lo puede bajar. */
+const exportBackupForbidden = () =>
+  new ForbiddenException({ code: 'EXPORT_BACKUP_FORBIDDEN', message: 'El backup completo es de toda la cuenta y tu alcance es una parte de ella' });
 
 export interface ExportFile {
   filename: string;
@@ -20,8 +28,9 @@ export interface ExportFile {
 /**
  * Exportar los datos de la cuenta: los cuatro CSV que pide el negocio (clientes, ubicaciones,
  * mora, agenda) más el backup completo. Ninguno pasa por `serializeClient` con `reveal: false`
- * —esto es un export, no una pantalla—, así que la PII sale en claro y cada llamada queda
- * auditada como `client/PII_REVEAL`, igual que «Mostrar» en la ficha.
+ * —esto es un export, no una pantalla—, así que la PII sale en claro **a quien tiene las categorías que la abren** (F14 · F4):
+ * el documento en claro con `client:pii:read` (si no, enmascarado), el contacto principal y las direcciones con `client:contact:read`
+ * (si no, vacío / 403). Cada llamada queda auditada como `EXPORT` con las categorías que salieron (nunca los valores).
  */
 @Injectable()
 export class ExportsService {
@@ -30,32 +39,60 @@ export class ExportsService {
     private readonly tenant: TenantContextService,
     private readonly crypto: CryptoService,
     private readonly audit: AuditService,
+    private readonly officeScope: OfficeScopeService,
   ) {}
+
+  /**
+   * D-7 (F13): mismo alcance que Mora. `null` = toda la cuenta (kind ALL: sin filtro, mismo código de siempre). Decisión: el
+   * `where` de Prisma no admite SQL crudo, así que los ids visibles se resuelven con `$queryRaw` y se filtra con `IN (...)`.
+   */
+  private async visibleIds(tx: PrismaClient, what: 'credits' | 'clients'): Promise<string[] | null> {
+    const scope = moraScopeOf(this.tenant);
+    if (seesWholeAccount(scope)) return null;
+    const q = what === 'credits'
+      ? Prisma.sql`SELECT v.id AS id FROM (${visibleCreditIdsSql(scope)}) v`
+      : Prisma.sql`SELECT v.client_id AS id FROM (${visibleClientIdsSql(scope)}) v`;
+    return (await tx.$queryRaw<{ id: string }[]>(q)).map((r) => r.id);
+  }
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
     return this.prisma.withTenant(this.tenant.accountId, fn);
   }
 
-  private async logExport(kind: string): Promise<void> {
-    await this.audit.record({ entity: `export:${kind}`, entityId: this.tenant.accountId, action: 'EXPORT' });
+  private async logExport(kind: string, categories: PiiCategory[] = []): Promise<void> {
+    await this.audit.record({
+      entity: `export:${kind}`,
+      entityId: this.tenant.accountId,
+      action: 'EXPORT',
+      after: { scope: moraScopeOf(this.tenant).kind, categories, channel: this.tenant.get?.()?.channel ?? 'api' },
+    });
+  }
+
+  private can(p: Permission): boolean {
+    return this.tenant.can(p);
   }
 
   async clientsCsv(): Promise<ExportFile> {
-    const clients = await this.tx((tx) =>
-      tx.client.findMany({
-        where: { accountId: this.tenant.accountId, deletedAt: null },
+    const clients = await this.tx(async (tx) => {
+      const ids = await this.visibleIds(tx, 'clients');
+      return tx.client.findMany({
+        where: { accountId: this.tenant.accountId, deletedAt: null, ...(ids ? { id: { in: ids } } : {}) },
         include: { contacts: { where: { relationId: null, isPrimary: true }, take: 1 } },
         orderBy: { createdAt: 'asc' },
-      }),
-    );
-    await this.logExport('clients');
+      });
+    });
+    // F14 · F4: el documento sale en claro sólo con `client:pii:read`; el contacto principal sólo con `client:contact:read`.
+    const docClear = this.can(Permission.CLIENT_PII_READ);
+    const withContact = this.can(Permission.CLIENT_CONTACT_READ);
+    const documentOf = (d: string | null): string => (d == null ? '' : docClear ? d : maskDocument(d));
+    await this.logExport('clients', [...(docClear ? [PiiCategory.DOCUMENT] : []), ...(withContact ? [PiiCategory.CONTACT] : [])]);
 
     const rows = clients.map((c) => ({
       id: c.id,
       nombre: clientDisplayName(c) ?? '',
       tipo: c.clientType,
-      documento: safeDecrypt(this.crypto, c.nationalId) ?? '',
-      contactoPrincipal: c.contacts[0] ? safeDecrypt(this.crypto, c.contacts[0].value) : '',
+      documento: documentOf(safeDecrypt(this.crypto, c.nationalId)),
+      contactoPrincipal: withContact && c.contacts[0] ? safeDecrypt(this.crypto, c.contacts[0].value) : '',
       estado: c.status,
       segmento: c.riskSegment ?? '',
       saldoTotal: Number(c.totalDebt),
@@ -80,14 +117,19 @@ export class ExportsService {
   }
 
   async locationsCsv(): Promise<ExportFile> {
-    const locations = await this.tx((tx) =>
-      tx.clientLocation.findMany({
-        where: { accountId: this.tenant.accountId },
+    // F14 · F4: direcciones y GPS son la categoría CONTACT; sin `client:contact:read` no hay nada que exportar.
+    if (!this.can(Permission.CLIENT_CONTACT_READ)) {
+      throw new ForbiddenException({ code: 'PII_REVEAL_DENIED', message: 'No tienes permiso para exportar direcciones ni ubicaciones' });
+    }
+    const locations = await this.tx(async (tx) => {
+      const ids = await this.visibleIds(tx, 'clients');
+      return tx.clientLocation.findMany({
+        where: { accountId: this.tenant.accountId, ...(ids ? { clientId: { in: ids } } : {}) },
         include: { client: true },
         orderBy: { createdAt: 'asc' },
-      }),
-    );
-    await this.logExport('locations');
+      });
+    });
+    await this.logExport('locations', [PiiCategory.CONTACT]);
 
     const rows = locations.map((l) => ({
       id: l.id,
@@ -108,8 +150,7 @@ export class ExportsService {
    * exportación de la Central de Mora (Responsable, Categoría, Situación, Castigado, Prioridad, Días de mora,
    * Monto vencido, Última gestión…).
    *
-   * Es la exportación **de la cuenta entera** (permiso `report:export`), sin el alcance por agencia que sí tiene la
-   * de la Central de Mora. Sale sin «Promesa vigente»: calcularla pide otra consulta que este archivo no necesita.
+   * D-7 (F13): acotada por oficina con la misma regla de la Central de Mora (quien ve toda la cuenta, la cuenta entera). Sale sin «Promesa vigente»: calcularla pide otra consulta que este archivo no necesita.
    */
   async moraCsv(): Promise<ExportFile> {
     const accountId = this.tenant.accountId;
@@ -121,11 +162,12 @@ export class ExportsService {
       const cfg = (account?.configuration ?? {}) as { importConfig?: { staleAfterDays?: unknown } };
       const staleAfterDays = staleAfterDaysOf(cfg.importConfig?.staleAfterDays);
       const now = new Date();
+      const visible = await this.visibleIds(tx, 'credits');
 
       const items: ReturnType<typeof serializeMoraCredit>[] = [];
       for (let cursor: string | undefined; ; ) {
         const batch = await tx.credit.findMany({
-          where: { accountId, deletedAt: null, arrearEpisodes: { some: { endedAt: null } } },
+          where: { accountId, deletedAt: null, arrearEpisodes: { some: { endedAt: null } }, ...(visible ? { id: { in: visible } } : {}) },
           select: {
             id: true,
             code: true,
@@ -182,8 +224,9 @@ export class ExportsService {
   /** `AgendaItem.clientId` es ref suave (sin relación de Prisma) — se resuelve con una segunda consulta. */
   async agendaCsv(): Promise<ExportFile> {
     const { items, clientById } = await this.tx(async (tx) => {
+      const visible = await this.visibleIds(tx, 'credits');
       const items = await tx.agendaItem.findMany({
-        where: { accountId: this.tenant.accountId, deletedAt: null },
+        where: { accountId: this.tenant.accountId, deletedAt: null, ...(visible ? { creditId: { in: visible } } : {}) },
         orderBy: { scheduledDate: 'asc' },
       });
       const clients = await tx.client.findMany({ where: { id: { in: [...new Set(items.map((a) => a.clientId))] } } });
@@ -219,6 +262,8 @@ export class ExportsService {
   async fullBackup(): Promise<ExportFile> {
     const accountId = this.tenant.accountId;
     const data = await this.tx(async (tx) => {
+      // D-7: es de TODA la cuenta. Sólo kind ALL o un SUBTREE asignado a la raíz (que `assignScope` ya resuelve como ALL).
+      if ((await this.officeScope.assignScope(tx)).kind !== 'ALL') throw exportBackupForbidden();
       const [clients, credits, activities, arrearEpisodes, payments, agendaItems] = await Promise.all([
         tx.client.findMany({
           where: { accountId, deletedAt: null },

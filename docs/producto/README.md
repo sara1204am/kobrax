@@ -54,7 +54,7 @@ Verificados por los agentes de auditoría; el detalle y la evidencia están en c
 **Producto**
 - 5 pestañas móviles sin filtrado por permisos; Importación y Mi cuenta las ven todos.
 - Alcance por fila activo en aplicación solo para Mora, Agenda, Rutas y visitas; Cartera y Pagos muestran toda la cuenta; sin policies de alcance en RLS.
-- Roles asignables por API: ADMIN, SUPERVISOR, COLLECTOR. MANAGER, AUDITOR y VIEWER existen pero no se asignan; overrides por usuario sin código; sin API de sucursales.
+- Roles asignables por API: ADMIN, SUPERVISOR, COLLECTOR. MANAGER, AUDITOR y VIEWER existen pero no se asignan; overrides por usuario sin código. **Oficinas (F13, 2026-11):** árbol por cuenta con tipos editables y ruta materializada (`/branches`, `/branch-types`), permisos `office:read`/`office:write`, asignaciones usuario↔oficina (una vigente por persona hasta F14), alcance por subárbol (`data:scope:subtree`, gerente regional = MANAGER) y tope de oficinas por plan; el MANAGER aún no se asigna por API (F14).
 - Planes: bloquean usuarios, créditos y clientes; fotos y acciones solo avisan; la retención no se hace cumplir. Sin cambio de plan autoservicio.
 - Importación: los modos RECONCILE/UPSERT_ONLY/REPLACE no tienen pantalla web; REPLACE se comporta como RECONCILE; la regla de ausentes «ask» no tiene UI.
 - Pagos: sin reversión; sin pasarela real (el enlace de cobro apunta a `pay.kobrax.demo`).

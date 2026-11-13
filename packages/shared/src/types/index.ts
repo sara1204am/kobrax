@@ -11,3 +11,4 @@ export * from './payment.types.js';
 export * from './analytics.types.js';
 export * from './dashboard.types.js';
 export * from './sin-caso.types.js';
+export * from './role.types.js';

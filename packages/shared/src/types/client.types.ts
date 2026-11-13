@@ -138,6 +138,26 @@ export interface ClientDuplicateMatch {
   deleted: boolean;
   /** Se llama igual pero tiene OTRO carnet cargado: puede ser un homónimo, o el mismo con un error. */
   otherDocument: boolean;
+  /**
+   * F14 · F2b (D-6, revisada): el documento ya está registrado pero ese cliente no es visible para quien pregunta (lo llevan otras
+   * personas). Trae el nombre y el carnet enmascarado —lo mismo que ya traía— y NO la cantidad de créditos; con el `id` se puede
+   * «crear mi crédito sobre este cliente» (`/cartera/:id/prestamo`), y recién con ese crédito el cliente pasa a verse.
+   */
+  hidden?: boolean;
+}
+
+/**
+ * Lo mínimo de un cliente que todavía no ves, para crearle TU crédito (`GET /clients/:id/preview`, `credit:create`).
+ * Sólo nombre, carnet enmascarado y agregados de los créditos de otras personas; nunca su detalle.
+ */
+export interface ClientPreview {
+  id: string;
+  displayName: string;
+  maskedDocument: string | null;
+  status: 'ACTIVE' | 'INACTIVE' | 'BLOCKED';
+  /** `true` si ya lo ves por algún crédito tuyo o por su oficina de registro. */
+  visible: boolean;
+  otherCredits: OtherCreditsSummary | null;
 }
 
 /**
@@ -158,6 +178,8 @@ export interface NewClientInput {
    * subió. El server lo respeta; si no viene, genera el suyo. **La web no lo manda**: no tiene cola.
    */
   id?: string;
+  /** F14 · F2: la oficina donde se registra el cliente. Opcional: sin ella la decide el servidor (única oficina de la cuenta o la de quien da de alta); nunca la central de una cuenta con varias.  */
+  branchId?: string;
   clientType: 'PERSON' | 'COMPANY';
   firstName?: string;
   lastName?: string;
@@ -372,6 +394,20 @@ export interface ClientDetail {
   relations?: ClientRelationDetail[];
   collaterals?: CollateralDetail[];
   attachments?: ClientAttachmentDetail[];
+  /**
+   * F14 · F2 (H-7): créditos de este cliente que quien mira NO ve (otro responsable u otra oficina), sólo como agregados: cuántos, cuánto
+   * suman y quiénes los llevan. Nunca el detalle. `null`/ausente = ve todos.
+   */
+  otherCredits?: OtherCreditsSummary | null;
+}
+
+/** El aviso «tiene otros créditos» de la ficha del cliente (F14 · F2). */
+export interface OtherCreditsSummary {
+  /** Una tarjeta por crédito ajeno (sólo para mostrar: no hay detalle al que entrar). */
+  items?: { code: string | null; typeCode: string | null; currency: string | null; status: string | null; outstandingBalance: number; responsibles: string[] }[];
+  count: number;
+  totalOutstanding: number;
+  responsibles: { userId: string; name: string }[];
 }
 
 export interface CreditInstallmentDetail {

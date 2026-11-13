@@ -1,7 +1,9 @@
 import { describe, it } from 'node:test';
+import { fakePolicy } from '../../common/authz/testing';
 import assert from 'node:assert/strict';
 import { fakePlanLimits } from '../../common/plan/plan-test-utils';
 import { CreditsService } from './credits.service';
+import { OfficeScopeService } from '../../common/office-scope/office-scope.service';
 import { AssignmentService } from '../assignments/assignment.service';
 import { rejectsWithCode } from '../auth/auth-test-utils';
 
@@ -16,6 +18,8 @@ function makeService(
     plan?: Parameters<typeof fakePlanLimits>[0];
     /** Permisos de quien llama. Por defecto ninguno: un cobrador sin `assignment:write`. */
     permissions?: string[];
+    /** Alcance de reparto de quien llama (F13). Por defecto, toda la cuenta. */
+    officeScope?: { kind: 'ALL' | 'OFFICES'; paths: string[] };
     /** Miembros de la cuenta, para validar a quién se asigna. */
     members?: { userId: string; isActive: boolean; role: string }[];
   } = {},
@@ -32,9 +36,13 @@ function makeService(
     priorityRecompute: [] as string[],
     assignmentCreate: [] as Record<string, unknown>[],
     columnWrites: [] as Record<string, unknown>[],
+    officeInputs: [] as { branchId?: string | null; responsibleId?: string | null }[],
+    creditManyUpdates: [] as Record<string, unknown>[],
   };
   const tx = {
     client: { findFirst: async () => opts.client ?? null },
+    // F13: la auditoría de `reassignOffice` se escribe en la MISMA transacción.
+    auditLog: { createMany: async (a: { data: { action: string; entity: string }[] }) => void calls.audit.push(...a.data) },
     credit: {
       create: async (args: { data: Record<string, unknown>; include?: unknown }) => {
         calls.creditCreate.push(args.data);
@@ -49,8 +57,9 @@ function makeService(
       // Lo que lee y escribe `AssignmentService`.
       findMany: async (args: { where: { id: { in: string[] } } }) =>
         args.where.id.in.map((id) => ({ id, assignedManagerId: (opts.credit as { assignedManagerId?: string } | undefined)?.assignedManagerId ?? null })),
-      updateMany: async (args: { data: Record<string, unknown> }) => {
-        calls.columnWrites.push(args.data);
+      updateMany: async (args: { where: { id: { in: string[] } }; data: Record<string, unknown> }) => {
+        if ('branchId' in args.data) calls.creditManyUpdates.push({ ids: args.where.id.in, ...args.data });
+        else calls.columnWrites.push(args.data);
         return { count: 1 };
       },
     },
@@ -106,17 +115,30 @@ function makeService(
   };
   const prisma = {
     withTenant: async (_acc: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
+    elevated: async (_tx: unknown, fn: () => Promise<unknown>) => fn(),
   };
-  const permissions = opts.permissions ?? [];
-  const tenant = { accountId: 'acc-A', userId: 'user-1', can: (p: string) => permissions.includes(p) };
+  // F14 · F2: crear un crédito exige `credit:create`; estas pruebas hablan de otra cosa, así que todas lo tienen.
+  const permissions = ['credit:create', ...(opts.permissions ?? [])];
+  const tenant = { accountId: 'acc-A', userId: 'user-1', get: () => ({ ip: '1.1.1.1' }), can: (p: string) => permissions.includes(p) };
   const audit = {
     record: async (e: { action: string; entity: string }) => void calls.audit.push(e),
     recordMany: async (es: { action: string; entity: string }[]) => void calls.audit.push(...es),
   };
-  const assignment = new AssignmentService({} as never, tenant as never, audit as never);
+  const assignment = new AssignmentService({} as never, tenant as never, audit as never, new OfficeScopeService(tenant as never), undefined, fakePolicy().service);
   // F4/08: la prioridad del episodio se recalcula con `ArrearsPriorityService`; acá sólo se registra la llamada.
   const arrearsPriority = { recomputeForCredit: async (_tx: unknown, creditId: string) => void calls.priorityRecompute.push(creditId) };
-  const service = new CreditsService(prisma as never, tenant as never, audit as never, fakePlanLimits(opts.plan), assignment, arrearsPriority as never);
+  // F13: la oficina la decide el servidor. El doble registra qué le pidieron y devuelve lo explícito o la raíz.
+  const realOffice = new OfficeScopeService(tenant as never);
+  const office = {
+    resolveCreditBranch: async (_tx: unknown, input: { branchId?: string | null; responsibleId?: string | null }) => {
+      calls.officeInputs.push(input);
+      return input.branchId ?? 'b-root';
+    },
+    assignScope: async () => opts.officeScope ?? { kind: 'ALL', paths: [] },
+    assertBranchUsable: async (_tx: unknown, id: string) => ({ id, path: `/r/${id}/` }),
+    inScope: realOffice.inScope.bind(realOffice),
+  };
+  const service = new CreditsService(prisma as never, tenant as never, audit as never, fakePlanLimits(opts.plan), assignment, arrearsPriority as never, office as never);
   return { service, calls };
 }
 
@@ -770,7 +792,7 @@ describe('CreditsService.markArrears', () => {
   });
 
   it('guarda la FECHA desde la que corre, no los días', async () => {
-    const { service, calls } = makeService({ credit: activo() });
+    const { service, calls } = makeService({ credit: activo(), permissions: ['data:scope:all'] });
     await service.markArrears('cr1', 15);
     const meta = calls.creditUpdate[0]!.metadata as { moraSince?: string };
     assert.ok(meta.moraSince, 'se guarda `moraSince`');
@@ -782,25 +804,25 @@ describe('CreditsService.markArrears', () => {
    * servicio sólo calcula su prioridad en el acto (el crédito aparece en Mora ya, ordenado, sin esperar al job).
    */
   it('no abre caso: recalcula la prioridad del episodio ahí mismo', async () => {
-    const { service, calls } = makeService({ credit: activo() });
+    const { service, calls } = makeService({ credit: activo(), permissions: ['data:scope:all'] });
     await service.markArrears('cr1', 15);
     assert.deepEqual(calls.priorityRecompute, ['cr1']);
   });
 
   it('la auditoría ya no habla de casos', async () => {
-    const { service, calls } = makeService({ credit: activo() });
+    const { service, calls } = makeService({ credit: activo(), permissions: ['data:scope:all'] });
     await service.markArrears('cr1', 15);
     assert.ok(calls.audit.some((e) => e.action === 'ARREARS_MARK' && e.entity === 'credit'));
   });
 
   /** Su mora la manda el archivo: la marca se guardaría y no haría nada. Mejor rebotar que mentir. */
   it('el importado no se puede marcar a mano', async () => {
-    const { service } = makeService({ credit: activo({ metadata: { origin: 'import' } }) });
+    const { service } = makeService({ credit: activo({ metadata: { origin: 'import' } }), permissions: ['data:scope:all'] });
     await rejectsWithCode(service.markArrears('cr1'), 'CREDIT_LOCKED');
   });
 
   it('un crédito que ya no está activo tampoco', async () => {
-    const { service } = makeService({ credit: activo({ status: 'PAID' }) });
+    const { service } = makeService({ credit: activo({ status: 'PAID' }), permissions: ['data:scope:all'] });
     await rejectsWithCode(service.markArrears('cr1'), 'CREDIT_NOT_ACTIVE');
   });
 });
@@ -821,7 +843,7 @@ describe('CreditsService.clearArrears', () => {
   });
 
   it('«siguiente período» avanza la fecha y (el trigger cierra el episodio)', async () => {
-    const { service, calls } = makeService({ credit: enMora() });
+    const { service, calls } = makeService({ credit: enMora(), permissions: ['data:scope:all'] });
     await service.clearArrears('cr1', { mode: 'next_period' });
     const meta = calls.creditUpdate[0]!.metadata as { nextDueDate?: string };
     assert.ok(meta.nextDueDate! > new Date().toISOString().slice(0, 10), 'la nueva fecha es futura');
@@ -830,7 +852,7 @@ describe('CreditsService.clearArrears', () => {
   });
 
   it('«sin fecha» deja el préstamo abierto: sin vencimiento no hay mora que contar', async () => {
-    const { service, calls } = makeService({ credit: enMora() });
+    const { service, calls } = makeService({ credit: enMora(), permissions: ['data:scope:all'] });
     await service.clearArrears('cr1', { mode: 'none' });
     const meta = calls.creditUpdate[0]!.metadata as { nextDueDate?: string };
     assert.equal(meta.nextDueDate, undefined);
@@ -838,13 +860,13 @@ describe('CreditsService.clearArrears', () => {
   });
 
   it('una fecha pasada se rechaza: dejaría el crédito en mora igual', async () => {
-    const { service } = makeService({ credit: enMora() });
+    const { service } = makeService({ credit: enMora(), permissions: ['data:scope:all'] });
     await rejectsWithCode(service.clearArrears('cr1', { mode: 'date', date: '2020-01-01' }), 'ARREARS_DATE_PAST');
   });
 
   it('poner al día también saca la marca manual: quien la puso es quien la saca', async () => {
     const credit = enMora({ metadata: { origin: 'manual', frequency: 'MONTHLY', moraSince: '2026-01-01' } });
-    const { service, calls } = makeService({ credit });
+    const { service, calls } = makeService({ credit, permissions: ['data:scope:all'] });
     await service.clearArrears('cr1', { mode: 'next_period' });
     const meta = calls.creditUpdate[0]!.metadata as { moraSince?: string };
     assert.equal(meta.moraSince, undefined);
@@ -984,5 +1006,54 @@ describe('CreditsService — responsable del crédito (assignment:write)', () =>
     await service.create(BASE);
     assert.equal(calls.creditCreate[0]!.assignedManagerId, undefined);
     assert.equal(calls.assignmentCreate.length, 0);
+  });
+});
+
+describe('F13 · A-6 la oficina de un crédito la decide el servidor', () => {
+  it('el alta pide la oficina al resolvedor (con lo que mandó el cliente y el responsable) y guarda lo que él devuelve', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create(BASE);
+    assert.deepEqual(calls.officeInputs, [{ branchId: undefined, responsibleId: 'user-1' }]);
+    assert.equal(calls.creditCreate[0]!.branchId, 'b-root', 'sin oficina en el cuerpo, nunca NULL: la decide el servidor');
+  });
+
+  it('una oficina explícita se entrega al resolvedor para que la valide (no se guarda a ciegas)', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create({ ...(BASE as object), branchId: 'b-pedida' } as never);
+    assert.equal(calls.officeInputs[0]!.branchId, 'b-pedida');
+    assert.equal(calls.creditCreate[0]!.branchId, 'b-pedida');
+  });
+
+  it('un reintento del alta offline no vuelve a resolver nada', async () => {
+    const { service, calls } = makeService({ credit: { id: 'ya-existe', metadata: {}, installments: [] }, client: { id: 'c1' } });
+    await service.create({ ...(BASE as object), id: 'ya-existe' } as never);
+    assert.equal(calls.officeInputs.length, 0);
+  });
+
+  it('🔴 el PATCH ya no cambia la oficina: otra oficina es 422 y no escribe; la misma no es un cambio', async () => {
+    const credit = { id: 'cr1', metadata: { origin: 'manual' }, branchId: 'b-1', assignedManagerId: null };
+    const a = makeService({ credit: { ...credit, _count: { payments: 0, installments: 0 } } });
+    await rejectsWithCode(a.service.update('cr1', { branchId: 'b-2' } as never), 'CREDIT_BRANCH_IMMUTABLE');
+    assert.equal(a.calls.creditUpdate.length, 0);
+    const b2 = makeService({ credit: { ...credit, _count: { payments: 0, installments: 0 } } });
+    await b2.service.update('cr1', { branchId: 'b-1', notes: 'x' } as never);
+    assert.equal(b2.calls.creditUpdate[0]!.branchId, undefined);
+  });
+});
+
+describe('F13 · POST /credits/reassign-office (D-5 · R14)', () => {
+  it('mueve el lote atómicamente a la oficina destino y audita cada crédito con antes y después', async () => {
+    const { service, calls } = makeService({ officeScope: { kind: 'ALL', paths: [] } });
+    // el tx de este spec devuelve los créditos pedidos sin oficina: todos cambian
+    const res = await service.reassignOffice({ creditIds: ['c1', 'c2'], toBranchId: 'b-nueva' });
+    assert.deepEqual(res, { moved: 2, unchanged: 0, toBranchId: 'b-nueva' });
+    assert.deepEqual(calls.creditManyUpdates, [{ ids: ['c1', 'c2'], branchId: 'b-nueva' }]);
+    assert.deepEqual(calls.audit.map((a) => a.action), ['REASSIGN_OFFICE', 'REASSIGN_OFFICE']);
+  });
+
+  it('🔴 quien no ve todo no mueve créditos sin oficina ni de oficinas fuera de su alcance: 403 y no escribe', async () => {
+    const { service, calls } = makeService({ officeScope: { kind: 'OFFICES', paths: ['/r/chq/'] } });
+    await rejectsWithCode(service.reassignOffice({ creditIds: ['c1'], toBranchId: 'b-nueva' }), 'CREDIT_OFFICE_OUT_OF_SCOPE');
+    assert.equal(calls.creditManyUpdates.length, 0);
   });
 });

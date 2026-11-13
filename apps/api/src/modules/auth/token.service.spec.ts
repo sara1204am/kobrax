@@ -22,9 +22,13 @@ describe('TokenService', () => {
       roleId: 'r1',
       permissions: ['collection:read'],
       sessionId: 's1',
+      av: 1,
+      pv: 1,
     });
     const claims = token.verifyAccess(jwt);
     assert.equal(claims.sub, 'u1');
+    assert.equal(claims.av, 1);
+    assert.equal(claims.pv, 1);
     assert.equal(claims.accountId, 'a1');
     assert.deepEqual(claims.permissions, ['collection:read']);
   });
@@ -49,6 +53,8 @@ describe('TokenService', () => {
       roleId: 'r1',
       permissions: [],
       sessionId: 's1',
+      av: 1,
+      pv: 1,
     });
     assert.throws(() => token.verifyPreAuth(acc, 'mfa'));
   });
@@ -73,6 +79,8 @@ describe('TokenService', () => {
       roleId: 'r1',
       permissions: [],
       sessionId: 's1',
+      av: 1,
+      pv: 1,
     });
     assert.throws(() => token.verifyRefresh(acc));
   });

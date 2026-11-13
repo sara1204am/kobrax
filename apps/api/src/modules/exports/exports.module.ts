@@ -6,8 +6,8 @@ import { ExportsService } from './exports.service';
 
 /**
  * `PrismaService`/`TenantContextService`/`CryptoService` llegan por sus módulos `@Global`;
- * `AuditService` no lo es, y `JwtAuthGuard`/`RolesGuard` (los guards del controller) tampoco —
- * los trae `AuthModule`, igual que en `clients.module.ts`.
+ * `AuditService` no lo es, y los guards ya son globales (`AuthModule`, F14 · F3);
+ * el módulo sólo importa lo que sus servicios inyectan, igual que en `clients.module.ts`.
  */
 @Module({
   imports: [AuthModule, AuditModule],

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import type { ConfigScreen } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
+import { getOffices } from '@/lib/offices-server';
 import { EmptyState, PageHeader } from '@/components/panel-ui';
 import { ImportSetup } from './import-setup';
 import { AdvisorLinks } from './advisor-links';
@@ -15,12 +16,13 @@ import { AdvisorLinks } from './advisor-links';
  */
 export default async function ImportSettingsPage() {
   const t = await getTranslations('panel.import');
-  const [{ status, body }, advisors] = await Promise.all([
+  const [{ status, body }, advisors, offices] = await Promise.all([
     apiCall<ConfigScreen>('/imports/portfolio/config', { method: 'GET', auth: true }),
     apiCall<{ links: { advisorCode: string; userId: string }[]; unlinked: string[] }>('/imports/portfolio/advisors', {
       method: 'GET',
       auth: true,
     }),
+    getOffices(),
   ]);
 
   // 403 = el rol no tiene `client:import`. El ítem del menú tampoco se le dibuja, así que llegar
@@ -45,7 +47,11 @@ export default async function ImportSettingsPage() {
         <p className="mb-4 rounded-xl bg-k-warning-bg px-4 py-3 text-[13px] text-k-warning-text">{t('setup.readOnly')}</p>
       )}
       <fieldset disabled={!body.data.viewer.canConfigure} className="m-0 min-w-0 border-0 p-0">
-        <ImportSetup screen={body.data} />
+        {/* F13: el alcance «oficina» es un nodo del árbol (incluye lo que cuelga de él) y se lee con su ruta completa. Con una sola oficina no se ofrece. */}
+        <ImportSetup
+          screen={offices.multi ? { ...body.data, branches: offices.options.map((o) => ({ id: o.id, name: o.name })) } : body.data}
+          officeScope={offices.multi || body.data.config.scope.kind === 'branch'}
+        />
         {/* D8: de quién es cada reporte. Aparte del asistente: no es parte de leer el archivo. */}
         <AdvisorLinks
           links={advisors.body.data?.links ?? []}

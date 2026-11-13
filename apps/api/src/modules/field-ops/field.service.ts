@@ -39,6 +39,7 @@ import {
   visitRouteCancelled,
   visitStopDone,
 } from './field.errors';
+import { AuthorizationService } from '../../common/authz/authorization.service';
 
 @Injectable()
 export class FieldService {
@@ -51,6 +52,7 @@ export class FieldService {
     private readonly events: EventBusService,
     private readonly alerts: PlanUsageAlertsService,
     private readonly clock: TenantClockService,
+    private readonly authz: AuthorizationService = new AuthorizationService(tenant),
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -75,7 +77,7 @@ export class FieldService {
    * audita todo el tenant. Mismo criterio que rutas, casos y agenda — la capacidad, no el rol.
    */
   private scopedToOwnVisits(): boolean {
-    return this.tenant.can(Permission.ROUTE_EXECUTE) && !this.tenant.can(Permission.ROUTE_ASSIGN);
+    return this.authz.can(Permission.ROUTE_EXECUTE) && !this.authz.can(Permission.ROUTE_ASSIGN);
   }
 
   /**
@@ -221,8 +223,8 @@ export class FieldService {
     }
 
     const actorId = this.tenant.userId!;
-    const canExecute = this.tenant.can(Permission.ROUTE_EXECUTE);
-    const isManager = this.tenant.can(Permission.ROUTE_ASSIGN) || this.tenant.can(Permission.ROUTE_WRITE);
+    const canExecute = this.authz.can(Permission.ROUTE_EXECUTE);
+    const isManager = this.authz.can(Permission.ROUTE_ASSIGN) || this.authz.can(Permission.ROUTE_WRITE);
     // Ni anda rutas ni las administra (auditor, visor): no registra visitas. Antes lo frenaba la puerta del controlador.
     if (!canExecute && !isManager) throw visitForbidden();
     // Sin parada no hay ruta de la que decir quién manda: solo el cobrador registra una visita suelta sobre un crédito.
@@ -268,7 +270,7 @@ export class FieldService {
         if (!s) throw resourceNotFound();
         // 🔴 Quién puede registrar sobre ESTA parada: su cobrador, o quien administra rutas (y por tanto quien la armó).
         // Antes cualquier ejecutor registraba sobre la parada de otro cobrador.
-        const roles = routeRoles({ userId: actorId, can: (p) => this.tenant.can(p) }, s.route);
+        const roles = routeRoles({ userId: actorId, can: (p) => this.authz.can(p) }, s.route);
         if (!roles.manager && !roles.isCollector) throw resourceNotFound();
         if (s.route.status === 'CANCELLED') throw visitRouteCancelled();
         onBehalf = actorId !== s.route.collectorId;
@@ -406,8 +408,8 @@ export class FieldService {
     if (dto.content && !verifyEvidenceHash(dto.content, dto.fileHash)) throw evidenceHashInvalid();
 
     const actorId = this.tenant.userId!;
-    const isManager = this.tenant.can(Permission.ROUTE_ASSIGN) || this.tenant.can(Permission.ROUTE_WRITE);
-    if (!isManager && !this.tenant.can(Permission.ROUTE_EXECUTE)) throw visitForbidden();
+    const isManager = this.authz.can(Permission.ROUTE_ASSIGN) || this.authz.can(Permission.ROUTE_WRITE);
+    if (!isManager && !this.authz.can(Permission.ROUTE_EXECUTE)) throw visitForbidden();
     const hash = dto.fileHash.trim().toLowerCase();
 
     const { evidence, replay } = await this.tx(async (tx) => {

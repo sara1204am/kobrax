@@ -1,6 +1,9 @@
 import { describe, it } from 'node:test';
+import { fakePolicy } from '../../common/authz/testing';
 import assert from 'node:assert/strict';
 import { Permission, RoleType } from '@kobrax/shared';
+import { OfficeScopeService } from '../../common/office-scope/office-scope.service';
+import { OfficeScopeService } from '../../common/office-scope/office-scope.service';
 import { AssignmentService } from './assignment.service';
 import { rejectsWithCode } from '../auth/auth-test-utils';
 
@@ -60,7 +63,7 @@ function make(opts: Opts = {}) {
       findMany: async ({ where }: { where: { id: { in: string[] } } }) =>
         where.id.in.flatMap((id) => {
           const c = credits.get(id);
-          return c && !c.deletedAt ? [{ ...c }] : [];
+          return c && !c.deletedAt ? [{ ...c, branch: c.branchId ? { path: `/${c.branchId}/` } : null }] : [];
         }),
       updateMany: async ({ where, data }: { where: { id: { in: string[] } }; data: { assignedManagerId: string | null } }) => {
         for (const id of where.id.in) credits.get(id)!.assignedManagerId = data.assignedManagerId;
@@ -105,6 +108,12 @@ function make(opts: Opts = {}) {
         return { count: hit.length };
       },
     },
+    userBranchAssignment: {
+      findMany: async ({ where }: { where: { userId?: { in: string[] } } }) =>
+        (opts.members ?? [])
+          .filter((m) => (where.userId ? where.userId.in.includes(m.userId) : true) && m.branchId)
+          .map((m) => ({ userId: m.userId, branch: { path: `/${m.branchId}/` } })),
+    },
     userAccount: {
       findMany: async ({ where }: { where: { userId?: { in: string[] }; isActive?: boolean } }) =>
         (opts.members ?? [])
@@ -128,6 +137,8 @@ function make(opts: Opts = {}) {
 
   const prisma = {
     withTenant: async (_acc: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
+    // F14 · F2b: el barrido de vencimientos es trabajo de sistema.
+    withSystemTenant: async (_acc: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
     $queryRaw: async () => [{ account_id: 'acc-A' }],
   };
   const permissions = opts.permissions ?? [];
@@ -137,7 +148,7 @@ function make(opts: Opts = {}) {
     record: async (e: (typeof audited)[number]) => void audited.push(e),
     recordMany: async (es: typeof audited) => void audited.push(...es),
   };
-  const service = new AssignmentService(prisma as never, tenant as never, audit as never);
+  const service = new AssignmentService(prisma as never, tenant as never, audit as never, new OfficeScopeService(tenant as never), undefined, fakePolicy().service);
   const agendaOf = (id: string) => agenda.find((a) => a.id === id)!;
   return { service, credits, assignments, agenda, agendaOf, audited, auditLogs, tx: tx as never };
 }

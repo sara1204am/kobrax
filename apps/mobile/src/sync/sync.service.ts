@@ -20,6 +20,7 @@ import { getUserId } from '../session';
 import { useNetStore } from '../store/net';
 import { enqueue, pendingActions, send, stabilize, type QueuedAction, type SendResult } from './queue';
 import { writeProvisionalClient, writeProvisionalCredit } from './optimistic';
+import { explainRejection } from './rejection';
 
 /** Después de esto, el ítem queda esperando un reintento manual. */
 const MAX_ATTEMPTS = 3;
@@ -67,7 +68,8 @@ export async function drain(userId: string, opts: { force?: boolean } = {}): Pro
         res.stopped = r.status;
         break; // sin red, sin sesión o app vieja: lo que sigue va a fallar igual (y nada se descarta ni cuenta intento)
       }
-      if (r.permanent) await db.markRejected(item.id, r.message);
+      // La agenda ya trae sus propias explicaciones (`agenda-conflicts.ts`); el resto se explica acá (F14 · F8, N-06).
+      if (r.permanent) await db.markRejected(item.id, item.action.kind.startsWith('agenda.') ? r.message : explainRejection({ httpStatus: r.httpStatus, code: r.code, message: r.message }));
       else await db.markFailed(item.id, r.message);
       res.failed += 1;
     }
@@ -121,13 +123,23 @@ export async function refreshPendingCount(userId: string): Promise<number> {
  * el desmontaje. **Sin red no despierta nada** — en un teléfono de gama baja bajo el sol, la
  * batería es parte de la UX (epic §3.3.2).
  */
-export function startSync(userId: string): () => void {
+export function startSync(userId: string, opts: { beforeReconnectDrain?: () => Promise<boolean> } = {}): () => void {
   void drain(userId);
+
+  /**
+   * Al RECONECTAR, antes de subir lo guardado se lee de nuevo quién es la persona y qué puede hacer (F14 · F8, N-06): si le cambiaron el rol mientras
+   * estaba sin señal, sus permisos y su ventana se actualizan primero, y si la sesión ya no vale no se intenta subir nada. Sin esta lectura el
+   * servidor igual rechaza lo que no corresponda; esto evita que la app crea una cosa y el servidor otra.
+   */
+  const reconnect = async () => {
+    if (opts.beforeReconnectDrain && !(await opts.beforeReconnectDrain().catch(() => true))) return;
+    await drain(userId);
+  };
 
   let ultimaConexion = useNetStore.getState().isConnected;
   const unsub = useNetStore.subscribe((s) => {
     // Sólo el flanco de subida: de sin red a con red. Sin esto, cada cambio del store dispararía.
-    if (s.isConnected && !ultimaConexion) void drain(userId);
+    if (s.isConnected && !ultimaConexion) void reconnect();
     ultimaConexion = s.isConnected;
   });
 

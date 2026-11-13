@@ -1,14 +1,10 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 import { Permission } from '@kobrax/shared';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { TenantGuard } from '../auth/guards/tenant.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { AssignmentService } from './assignment.service';
 import { BulkReassignDto, CreateSupportAssignmentDto, CreateTemporaryAssignmentDto } from './dto/assignment.dto';
 
 @Controller('assignments')
-@UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 export class AssignmentsController {
   constructor(private readonly assignments: AssignmentService) {}
 

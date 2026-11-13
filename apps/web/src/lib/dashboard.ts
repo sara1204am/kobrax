@@ -8,6 +8,9 @@ import { isUuid } from './uuid';
  * la persona estaba mirando. Nada de estado global.
  */
 
+/** La cookie que recuerda la última pestaña (tablero) que miró la persona. La escribe el navegador; el servidor la lee al abrir. */
+export const DASHBOARD_VIEW_COOKIE = 'k_dash_view';
+
 const IS_DAY = /^\d{4}-\d{2}-\d{2}$/;
 const day = (d: Date): string => d.toISOString().slice(0, 10);
 const shift = (d: Date, days: number): Date => new Date(d.getTime() + days * 86_400_000);

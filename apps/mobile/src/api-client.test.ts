@@ -8,6 +8,7 @@ jest.mock('./session', () => ({
 import { apiFetch } from './api';
 import { clearSession, getSession, saveSession } from './session';
 import { apiMutate, authedFetch } from './api-client';
+import { takeSessionNotice } from './session-notice';
 
 const mockFetch = apiFetch as jest.Mock;
 const mockGetSession = getSession as jest.Mock;
@@ -115,5 +116,57 @@ describe('authedFetch — 401 por credencial equivocada no es sesión muerta', (
       .mockResolvedValueOnce({ status: 200, data: { ok: 1 }, error: null });
     expect((await authedFetch('/x')).status).toBe(200);
     expect(mockFetch).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('authedFetch — AUTHZ_STALE (F14 · F1, H-2)', () => {
+  const stale = { status: 401, data: null, error: { code: 'AUTHZ_STALE', message: 'x' } };
+
+  it('AUTHZ_STALE → refresca y reintenta UNA vez con el token nuevo → 200', async () => {
+    mockGetSession.mockResolvedValue(SESSION);
+    mockFetch
+      .mockResolvedValueOnce(stale)
+      .mockResolvedValueOnce({ status: 200, data: { accessToken: 'a2', refreshToken: 'r2' }, error: null })
+      .mockResolvedValueOnce({ status: 200, data: { ok: 1 }, error: null });
+    const res = await authedFetch('/x');
+    expect(res.status).toBe(200);
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(mockFetch).toHaveBeenLastCalledWith('/x', expect.objectContaining({ token: 'a2' }));
+  });
+
+  it('segundo AUTHZ_STALE tras refrescar → no reintenta otra vez y limpia la sesión (login)', async () => {
+    mockGetSession.mockResolvedValue(SESSION);
+    mockFetch
+      .mockResolvedValueOnce(stale)
+      .mockResolvedValueOnce({ status: 200, data: { accessToken: 'a2', refreshToken: 'r2' }, error: null })
+      .mockResolvedValueOnce(stale);
+    const res = await authedFetch('/x');
+    expect(res.status).toBe(401);
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(clearSession).toHaveBeenCalled();
+  });
+});
+
+describe('refresh rechazado por rol fuera del móvil (F14 · F8, D-3)', () => {
+  it('🔴 403 MOBILE_ROLE_NOT_ALLOWED → limpia la sesión Y deja el aviso para el ingreso', async () => {
+    takeSessionNotice();
+    mockGetSession.mockResolvedValue(SESSION);
+    mockFetch
+      .mockResolvedValueOnce({ status: 401, data: null, error: { code: 'AUTH_003', message: 'x' } }) // petición original
+      .mockResolvedValueOnce({ status: 403, data: null, error: { code: 'MOBILE_ROLE_NOT_ALLOWED', message: 'Tu rol se usa desde la web: entra desde el navegador' } }); // refresh
+    const res = await authedFetch('/x');
+    expect(res.status).toBe(401);
+    expect(clearSession).toHaveBeenCalled();
+    expect(takeSessionNotice()).toBe('Tu rol se usa desde la web: entra desde el navegador');
+  });
+
+  it('un refresh rechazado por otra razón no deja ningún aviso', async () => {
+    takeSessionNotice();
+    mockGetSession.mockResolvedValue(SESSION);
+    mockFetch
+      .mockResolvedValueOnce({ status: 401, data: null, error: { code: 'AUTH_003', message: 'x' } })
+      .mockResolvedValueOnce({ status: 401, data: null, error: { code: 'AUTH_003', message: 'sesión vencida' } });
+    await authedFetch('/x');
+    expect(takeSessionNotice()).toBeNull();
   });
 });

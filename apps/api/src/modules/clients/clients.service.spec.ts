@@ -1,4 +1,5 @@
 import { describe, it } from 'node:test';
+import { fakePolicy } from '../../common/authz/testing';
 import assert from 'node:assert/strict';
 import { fakePlanLimits } from '../../common/plan/plan-test-utils';
 import { ClientsService } from './clients.service';
@@ -116,7 +117,7 @@ function makeService(
     creditActivity: { groupBy: async () => opts.pdf?.lastActions ?? [] },
     account: { findUnique: async () => ({ businessName: 'Demo', currencyCode: 'BOB' }) },
   };
-  const prisma = { withTenant: async (_acc: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
+  const prisma = { withTenant: async (_acc: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx), elevated: async (_tx: unknown, fn: () => Promise<unknown>) => fn() };
   // `can` por defecto dice que sí a todo; los tests de la bitácora le pasan la lista que quieren.
   const tenant = { accountId: 'acc-A', can: (p: string) => opts.permissions?.includes(p) ?? true };
   const crypto = {
@@ -142,6 +143,8 @@ function makeService(
     blind as never,
     audit as never,
     fakePlanLimits(),
+    undefined,
+    fakePolicy().service,
   );
   return { service, calls };
 }
@@ -416,7 +419,7 @@ describe('ClientsService.list — cartera (view=portfolio)', () => {
     const sql = pageSql(calls).sql;
     assert.doesNotMatch(sql, /collection_cases/, 'F4/08: el cobrador ya no es el del caso');
     assert.match(sql, /EXISTS \(\s*SELECT 1 FROM credits k\s*WHERE k\.client_id = c\.id AND k\.deleted_at IS NULL AND k\.assigned_manager_id = \?/);
-    assert.match(sql, /k\.branch_id = \?/);
+    assert.match(sql, /k\.branch_id IN \(\s*SELECT nb\.id FROM branches nb/);
     assert.doesNotMatch(sql, /\bJOIN\b/);
   });
 
@@ -527,7 +530,7 @@ describe('ClientsService.list — cartera (view=portfolio)', () => {
   it('🔴 la fuente que no se puede ver no entra en la consulta', async () => {
     // La bitácora cruza tres dominios con tres permisos. Sin esta guarda, la ficha del cliente sería
     // la puerta de atrás para leer pagos sin `payment:read`.
-    const { service, calls } = makeService({ rows: [], permissions: ['client:read', 'agenda:read'] });
+    const { service, calls } = makeService({ rows: [], permissions: ['client:read', 'agenda:read', 'data:scope:all'] });
     await service.timeline('c1', {});
 
     const sql = calls.sql[0]!.sql;
@@ -540,7 +543,7 @@ describe('ClientsService.list — cartera (view=portfolio)', () => {
   it('🔴 sin ninguno de los tres permisos no se consulta nada', async () => {
     // `UNION ALL` de cero partes no es SQL válido: sin la guarda, la ficha reventaría con un 500 en
     // vez de mostrar una bitácora vacía.
-    const { service, calls } = makeService({ rows: [], permissions: ['client:read'] });
+    const { service, calls } = makeService({ rows: [], permissions: ['client:read', 'data:scope:all'] });
     const res = await service.timeline('c1', {});
 
     assert.deepEqual(calls.sql, []);

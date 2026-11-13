@@ -90,7 +90,7 @@ export class PlanLifecycleService implements OnApplicationBootstrap, OnModuleDes
   }
 
   async scanAccount(accountId: string, now: Date = new Date()): Promise<PlanLifecycleResult> {
-    return this.prisma.withTenant(accountId, async (tx) => {
+    return this.prisma.withSystemTenant(accountId, async (tx) => {
       const account = await tx.account.findFirst({
         where: { id: accountId, deletedAt: null },
         select: { status: true, planCode: true, settings: true, businessName: true, createdAt: true },

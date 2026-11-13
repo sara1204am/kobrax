@@ -1,15 +1,11 @@
-import { Body, Controller, Delete, Get, Param, ParseEnumPipe, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseEnumPipe, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { CatalogType } from '@prisma/client';
 import { Permission } from '@kobrax/shared';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { TenantGuard } from '../auth/guards/tenant.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CatalogsService } from './catalogs.service';
 import { CreateCatalogItemDto, UpdateCatalogItemDto } from './dto/catalog.dto';
 
 @Controller('catalogs')
-@UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 export class CatalogsController {
   constructor(private readonly catalogs: CatalogsService) {}
 

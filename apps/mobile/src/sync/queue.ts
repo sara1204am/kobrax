@@ -384,7 +384,7 @@ export type SendResult =
   | { status: 'auth' }
   /** 426: esta versión de la app ya no es compatible. No es un rechazo: lo pendiente espera a que se actualice. */
   | { status: 'upgrade' }
-  | { status: 'error'; message: string; permanent?: boolean; code?: string };
+  | { status: 'error'; message: string; permanent?: boolean; code?: string; /** Lo que contestó el servidor (F14 · F8): la hoja de pendientes lo traduce a un motivo claro. */ httpStatus?: number };
 
 const LOST_PHOTO = 'La foto ya no está en el teléfono (el sistema la borró). Descartá este aviso.';
 
@@ -702,7 +702,13 @@ function mapMutate(res: { status: string; message?: string; httpStatus?: number;
   if (res.status === 'unauthenticated') return { status: 'auth' };
   // El corte de versión no descarta nada: el drenaje se detiene y la cola espera a la actualización.
   if (res.status === 'error' && res.httpStatus === 426) return { status: 'upgrade' };
-  return { status: 'error', message: res.message ?? 'No se pudo subir', permanent: isPermanentRejection(res.httpStatus), ...(res.code ? { code: res.code } : {}) };
+  return {
+    status: 'error',
+    message: res.message ?? 'No se pudo subir',
+    permanent: isPermanentRejection(res.httpStatus),
+    ...(res.code ? { code: res.code } : {}),
+    ...(res.httpStatus !== undefined ? { httpStatus: res.httpStatus } : {}),
+  };
 }
 
 /** Un DELETE que devuelve 404 ya está hecho: no es un error. */

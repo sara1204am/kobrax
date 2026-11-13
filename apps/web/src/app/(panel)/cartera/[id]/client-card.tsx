@@ -13,7 +13,7 @@ import { Modal } from '@/components/modal';
 import { usePermissions } from '@/components/permissions';
 import { useToast } from '@/components/toast';
 import { postJson, sendJson } from '@/lib/client';
-import { date, fullName } from '@/lib/format';
+import { date, fullName, money } from '@/lib/format';
 import { ContactList, LocationList } from './client-contacts';
 import { CollateralsSection, GuarantorsSection } from './backing-sections';
 import { AttachmentsSection } from './attachments-section';
@@ -85,6 +85,11 @@ export function ClientCard({
   const [editando, setEditando] = useState<SectionKey | null>(null);
 
   const canWrite = can('client:write');
+  // F14 · F2 (H-12): borrar un cliente es de quien administra la cuenta, no de quien puede editarlo.
+  const canDelete = can('client:delete');
+  // F14 · F4 (H-5): quien no tiene `client:contact:read` (VIEWER) no recibe contactos, ubicaciones ni adjuntos; la API no los manda y la
+  // pantalla no ofrece secciones vacías ni el botón de revelar (que la API negaría con 403).
+  const canSeeContact = can('client:contact:read');
 
   async function darDeBaja() {
     setBusy(true);
@@ -189,7 +194,7 @@ export function ClientCard({
             </a>
             {/* La baja no se ofrece si hay plata en la calle: la API la rechaza igual, pero un
                 botón que siempre falla enseña a desconfiar de la pantalla. */}
-            {canWrite && !hasActiveCredits && shown.status !== 'INACTIVE' && (
+            {canDelete && !hasActiveCredits && shown.status !== 'INACTIVE' && (
               <button
                 type="button"
                 onClick={() => setConfirmBaja(true)}
@@ -201,6 +206,17 @@ export function ClientCard({
           </>
         }
       />
+
+      {/* F14 · F2 (H-7): el cliente no tiene dueño. Si tiene créditos que yo no veo, un aviso con SÓLO agregados (nunca su detalle). */}
+      {shown.otherCredits && (
+        <p role="note" className="mb-4 rounded-lg bg-k-highlight px-4 py-3 text-[13px] text-k-periwinkle">
+          {t('otherCredits.notice', {
+            count: shown.otherCredits.count,
+            total: money(shown.otherCredits.totalOutstanding, currency),
+            names: shown.otherCredits.responsibles.map((p) => p.name).join(', ') || t('otherCredits.nobody'),
+          })}
+        </p>
+      )}
 
       <SendWhatsappDialog open={writing} onClose={() => setWriting(false)} clientId={client.id} />
 
@@ -253,7 +269,7 @@ export function ClientCard({
             <Section
               title={t('sections.credits')}
               action={
-                can('credit:write') && (
+                can('credit:create') && (
                   <Link
                     href={`/cartera/${client.id}/prestamo`}
                     className="inline-flex min-h-[32px] items-center rounded-lg bg-k-highlight px-3 text-[13px] font-medium text-k-periwinkle hover:bg-k-light-bg"
@@ -274,6 +290,7 @@ export function ClientCard({
            * 🔴 El «Mostrar» de cada fila **revela la ficha entera** —una sola entrada de auditoría,
            * que es la verdad de lo que pasó—; por eso las dos listas comparten el mismo `reveal`.
            */}
+          {canSeeContact && (
           <div className="grid gap-5 sm:grid-cols-2">
             <ContactList
               rows={shown.contacts ?? []}
@@ -293,11 +310,12 @@ export function ClientCard({
               modalities={collectionModalities}
             />
           </div>
+          )}
 
           {/* 🔴 Con `client`, no con `shown`: los adjuntos no llevan máscara, y `shown` es una copia
               congelada del primer render — el `router.refresh()` de la subida traía el adjunto
               nuevo y no se veía hasta recargar la página. */}
-          <AttachmentsSection clientId={client.id} rows={client.attachments ?? []} canWrite={canWrite} />
+          {canSeeContact && <AttachmentsSection clientId={client.id} rows={client.attachments ?? []} canWrite={canWrite} />}
         </div>
 
         {/* La columna de consulta: cuánto debe, qué se hizo, y quién responde si no paga. */}

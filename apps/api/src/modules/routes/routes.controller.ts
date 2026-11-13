@@ -1,9 +1,6 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query, StreamableFile, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query, StreamableFile } from '@nestjs/common';
 import { Permission } from '@kobrax/shared';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { TenantGuard } from '../auth/guards/tenant.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { Roles, RolesAny } from '../auth/decorators/roles.decorator';
 import { RoutesService } from './routes.service';
 import { RouteChangesService } from './route-changes.service';
 import { buildRoutePdf } from './route-pdf';
@@ -21,18 +18,16 @@ import {
 } from './dto/route.dto';
 
 @Controller('routes')
-@UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 export class RoutesController {
   constructor(
     private readonly routes: RoutesService,
     private readonly changes: RouteChangesService,
   ) {}
 
-  // Puerta mínima, igual que `generate`: el cobrador arma SU ruta desde el mapa (RT-1) y no tiene
-  // ROUTE_WRITE — con esa puerta el flujo entero moría en 403. Para quién es la ruta lo decide
-  // `collectorFor` en el service, que ya 403ea a quien no ejecuta ni asigna.
+  // F14·F3 (R-05): la puerta real, declarada en el guard — alguno de ejecutar / escribir / asignar (el cobrador arma SU ruta
+  // desde el mapa y no tiene ROUTE_WRITE). Para quién es la ruta lo decide `collectorFor` en el service.
   @Post()
-  @Roles(Permission.ROUTE_READ)
+  @RolesAny(Permission.ROUTE_EXECUTE, Permission.ROUTE_WRITE, Permission.ROUTE_ASSIGN)
   create(@Body() dto: CreateRouteDto) {
     return this.routes.create(dto);
   }
@@ -40,21 +35,21 @@ export class RoutesController {
   // Puerta mínima: quién genera y PARA QUIÉN lo decide el service por capacidad
   // (ROUTE_ASSIGN = para cualquiera; ROUTE_EXECUTE = sólo la propia; ninguna = 403).
   @Post('generate')
-  @Roles(Permission.ROUTE_READ)
+  @RolesAny(Permission.ROUTE_EXECUTE, Permission.ROUTE_WRITE, Permission.ROUTE_ASSIGN)
   generate(@Body() dto: GenerateRouteDto) {
     return this.routes.generate(dto);
   }
 
   /** La vista previa de un recorrido que todavía no se publicó (F4/12): no guarda nada. */
   @Post('plan-preview')
-  @Roles(Permission.ROUTE_READ)
+  @RolesAny(Permission.ROUTE_EXECUTE, Permission.ROUTE_WRITE, Permission.ROUTE_ASSIGN)
   planPreview(@Body() dto: PlanPreviewDto) {
     return this.routes.previewPoints(dto);
   }
 
   /** El camino por las calles entre dos puntos (de «dónde estoy» a una parada): no guarda nada. */
   @Post('leg')
-  @Roles(Permission.ROUTE_READ)
+  @RolesAny(Permission.ROUTE_EXECUTE, Permission.ROUTE_WRITE, Permission.ROUTE_ASSIGN)
   leg(@Body() dto: LegDto) {
     return this.routes.leg(dto);
   }

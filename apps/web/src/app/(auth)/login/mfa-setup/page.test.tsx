@@ -1,12 +1,21 @@
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { server } from '@/test/msw-server';
+import { hardNav } from '@/lib/client';
 import MfaSetupPage from './page';
 
 const { replace, push } = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push, replace }) }));
+
+const { hardNavigate } = vi.hoisted(() => ({ hardNavigate: vi.fn() }));
+// El login termina con una carga completa (`window.location.replace`), no con el router.
+beforeEach(() => {
+  hardNavigate.mockClear();
+  vi.spyOn(hardNav, 'replace').mockImplementation(hardNavigate);
+});
+afterEach(() => vi.restoreAllMocks());
 vi.mock('qrcode', () => ({ default: { toDataURL: async () => 'data:image/png;base64,AAAA' } }));
 
 /** Arranque: `start` entrega el secreto y `/auth/me` dice si ya hay sesión. */
@@ -40,7 +49,7 @@ describe('MfaSetupPage · Lo hago después (W-LOG-51)', () => {
     render(<MfaSetupPage />);
     await userEvent.click(await screen.findByRole('button', { name: 'Lo hago después' }));
 
-    await vi.waitFor(() => expect(replace).toHaveBeenCalledWith('/dashboard'));
+    await vi.waitFor(() => expect(hardNavigate).toHaveBeenCalledWith('/dashboard'));
     expect(actions).toContain('skip');
   });
 

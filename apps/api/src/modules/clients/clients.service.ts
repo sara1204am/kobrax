@@ -4,12 +4,14 @@ import type { PrismaClient } from '@prisma/client';
 import { ClientType, Prisma } from '@prisma/client';
 import {
   Permission,
+  looksMasked,
   maskDocument,
   resolvePagination,
   searchTerms,
   type ApiResponse,
   type ClientDuplicateCheck,
   type ClientDuplicateMatch,
+  ClientPreview,
   type ClientTimelineEntry,
   ResponseDto,
   validateCollectionProfile,
@@ -18,12 +20,15 @@ import {
 import { PrismaService } from '../../database/prisma.service';
 import { nameTerms } from '../../common/name-search';
 import { nameKey } from '../../common/name-key';
+import { moraScopeOf, seesWholeAccount, visibleClientIdsSql, visibleCredits } from '../mora/mora-query';
+import { loadNames } from '../mora/mora-names';
+import { summarizeOtherCredits, type OtherCredits } from './other-credits';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { BlindIndexService } from '../../common/crypto/blind-index.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { PlanLimitsService } from '../../common/plan/plan-limits.service';
-import { clientDisplayName, serializeClient, serializeIncomeProfile, type PortfolioClient, type PortfolioTotals } from './clients.serializer';
+import { clientDisplayName, serializeClient, serializeIncomeProfile, type PortfolioClient, type PortfolioTotals, type SerializeOpts } from './clients.serializer';
 import type { ClientPdfBundle, ClientPdfContext } from './client-pdf';
 import {
   ClientDuplicateCheckDto,
@@ -46,11 +51,16 @@ import {
 import {
   clientDuplicate,
   clientHasActiveCredits,
+  documentMasked,
   invalidClientIdentity,
   invalidCollectionProfile,
   invalidIncomeProfile,
   resourceNotFound,
 } from './clients.errors';
+import { AuthorizationService } from '../../common/authz/authorization.service';
+import { PolicyService } from '../../common/authz/policy.service';
+import { PiiService } from '../../common/authz/pii.service';
+import type { AppConfigService } from '../../config/app-config.service';
 
 /** PII del cliente que se redacta en los snapshots de auditoría. */
 const CLIENT_REDACT = ['nationalId', 'taxId', 'value', 'address', 'phone'];
@@ -123,11 +133,45 @@ export class ClientsService {
     private readonly blind: BlindIndexService,
     private readonly audit: AuditService,
     private readonly plan: PlanLimitsService,
+    private readonly authz: AuthorizationService = new AuthorizationService(tenant),
+    /** F14 · F2: políticas con hechos de la DB (`client.create`). Lo inyecta Nest; los specs que no pasan por el alta no lo necesitan. */
+    private readonly policies: PolicyService,
+    /** F14 · F4: qué categorías de PII ve quien pregunta. Lo inyecta Nest; los specs anteriores a F4 usan el valor por omisión. */
+    private readonly pii: PiiService = new PiiService(tenant, { piiMobileMask: false } as AppConfigService),
   ) {}
+
+  /** Opciones de serialización según lo que ve quien pregunta (F14 · F4). `reveal` ya viene resuelto por la política. */
+  private opts(reveal: boolean, revealDocument?: boolean): SerializeOpts {
+    return { crypto: this.crypto, reveal, revealDocument, contact: this.pii.canSeeContact(), economic: this.pii.canSeeEconomic() };
+  }
 
   /** Ejecuta `fn` en el contexto RLS del tenant actual (del TenantContextService). */
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
     return this.prisma.withTenant(this.tenant.accountId, fn);
+  }
+
+  /**
+   * D-7 (F13): los clientes que esta persona ve, con LA MISMA regla que Mora (`visibleClientIdsSql`). `null` = toda la
+   * cuenta (kind ALL): no se filtra nada y el código de ese camino queda como estaba.
+   */
+  private visibleScope() {
+    const scope = moraScopeOf(this.tenant);
+    return seesWholeAccount(scope) ? null : scope;
+  }
+
+  /** ¿Este cliente entra en el alcance de quien pregunta? Quien ve toda la cuenta no paga ni una consulta. */
+  private async isClientVisible(tx: PrismaClient, clientId: string): Promise<boolean> {
+    const scope = this.visibleScope();
+    if (!scope) return true;
+    const rows = await tx.$queryRaw<{ ok: number }[]>(
+      Prisma.sql`SELECT 1 AS ok FROM (${visibleClientIdsSql(scope)}) v(id) WHERE v.id = ${clientId} LIMIT 1`,
+    );
+    return rows.length > 0;
+  }
+
+  /** Un cliente fuera del alcance responde 404, igual que si no existiera. */
+  private async assertClientVisible(tx: PrismaClient, clientId: string): Promise<void> {
+    if (!(await this.isClientVisible(tx, clientId))) throw resourceNotFound();
   }
 
   private enc(value?: string | null): string | null {
@@ -135,8 +179,18 @@ export class ClientsService {
   }
 
   // ── Clientes ────────────────────────────────────────────────────────────────
+  /**
+   * F14 · F8 (D-4): un documento ENMASCARADO (`12345***`: el CI/NIT y también el RUC) nunca es un valor para guardar. Una app que lo prellenó con la máscara y lo reenvía tal
+   * cual pisaría el documento real; se rechaza y la persona debe escribir el documento completo (o no tocarlo).
+   */
+  private assertDocumentNotMasked(nationalId: string | null | undefined): void {
+    if (looksMasked(nationalId)) throw documentMasked();
+  }
+
   async create(dto: CreateClientDto): Promise<ReturnType<typeof serializeClient>> {
     this.assertIdentity(dto.clientType, dto.firstName, dto.lastName, dto.businessName);
+    this.assertDocumentNotMasked(dto.nationalId);
+    this.assertDocumentNotMasked(dto.taxId);
     // F4/13 · E2: los perfiles de cobro se validan ANTES de abrir la transacción (los del cliente y los de sus garantes).
     for (const l of dto.locations ?? []) this.assertCollectionProfile(l.visitSchedule);
     for (const r of dto.relations ?? []) for (const l of r.locations ?? []) this.assertCollectionProfile(l.visitSchedule);
@@ -152,8 +206,13 @@ export class ClientsService {
         const previo = await tx.client.findFirst({ where: { id: dto.id, deletedAt: null } });
         if (previo) return { created: previo, subs: [], yaExistia: true };
       }
+      // F14 · F2 (H-7): la oficina de registro la decide el servidor con la política `client.create` (cuenta de una oficina → esa; si no,
+      // la pedida dentro del alcance o la del actor; nunca la raíz de una cuenta con varias). Antes del chequeo de duplicados.
+      const registration = await this.policies.assert('client.create', { branchId: dto.branchId }, tx);
+      const registeredBranchId = (registration?.registeredBranchId as string | undefined) ?? null;
       if (nationalIdHash) {
-        const dup = await tx.client.findFirst({ where: { nationalIdHash } });
+        // F14 · F2b: el documento es único en TODA la cuenta; se busca sin el recorte de alcance (sólo se responde que existe).
+        const dup = await this.prisma.elevated(tx, () => tx.client.findFirst({ where: { nationalIdHash }, select: { id: true } }));
         if (dup) throw clientDuplicate();
       }
 
@@ -171,6 +230,9 @@ export class ClientsService {
             // Sólo si el móvil lo propuso (ver `CreateClientDto.id`).
             ...(dto.id ? { id: dto.id } : {}),
             accountId: this.tenant.accountId,
+            // F14 · F1: trazabilidad (NO es dueño: la responsabilidad vive en el crédito, H-7). Hace visible al cliente a su creador.
+            createdBy: this.tenant.userId ?? null,
+            registeredBranchId,
             clientType: dto.clientType,
             firstName: dto.firstName,
             lastName: dto.lastName,
@@ -247,14 +309,14 @@ export class ClientsService {
     });
 
     // Un reintento no vuelve a auditar: el alta ya quedó registrada la primera vez.
-    if (yaExistia) return serializeClient(created, { crypto: this.crypto, reveal: false });
+    if (yaExistia) return serializeClient(created, this.opts(false));
 
     // Audit fuera del tx (audit.record abre su propio withTenant), como en update().
     await this.audit.record({ entity: 'client', entityId: created.id, action: 'CREATE', after: created, redactKeys: CLIENT_REDACT });
     for (const s of subs) {
       await this.audit.record({ entity: `client_${s.kind}`, entityId: s.id, action: 'CREATE', after: s.after, redactKeys: CLIENT_REDACT });
     }
-    return serializeClient(created, { crypto: this.crypto, reveal: false });
+    return serializeClient(created, this.opts(false));
   }
 
   /**
@@ -280,7 +342,10 @@ export class ClientsService {
     const word = key?.split(' ').sort((a, b) => b.length - a.length)[0] ?? null;
 
     return this.tx(async (tx) => {
-      const byDoc = docHash ? await tx.client.findFirst({ where: { nationalIdHash: docHash }, select: DUP_SELECT }) : null;
+      // F14 · F2b (D-6): el documento se busca en TODA la cuenta (bloquea el alta), pero si ese cliente no es visible para quien
+      // pregunta, sólo se le avisa que ya está registrado: sin nombre, carnet, estado ni cantidad de créditos.
+      const byDoc = docHash ? await this.prisma.elevated(tx, () => tx.client.findFirst({ where: { nationalIdHash: docHash }, select: DUP_SELECT })) : null;
+      const docVisible = byDoc ? await this.isClientVisible(tx, byDoc.id) : true;
 
       let byName: DupRow[] = [];
       if (nameReady && key && word) {
@@ -303,10 +368,32 @@ export class ClientsService {
       }
 
       return {
-        document: byDoc ? this.dupMatch(byDoc, docHash) : null,
+        document: byDoc ? (docVisible ? this.dupMatch(byDoc, docHash) : this.hiddenMatch(byDoc, docHash)) : null,
         names: byName.map((c) => this.dupMatch(c, docHash)),
       };
     });
+  }
+
+  /**
+   * El duplicado de un cliente que no se ve (D-6 revisada): el nombre y el carnet enmascarado —para que se sepa de quién se trata— y
+   * el `id` para crear el crédito propio sobre él. Sin cantidad de créditos.
+   */
+  private hiddenMatch(c: DupRow, docHash: string | null): ClientDuplicateMatch {
+    return { ...this.dupMatch(c, docHash), creditCount: 0, hidden: true };
+  }
+
+  /**
+   * Lo mínimo para crearle MI crédito a un cliente que todavía no veo (F14 · F2b): nombre, carnet enmascarado y agregados de los
+   * créditos de otras personas. Exige `credit:create`; quien ya lo ve recibe `visible: true`.
+   */
+  async preview(id: string): Promise<ClientPreview> {
+    const c = await this.tx((tx) =>
+      this.prisma.elevated(tx, () => tx.client.findFirst({ where: { id, deletedAt: null }, select: DUP_SELECT })),
+    );
+    if (!c) throw resourceNotFound();
+    const visible = await this.tx((tx) => this.isClientVisible(tx, id));
+    const m = this.dupMatch(c, null);
+    return { id: c.id, displayName: m.displayName, maskedDocument: m.maskedDocument, status: m.status, visible, otherCredits: await this.otherCredits(id) };
   }
 
   private dupMatch(c: DupRow, docHash: string | null): ClientDuplicateMatch {
@@ -348,6 +435,32 @@ export class ClientsService {
       ];
     }
 
+    const scope = this.visibleScope();
+    if (scope) {
+      /*
+       * D-7: Prisma no admite SQL crudo en un `where`. Antes se traían TODOS los ids visibles y se acotaba con `id IN (…)`: con más
+       * de 32 767 clientes visibles el `IN` revienta el tope de parámetros de Postgres (500). Ahora la página y el total salen de
+       * SQL con la subconsulta de visibilidad —nunca una lista de ids en memoria— y sólo los ≤ `limit` ids de la página vuelven
+       * a Prisma. Los filtros (estado, riesgo, búsqueda) son los mismos de `view=portfolio` (`portfolioWhere`).
+       */
+      // Sólo los filtros de ESTE listado (estado, riesgo, búsqueda): `portfolioWhere` también sabe de responsable, oficina, fuente y rangos de
+      // deuda / mora, que el listado simple no aplica para quien ve toda la cuenta. Mismos filtros = mismo resultado para todos los roles.
+      const simple = { status: query.status, risk: query.risk, q: query.q } as ListClientsQueryDto;
+      const whereScoped = Prisma.sql`${this.portfolioWhere(simple)} AND c.id IN (${visibleClientIdsSql(scope)})`;
+      // Una sola transacción: página, total y lectura de las filas ven el mismo estado (y se abre un solo SET LOCAL ROLE).
+      const { ids, counted, found } = await this.tx(async (tx) => {
+        const [pageIds, count] = await Promise.all([
+          tx.$queryRaw<{ id: string }[]>(Prisma.sql`SELECT c.id FROM clients c WHERE ${whereScoped} ORDER BY c.created_at DESC, c.id LIMIT ${limit} OFFSET ${skip}`),
+          tx.$queryRaw<{ total: number }[]>(Prisma.sql`SELECT COUNT(*)::int AS total FROM clients c WHERE ${whereScoped}`),
+        ]);
+        const rowsFound = await tx.client.findMany({ where: { id: { in: pageIds.map((r) => r.id) } } });
+        return { ids: pageIds, counted: count, found: rowsFound };
+      });
+      const byId = new Map(found.map((c) => [c.id, c]));
+      const ordered = ids.flatMap((r) => (byId.has(r.id) ? [byId.get(r.id)!] : [])); // el orden es el de la consulta, no el del IN
+      const data = ordered.map((c) => serializeClient(c, this.opts(false)));
+      return ResponseDto.paginated(data, counted[0]?.total ?? 0, page, limit);
+    }
     const [rows, total] = await this.tx((tx) =>
       Promise.all([
         tx.client.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: limit }),
@@ -355,7 +468,7 @@ export class ClientsService {
       ]),
     );
 
-    const data = rows.map((c) => serializeClient(c, { crypto: this.crypto, reveal: false }));
+    const data = rows.map((c) => serializeClient(c, this.opts(false)));
     return ResponseDto.paginated(data, total, page, limit);
   }
 
@@ -392,6 +505,8 @@ export class ClientsService {
     skip: number,
   ): Promise<ApiResponse<PortfolioClient[]>> {
     const where = this.portfolioWhere(query);
+    const scope = this.visibleScope();
+    const whereScoped = scope ? Prisma.sql`${where} AND c.id IN (${visibleClientIdsSql(scope)})` : where; // D-7
     const página = Prisma.sql`
       SELECT c.id,
              c.total_debt::float8  AS total_debt,
@@ -400,10 +515,10 @@ export class ClientsService {
              c.total_debt_external::float8 AS total_debt_external,
              c.max_days_past_due_external  AS max_days_past_due_external
       FROM clients c
-      WHERE ${where}
+      WHERE ${whereScoped}
       ORDER BY ${this.portfolioOrder(query)}
       LIMIT ${limit} OFFSET ${skip}`;
-    const cuenta = Prisma.sql`SELECT COUNT(*)::int AS total FROM clients c WHERE ${where}`;
+    const cuenta = Prisma.sql`SELECT COUNT(*)::int AS total FROM clients c WHERE ${whereScoped}`;
 
     const [rows, totals] = await this.tx((tx) =>
       Promise.all([tx.$queryRaw<PortfolioRow[]>(página), tx.$queryRaw<{ total: number }[]>(cuenta)]),
@@ -418,7 +533,7 @@ export class ClientsService {
       if (!client) return []; // borrado entre las dos consultas
       return [
         {
-          ...serializeClient(client, { crypto: this.crypto, reveal: false }),
+          ...serializeClient(client, this.opts(false)),
           totalDebt: Math.round(r.total_debt * 100) / 100,
           maxDaysPastDue: r.max_days_past_due,
           creditCount: r.credit_count,
@@ -460,7 +575,9 @@ export class ClientsService {
     if (query.branchId) {
       conds.push(Prisma.sql`EXISTS (
         SELECT 1 FROM credits k
-        WHERE k.client_id = c.id AND k.deleted_at IS NULL AND k.branch_id = ${query.branchId})`);
+        WHERE k.client_id = c.id AND k.deleted_at IS NULL AND k.branch_id IN (
+          SELECT nb.id FROM branches nb WHERE nb.account_id = k.account_id
+            AND nb.path LIKE (SELECT n.path FROM branches n WHERE n.id = ${query.branchId} AND n.account_id = k.account_id) || '%'))`); // F13: la oficina y su subárbol
     }
     /*
      * P7 · El RESPONSABLE es del crédito: «tiene algún crédito vivo a cargo de esta persona». Desde F4/08
@@ -542,9 +659,24 @@ export class ClientsService {
     }
   }
 
-  async findOne(id: string, reveal: boolean): Promise<ReturnType<typeof serializeClient> & { linkSuggestions?: { id: string; displayName: string; creditCount: number }[] }> {
-    const client = await this.tx((tx) =>
-      tx.client.findFirst({
+  /**
+   * F14 · F4 (D-3): el cliente para una PANTALLA DE TRABAJO (Agenda, Mora, Rutas): contactos y direcciones en claro —se necesitan para
+   * cobrar— y el documento en claro sólo si `documentInClearByDefault` (administrador, gerente, auditor; el cobrador sobre su cartera).
+   * Al supervisor el documento le llega enmascarado: lo revela con la acción explícita. Audita igual que un revelado.
+   */
+  /** ¿Esta persona puede ver datos personales en claro ahora mismo? (para que otros módulos no auditen un revelado que no ocurrió). */
+  canRevealNow(): boolean {
+    return this.pii.canSeeContact() || this.pii.canReveal();
+  }
+
+  findOneForWork(id: string) {
+    return this.findOne(id, true, false, { documentClear: this.pii.documentInClearByDefault() });
+  }
+
+  async findOne(id: string, reveal: boolean, withOtherCredits = false, how: { explicit?: boolean; documentClear?: boolean } = {}): Promise<ReturnType<typeof serializeClient> & { linkSuggestions?: { id: string; displayName: string; creditCount: number }[] }> {
+    const client = await this.tx(async (tx) => {
+      await this.assertClientVisible(tx, id);
+      return tx.client.findFirst({
         where: { id, deletedAt: null },
         include: {
           // Los teléfonos/ubicaciones del cliente = los que NO cuelgan de una relación (relationId null).
@@ -556,15 +688,38 @@ export class ClientsService {
           attachments: true,
           incomeProfile: true,
         },
-      }),
-    );
+      });
+    });
     if (!client) throw resourceNotFound();
 
-    if (reveal) {
-      // Acceso a PII en claro → queda auditado (data_access_log detallado llega en F12).
-      await this.audit.record({ entity: 'client', entityId: id, action: 'PII_REVEAL' });
+    /*
+     * F14 · F4: política `pii.reveal`. Quien no puede revelar (VIEWER; el canal móvil con `PII_MOBILE_MASK` encendido) recibe un 403 si lo pidió
+     * EXPLÍCITAMENTE (`?reveal=true`) y la versión enmascarada si fue un llamador interno que sólo quería «lo más que se pueda». El documento
+     * se revela aparte (D-3): las pantallas de trabajo piden `documentClear` según `documentInClearByDefault()`.
+     */
+    // F14 · F8 (D-4): el pedido explícito exige poder ver CONTACTOS; el documento se decide aparte (`canReveal`: el móvil con la máscara no lo recibe).
+    if (reveal && how.explicit) this.pii.assertCanRevealContacts();
+    /*
+     * Los contactos y el documento se deciden APARTE (D-2/D-3): los contactos y direcciones van en claro si la persona los ve (`client:contact:read`);
+     * el documento sólo si además puede revelar (`canReveal`: no VIEWER, y no el canal móvil con `PII_MOBILE_MASK` encendido) y, cuando el
+     * llamador no pidió el revelado explícito, si su rol lo ve en claro por defecto (el supervisor, no). Así el interruptor del móvil tapa el
+     * documento pero no el teléfono que el cobrador necesita para cobrar.
+     */
+    const effContacts = reveal && this.pii.canSeeContact();
+    const documentDefault = how.documentClear ?? (how.explicit ? true : this.pii.documentInClearByDefault());
+    const effDocument = reveal && this.pii.canReveal() && documentDefault;
+    if (effContacts || effDocument) {
+      // Acceso a PII en claro → queda auditado, con las categorías REALMENTE reveladas y el canal (nunca los valores).
+      await this.audit.record({
+        entity: 'client',
+        entityId: id,
+        action: 'PII_REVEAL',
+        after: this.pii.auditAfter('client', this.pii.revealedCategories(effDocument, effContacts)),
+      });
     }
-    const serialized = serializeClient(client, { crypto: this.crypto, reveal });
+    // F14 · F2 (H-7): si hay créditos del cliente que quien mira no ve, un aviso con SÓLO agregados.
+    // Sólo lo pide la ficha (GET /clients/:id): el PDF y los demás llamadores internos no pagan esas consultas.
+    const serialized = { ...serializeClient(client, this.opts(effContacts, effDocument)), ...(withOtherCredits ? { otherCredits: await this.otherCredits(id) } : {}) };
     if (!client.linkReviewPending) return serialized;
 
     // Las sugerencias con su nombre: la pantalla de revisión no puede mostrar uuids.
@@ -573,16 +728,47 @@ export class ClientsService {
     const suggested =
       suggestionIds.length > 0
         ? await this.tx((tx) =>
-            tx.client.findMany({
-              where: { id: { in: suggestionIds }, deletedAt: null },
-              select: { id: true, firstName: true, lastName: true, businessName: true, creditCount: true },
-            }),
+            // F14 · F2b: las sugerencias son homónimos del propio archivo (el nombre ya lo trae quien importa): se leen sin el recorte
+            // de alcance para poder vincular al cliente que lleva otra persona (el vínculo no revela nada más).
+            this.prisma.elevated(tx, () =>
+              tx.client.findMany({
+                where: { id: { in: suggestionIds }, deletedAt: null },
+                select: { id: true, firstName: true, lastName: true, businessName: true, creditCount: true },
+              }),
+            ),
           )
         : [];
     return {
       ...serialized,
       linkSuggestions: suggested.map((c) => ({ id: c.id, displayName: clientDisplayName(c) ?? '—', creditCount: c.creditCount })),
     };
+  }
+
+  /**
+   * Los créditos del cliente que el actor NO ve (otro responsable, otra oficina), resumidos: cantidad, saldo y responsables. Quien ve toda la
+   * cuenta no paga la consulta. Nunca devuelve el detalle del crédito ajeno (esos endpoints siguen dando 404).
+   */
+  private async otherCredits(clientId: string): Promise<OtherCredits | null> {
+    const scope = this.visibleScope();
+    if (!scope) return null;
+    return this.tx(async (tx) => {
+      const visible = new Set((await visibleCredits(tx, scope, { clientId })).map((c) => c.id));
+      // F14 · F2b: aquí hace falta la lista COMPLETA de créditos del cliente (para restar los que sí se ven y resumir el resto en agregados).
+      const all = await this.prisma.elevated(tx, () =>
+        tx.credit.findMany({ where: { clientId, deletedAt: null }, select: { id: true, code: true, typeCode: true, currency: true, status: true, outstandingBalance: true, assignedManagerId: true } }),
+      );
+      const hidden = all.filter((c) => !visible.has(c.id));
+      if (hidden.length === 0) return null;
+      const now = new Date();
+      const assigned = await tx.creditAssignment.findMany({
+        where: { creditId: { in: hidden.map((c) => c.id) }, revokedAt: null, startsAt: { lte: now }, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+        select: { creditId: true, userId: true },
+      });
+      const people = (id: string, manager: string | null): string[] => [...new Set([...(manager ? [manager] : []), ...assigned.filter((a) => a.creditId === id).map((a) => a.userId)])];
+      const rows = hidden.map((c) => ({ id: c.id, code: c.code, typeCode: c.typeCode, currency: c.currency, status: c.status, outstandingBalance: Number(c.outstandingBalance), responsibleIds: people(c.id, c.assignedManagerId) }));
+      const names = await loadNames(tx, this.tenant.accountId, rows.flatMap((r) => r.responsibleIds));
+      return summarizeOtherCredits(rows, names);
+    });
   }
 
   /** Lo que pide el PDF del legajo: el cliente completo (ya audita su propio revelado) + créditos y créditos en mora. */
@@ -648,7 +834,7 @@ export class ClientsService {
     const { page, limit, skip } = resolvePagination(query);
     const partes: Prisma.Sql[] = [];
 
-    if (this.tenant.can(Permission.PAYMENT_READ)) {
+    if (this.authz.can(Permission.PAYMENT_READ)) {
       partes.push(Prisma.sql`
         SELECT 'PAYMENT' AS kind, p.id, p.payment_date AS at, p.method::text AS code, NULL AS status,
                p.amount::float8 AS amount, cr.currency AS currency, NULL AS notes,
@@ -657,7 +843,7 @@ export class ClientsService {
         JOIN credits cr ON cr.id = p.credit_id
         WHERE cr.client_id = ${clientId}`);
     }
-    if (this.tenant.can(Permission.AGENDA_READ)) {
+    if (this.authz.can(Permission.AGENDA_READ)) {
       partes.push(Prisma.sql`
         SELECT 'AGENDA' AS kind, a.id, a.updated_at AS at, a.type::text AS code, a.status::text AS status,
                NULL AS amount, NULL AS currency, a.observations AS notes,
@@ -665,7 +851,7 @@ export class ClientsService {
         FROM agenda_items a
         WHERE a.client_id = ${clientId} AND a.deleted_at IS NULL`);
     }
-    if (this.tenant.can(Permission.COLLECTION_READ)) {
+    if (this.authz.can(Permission.COLLECTION_READ)) {
       partes.push(Prisma.sql`
         SELECT 'ACTIVITY' AS kind, ac.id, ac.created_at AS at, ac.type::text AS code, ac.result AS status,
                NULL AS amount, NULL AS currency, ac.notes AS notes,
@@ -677,16 +863,17 @@ export class ClientsService {
     if (partes.length === 0) return ResponseDto.paginated([], 0, page, limit);
 
     const union = Prisma.join(partes, ' UNION ALL ');
-    const [rows, totals] = await this.tx((tx) =>
-      Promise.all([
+    const [rows, totals] = await this.tx(async (tx) => {
+      await this.assertClientVisible(tx, clientId); // D-7
+      return Promise.all([
         tx.$queryRaw<TimelineRow[]>(
           // El desempate por `id` es el mismo cuidado que en la cartera: dos gestiones del mismo
           // segundo se intercambiarían entre páginas, y con `LIMIT/OFFSET` eso repite o saltea.
           Prisma.sql`SELECT * FROM (${union}) t ORDER BY t.at DESC, t.id LIMIT ${limit} OFFSET ${skip}`,
         ),
         tx.$queryRaw<{ total: number }[]>(Prisma.sql`SELECT COUNT(*)::int AS total FROM (${union}) t`),
-      ]),
-    );
+      ]);
+    });
 
     const data = rows.map((r) => ({
       kind: r.kind,
@@ -705,6 +892,7 @@ export class ClientsService {
 
   async update(id: string, dto: UpdateClientDto): Promise<ReturnType<typeof serializeClient>> {
     const { before, after } = await this.tx(async (tx) => {
+      await this.assertClientVisible(tx, id);
       const prev = await tx.client.findFirst({ where: { id, deletedAt: null } });
       if (!prev) throw resourceNotFound();
 
@@ -734,26 +922,31 @@ export class ClientsService {
         metadata: dto.metadata as Prisma.InputJsonValue | undefined,
       };
       if (dto.nationalId !== undefined) {
+        this.assertDocumentNotMasked(dto.nationalId);
         const hash = this.blind.hash(dto.nationalId);
         if (hash) {
-          const dup = await tx.client.findFirst({ where: { nationalIdHash: hash, id: { not: id } } });
+          const dup = await this.prisma.elevated(tx, () => tx.client.findFirst({ where: { nationalIdHash: hash, id: { not: id } }, select: { id: true } }));
           if (dup) throw clientDuplicate();
         }
         data.nationalId = this.enc(dto.nationalId);
         data.nationalIdHash = hash;
       }
-      if (dto.taxId !== undefined) data.taxId = this.enc(dto.taxId);
+      if (dto.taxId !== undefined) {
+        this.assertDocumentNotMasked(dto.taxId);
+        data.taxId = this.enc(dto.taxId);
+      }
 
       const next = await tx.client.update({ where: { id }, data });
       return { before: prev, after: next };
     });
     // Audit fuera del tx para no anidar transacciones (audit.record abre su propio withTenant).
     await this.audit.record({ entity: 'client', entityId: after.id, action: 'UPDATE', before, after, redactKeys: CLIENT_REDACT });
-    return serializeClient(after, { crypto: this.crypto, reveal: false });
+    return serializeClient(after, this.opts(false));
   }
 
   async remove(id: string): Promise<void> {
     await this.tx(async (tx) => {
+      await this.assertClientVisible(tx, id);
       const client = await tx.client.findFirst({ where: { id, deletedAt: null } });
       if (!client) throw resourceNotFound();
       const activeCredits = await tx.credit.count({ where: { clientId: id, status: 'ACTIVE', deletedAt: null } });
@@ -795,6 +988,7 @@ export class ClientsService {
   /** Edita los datos de un garante (nombre, tipo de relación, notas…). */
   async updateRelation(clientId: string, relationId: string, dto: UpdateRelationDto) {
     const updated = await this.tx(async (tx) => {
+      await this.assertClientVisible(tx, clientId);
       const existing = await tx.clientRelation.findFirst({ where: { id: relationId, clientId }, select: { id: true } });
       if (!existing) throw resourceNotFound();
       // El vínculo con los créditos va en la MISMA transacción que el resto del garante: si el
@@ -817,6 +1011,7 @@ export class ClientsService {
 
   async updateContact(clientId: string, contactId: string, dto: UpdateContactDto) {
     const updated = await this.tx(async (tx) => {
+      await this.assertClientVisible(tx, clientId);
       const existing = await tx.clientContact.findFirst({ where: { id: contactId, clientId } });
       if (!existing) throw resourceNotFound();
       return tx.clientContact.update({
@@ -854,6 +1049,7 @@ export class ClientsService {
 
   async getIncomeProfile(clientId: string) {
     return this.tx(async (tx) => {
+      await this.assertClientVisible(tx, clientId);
       const client = await tx.client.findFirst({ where: { id: clientId, deletedAt: null }, select: { id: true } });
       if (!client) throw resourceNotFound();
       const row = await tx.clientIncomeProfile.findFirst({ where: { clientId } });
@@ -868,6 +1064,7 @@ export class ClientsService {
   async putIncomeProfile(clientId: string, dto: IncomeProfileDto) {
     const data = this.incomeData(dto);
     const { before, after } = await this.tx(async (tx) => {
+      await this.assertClientVisible(tx, clientId);
       const client = await tx.client.findFirst({ where: { id: clientId, deletedAt: null }, select: { id: true } });
       if (!client) throw resourceNotFound();
       const existing = await tx.clientIncomeProfile.findFirst({ where: { clientId } });
@@ -949,6 +1146,7 @@ export class ClientsService {
   async updateLocation(clientId: string, locationId: string, dto: UpdateLocationDto) {
     this.assertCollectionProfile(dto.visitSchedule);
     const updated = await this.tx(async (tx) => {
+      await this.assertClientVisible(tx, clientId);
       const found = await tx.clientLocation.findFirst({ where: { id: locationId, clientId }, select: { id: true } });
       if (!found) throw resourceNotFound();
       return tx.clientLocation.update({
@@ -1060,6 +1258,7 @@ export class ClientsService {
 
   async updateCollateral(clientId: string, collateralId: string, dto: UpdateCollateralDto) {
     const updated = await this.tx(async (tx) => {
+      await this.assertClientVisible(tx, clientId);
       const found = await tx.collateral.findFirst({ where: { id: collateralId, clientId }, select: { id: true } });
       if (!found) throw resourceNotFound();
       await this.linkCollateral(tx, clientId, collateralId, dto.creditIds);
@@ -1096,6 +1295,7 @@ export class ClientsService {
   /** Reclasificar un adjunto. El archivo no se toca: su hash es la prueba de que no cambió. */
   async updateAttachment(clientId: string, attachmentId: string, dto: UpdateAttachmentDto) {
     const updated = await this.tx(async (tx) => {
+      await this.assertClientVisible(tx, clientId);
       const found = await tx.clientAttachment.findFirst({ where: { id: attachmentId, clientId }, select: { id: true } });
       if (!found) throw resourceNotFound();
       return tx.clientAttachment.update({ where: { id: attachmentId }, data: { fileType: dto.fileType } });
@@ -1110,7 +1310,8 @@ export class ClientsService {
     kind: 'contact' | 'location' | 'relation' | 'collateral' | 'attachment',
     subId: string,
   ): Promise<void> {
-    const res = await this.tx((tx) => {
+    const res = await this.tx(async (tx) => {
+      await this.assertClientVisible(tx, clientId);
       const where = { id: subId, clientId };
       switch (kind) {
         case 'contact':
@@ -1137,6 +1338,7 @@ export class ClientsService {
     create: (tx: PrismaClient) => Promise<T>,
   ): Promise<T> {
     const result = await this.tx(async (tx) => {
+      await this.assertClientVisible(tx, clientId);
       const client = await tx.client.findFirst({ where: { id: clientId, deletedAt: null }, select: { id: true } });
       if (!client) throw resourceNotFound();
       return create(tx);

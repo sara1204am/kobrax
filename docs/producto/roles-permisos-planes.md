@@ -116,9 +116,10 @@ Tres niveles conceptuales: **todo** (`data:scope:all`), **mi agencia + lo mío**
 | Capa | Estado | Evidencia |
 |---|---|---|
 | **Aislamiento entre empresas (RLS por `account_id`)** | **Activo** en todas las tablas operativas, con `FORCE`. | `rls/001_enable_rls.sql`; `prisma.service.ts` (`set_config('app.current_account_id', …)`). |
-| **Alcance por fila dentro de la empresa, en PostgreSQL (RLS)** | **No activo.** `PrismaService.withTenant` ya fija `app.scope` (`account` si tiene `data:scope:all`, `own` si no; `system` para trabajos de sistema; sin contexto = sin scope), pero `002_scope.sql` solo define helpers (`app_current_scope()`, `app_scope_sees_all()`, `app_current_user()`) y **ninguna policy los usa**. El script lo dice: «F1 sólo define los helpers. Las policies llegan en F2». `PLAN-SEGURIDAD.md §1.1` lo marca como hueco bloqueante. | `rls/002_scope.sql`; las funciones solo aparecen en ese archivo. |
+| **Alcance por fila dentro de la empresa, en PostgreSQL (RLS)** | **Instalado, apagado por defecto.** Segunda barrera (F14·F2b): policies `RESTRICTIVE FOR SELECT` en `credits`, `clients`, `payments`, `agenda_items` y `route_plans`, sólo para el rol `kobrax_scoped`. `PrismaService.runScoped` fija `app.scope` (`account` / `subtree` / `branch` / `own` / `system`) y `app.scope_mode` (`SCOPE_RLS_MODE=off|log|enforce`, por defecto `off`) y, con alcance restringido y modo ≠ `off`, cambia a ese rol (`SET LOCAL ROLE`). Quien ve toda la cuenta, los trabajos de sistema y el modo `off` no pasan por ninguna policy (costo cero). Con `enforce`, una consulta que olvida su filtro no devuelve filas fuera del alcance; sin alcance no devuelve nada (fail-closed). La API sigue aplicando la regla fina; la barrera es un superconjunto. **`enforce` no está activado** hasta orden expresa. | `rls/006_scope_policies.sql`; `rls/verify_scope.sql`; `prisma.service.ts`; migración `20261106000000_f14_f2b_scope_copies`; `f2b-rls-alcance.it.ts`. |
 | **Alcance por fila en la aplicación: Mora, Agenda, visitas de campo, rutas, asignaciones** | **Activo.** `moraScopeOf` resuelve `ALL` (con `data:scope:all`) → `BRANCH` (con `data:scope:branch`) → `OWN` (ninguno). `OWN` = créditos donde es responsable (`assigned_manager_id`) o tiene asignación temporal/apoyo vigente. `BRANCH` = lo suyo **más** los créditos **con responsable** cuya `branch_id` es la del supervisor (`user_accounts.branch_id`); un supervisor **sin agencia** ve solo lo suyo. Un crédito sin responsable solo lo ve quien tiene alcance total. Lo usan Mora (lista, ficha, export), Agenda, `field.service` (crear visita), `routes.service` y `assignment.service`. | `mora-query.ts` (`moraAccessConditions`, `moraScopeOf`); usos en `agenda.service.ts`, `field.service.ts`, `routes.service.ts`. |
-| **Alcance por fila en Cartera: clientes, créditos, pagos** | **No aplicado.** `GET /clients`, `GET /credits`, `GET /payments` (y detalles) filtran por empresa (RLS) y por los filtros que mande el cliente, **no** por el alcance del usuario: un cobrador con `client:read` / `credit:read` / `payment:read` obtiene los de toda la cuenta. | `clients.service.ts` `list`, `credits.service.ts` `list`, `payments.service.ts` `list`: sin `moraAccessConditions` ni `DATA_SCOPE`. |
+| **Alcance por fila en Cartera: clientes, créditos, pagos** | **Aplicado por la API** (F2: `moraAccessConditions`, `visibleClientIdsSql`; cliente visible por sus créditos y por su oficina de registro) **y, con `enforce`, también por la base** (F2b). El listado de clientes de quien no ve toda la cuenta ya no pasa listas de ids a Prisma (sin tope de 32 767). Marcar mora / poner al día comprueba que el crédito sea visible (404 si no). | `clients.service.ts` `list`, `credits.service.ts` `assertInScope`, `mora-query.ts`. |
+| **Alcance de Personas, clientes sin crédito y archivos (F14·F1)** | **Activo.** `GET /users` y la ficha de un miembro se filtran por la oficina de quien pregunta (`memberVisibleTo`): el gerente de una regional no ve a otra (detalle ⇒ 404); el alcance total ve a todos. Un cliente **sin crédito vivo** sólo lo ve quien tiene alcance total o de subárbol, o quien lo creó (`clients.created_by`; es trazabilidad, no propiedad). `POST /uploads` exige escribir algo (`client:write`, `collection:write`, `payment:write` o `route:execute`); `GET /uploads/:name` exige que el archivo cuelgue de algo visible (adjunto/ubicación/garantía de un cliente visible, comprobante de un pago visible, evidencia de una visita propia o visible, foto/QR de un miembro) o que lo haya subido la persona. Interino hasta la tabla `files` de F4. | `office-scope.ts`, `mora-query.ts` (`visibleClientIdsSql`), `uploads/upload-access.service.ts` |
 | **Quién puede repartir cartera** | `assignment:write` (admin, gerente, supervisor). Sin él no se elige responsable: solo se recibe lo que uno mismo importa o crea. | `assignment.service.ts`, `credits.service.ts`. |
 | **Castigar un crédito (write-off)** | Exige `credit:write` **y** `data:scope:all`. | `credits.service.ts` (`writeOffForbidden`). |
 
@@ -276,6 +277,9 @@ Cita: `accounts.controller.ts`, `accounts.service.ts` (`create`), `dto/create-ac
 | Refresh token | 7 días, **rotativo**, solo el hash en DB, con `familyId` | `auth.service.ts` |
 | Reuso de refresh | Un refresh ya usado que reaparece pasados **10 s** → se revoca la familia y la sesión (denylist inmediata); dentro de 10 s se trata como carrera legítima (`refreshRetry`) | `auth.service.ts` (`refresh`) |
 | Denylist de sesiones | Redis, `revoked_session:<id>`, TTL 7 días; `JwtAuthGuard` la consulta en **cada request** | `session.service.ts`, `jwt-auth.guard.ts` |
+| Versiones de autorización (F14·F1) | Los permisos viajan en el JWT junto con `av` (versión de la membresía, `user_accounts.authz_version`) y `pv` (versión global de política, `platform_settings.policy_version`). Cambiar el rol, la oficina o el estado de una membresía sube `av` (en la misma transacción, vía outbox hacia Redis); el guard compara con una sola lectura `MGET` y, si no coinciden, responde `401 AUTHZ_STALE`. El cliente renueva y reintenta **una vez** (web: `apiCall` y `/api/auth/renew`; móvil: `authedFetch`). El refresh **re-deriva** los permisos desde la base, nunca del JWT. Sin Redis responde `401 AUTHZ_UNAVAILABLE` (falla cerrado, sin bucle). Flag de reversa: `AUTHZ_VERSION_CHECK=off`. | `auth/authz-version.service.ts`, `jwt-auth.guard.ts`, `apps/web/src/lib/bff.ts` |
+| Contrato de acceso por endpoint (F14·F3) | Los guards (`JwtAuthGuard` → `TenantGuard` → `AuthzGuard`) son **globales**. Cada endpoint declara `@Public`, `@Authenticated`, `@Roles` (todos los permisos), `@RolesAny` (alguno) o `@Authz`; **si no declara nada se niega** (`403 AUTHZ_000`). Las decisiones por fila viven en políticas (`@Policy`, p. ej. `credit.writeOff`) y los servicios consultan `AuthorizationService`, no `tenant.can`. Rutas y visitas (crear, generar, evidencia) exigen en el guard ejecutar, escribir o asignar ruta; AUDITOR/VIEWER reciben `403 AUTH_002`. Reversa de un release: `AUTHZ_DENY_BY_DEFAULT=log`. | `auth/guards/authz.guard.ts`, `auth/authz-access.ts`, `common/authz/`, `docs/epics/F14/authz-snapshot.json` |
+| Cerrar sesiones de una persona | Desactivar una membresía cierra **sólo las sesiones de esa cuenta** (no las de otras cuentas del mismo usuario). `POST /users/:id/sessions/revoke` (permiso `user:sessions:revoke`: administrador y gerente regional, acotado a su oficina; otra regional ⇒ 404) lo hace a demanda y queda auditado (`SESSION_REVOKE`). | `users.service.ts`, `session.service.ts` (`revokeAccountSessions`) |
 | Cookies web | `k_access` (15 min) y `k_refresh` (7 d), `httpOnly`, `SameSite=Strict`, `secure` en producción; el middleware renueva en silencio | `apps/web/src/middleware.ts` |
 | Listar / cerrar sesiones | `GET /auth/sessions` (dispositivo, IP, ciudad, última actividad, marca la actual), `DELETE /auth/sessions/:id`, `DELETE /auth/sessions` (todas menos la actual) | `auth.controller.ts`; UI en `/settings/security/sessions` |
 | Logout | Revoca refresh + sesión + denylist; idempotente | `auth.service.ts` |
@@ -383,6 +387,16 @@ La UI muestra un checklist en tiempo real con las cuatro reglas (`checkPassword`
 - **Avisos de plan:** contadores y cartel «cerca del tope» (80 %) en Equipo/Cuenta; notificaciones de topes mensuales y de fin de prueba al administrador.
 - **Datos sensibles:** PII cifrada en reposo (AES-256-GCM) con revelado auditado (`client/PII_REVEAL`); toda mutación queda en la bitácora (quién/cuándo/qué/IP), pero **no hay pantalla ni API para consultarla** (3.4).
 
+### F14 · F2 — responsabilidad y alcance (2026-11-05)
+
+- **El cliente no tiene dueño.** Lo ve quien ve alguno de sus créditos (responsable, reemplazo o apoyo vigentes) o quien está en la oficina donde se registró (gerente o supervisor del subárbol). El cobrador ve además al cliente sin créditos que él mismo dio de alta. Al perder el último crédito visible el cliente deja de verse; nada queda guardado a su nombre.
+- **«Tiene otros créditos».** La ficha avisa cuántos créditos del cliente no ves, su saldo total y quién los lleva. Nunca muestra el detalle; el crédito ajeno sigue dando 404.
+- **Dar de alta un cliente** exige `client:create` y se registra en una oficina: la única de la cuenta, la tuya, o la que elijas dentro de tu alcance (selector en «Nuevo cliente»). **Nunca en la central de una cuenta con varias oficinas.** Crear un crédito exige `credit:create`.
+- **Borrar un cliente** exige `client:delete`: sólo el administrador de la cuenta.
+- **Asignar créditos:** a una persona de nivel igual o inferior al tuyo; a un par de tu misma oficina, no (sí a uno de una oficina hija).
+- **Personas:** el gerente invita a roles de nivel inferior dentro de su alcance; el supervisor ve las personas de su oficina. **El rol ACCOUNT_ADMIN no se otorga por invitación ni por cambio de rol** (lo asigna la plataforma).
+- **Móvil:** sin cambios en esta fase (se refactorizará).
+
 ---
 
 ## 8. Brechas y puntos no verificados
@@ -400,3 +414,56 @@ La UI muestra un checklist en tiempo real con las cuatro reglas (`checkPassword`
 | 9 | Móvil sin gating de pestañas por rol. | Verificado. |
 | 10 | Uso real de `SUPER_ADMIN`; uso de `isDefault` para preseleccionar cuenta; guard por pantalla web no listada; `requiresPasswordChange` en la web (no hay manejo). | **No verificado** / no existe. |
 | 11 | `docs/security/PLAN-SEGURIDAD.md` (2026-08-26) está parcialmente desactualizado: cita `CASE_READ` para el cobrador y un `SET LOCAL` concatenado en `prisma.service.ts`; hoy los permisos son `collection:*` y se usa `set_config` con parámetros ligados. | Verificado contra el código actual. |
+
+## F14 · F4 — datos personales y archivos (2026-11-07)
+
+**Quién ve qué de un cliente.** Hay tres categorías de dato, y la regla es una sola para listados, ficha, agenda, mora, rutas, exportes y PDF (`packages/shared/src/utils/pii-fields.ts`, aplicada por `PiiService`):
+
+| Categoría | Qué incluye | Quién la ve |
+|---|---|---|
+| Documento | carnet y NIT (siempre enmascarados salvo revelado) | Se revela con una acción explícita auditada (`pii.reveal`) quien puede leer clientes y tiene `client:contact:read` (todos los roles menos VIEWER). **En pantallas de trabajo** (Agenda, Mora, Rutas, PDF) va en claro por defecto sólo para quien tiene `client:pii:read` (administrador, gerente, auditor) y para el cobrador sobre su cartera; el supervisor lo ve enmascarado hasta que lo revela. |
+| Contacto | teléfonos, correos, direcciones, GPS, zona, notas y fotos de ubicación, personas relacionadas, adjuntos | `client:contact:read`: todos los roles menos VIEWER. El alcance sigue recortando a qué clientes. |
+| Económico | perfil de ingresos y garantías | Igual que contacto. |
+
+El nombre de la persona lo ve todo el que ve al cliente. Cada revelado queda auditado con las categorías reveladas y el canal, nunca con los valores. Los exportes (`report:export`: administrador, gerente, auditor) llevan el documento en claro sólo con `client:pii:read` y el contacto sólo con `client:contact:read`.
+
+**Móvil.** La regla «el documento va siempre enmascarado y sin revelar en móvil» está implementada pero **apagada** (`PII_MOBILE_MASK=off`) hasta que el móvil se refactorice (F8): su edición de cliente todavía necesita el revelado.
+
+**Archivos.** Cada archivo subido queda registrado (`files`) con sus dueños (`file_owners`), que mantienen triggers de la base a partir de las columnas que guardan la URL. Se lee por identificador (`GET /files/:id`) o por nombre (`/uploads/<hash>`, la ruta que usa el móvil) con la misma política: el archivo cuelga de algo que la persona ve (un cliente, un pago, una evidencia, su perfil, el logo de la cuenta) y tiene el permiso de esa categoría; lo recién subido lo abre sólo quien lo subió. `POST /files/:id/link` da un enlace temporal de 5 minutos que abre el archivo sin sesión. La lectura de documentos y evidencias se audita (`FILE_READ`). Lo subido que nadie ata en 24 horas pasa a huérfano y se borra a los 7 días.
+
+## F14 · F5 — roles por cuenta y plataforma (2026-11-07)
+
+- Cada cuenta tiene sus propios roles (copias de las plantillas, con linaje `template_key`); los permisos del token salen del rol de la cuenta y, si ese rol no existe, la petición se niega (falla cerrado).
+- Los permisos `data:scope:*` no se pueden conceder fuera de lo que permite el alcance del rol; los permisos de plataforma nunca se conceden a un rol de cuenta.
+- La persona de plataforma entra por un login único con MFA (bloqueo tras 5 fallos, código TOTP no reutilizable) y solo si el interruptor externo está encendido.
+- El soporte accede mediante sesiones con vencimiento: leer datos personales exige el consentimiento de la cuenta; escribir exige además `SUPPORT_WRITE_ENABLED`. Una sesión rechazada o revocada no da token. La cuenta ve y revoca estos accesos en «Accesos de soporte» y aparecen en su Actividad.
+
+## F14 · F6 — navegación por permisos (2026-11-08)
+
+- El menú tiene cinco secciones con permiso propio: **Organización** (`office:read`), **Equipo** (`user:read`), **Seguridad** (`role:read`, `user:sessions:revoke` o `support:consent`), **Actividad** (`audit:read`) y **Cuenta** (`account:read`). Ninguna depende de `account:read` salvo Cuenta: el supervisor ve Organización y el auditor ve Actividad.
+- Oficinas, Actividad y Accesos de soporte salieron de Cuenta a `/organizacion`, `/actividad` y `/seguridad/soporte`; las rutas viejas redirigen.
+- Cada pantalla se protege en el servidor (`requirePermission`): sin permiso muestra «No tienes acceso a esta pantalla»; si la API falla muestra «reintentar» y no «sin acceso». La API sigue siendo quien autoriza.
+- Mientras la plataforma está en una sesión de soporte, el panel muestra «Sesión de soporte · vence HH:MM».
+
+## F14 · F7 — editor de roles y permisos (2026-11-08)
+
+- Seguridad › **Roles y permisos** muestra los roles de la cuenta (origen, si difieren de la plantilla, personas, alcance), el detalle de cada uno, su historial y una comparación entre dos roles. Leer pide `role:read`; cambiar, `role:write`.
+- El administrador puede añadir o quitar permisos a Gerente, Supervisor, Cobrador, Auditor y Consulta. **No** se edita el rol de administrador ni los permisos reservados (`role:write`, `user:write`, `account:write`, `office:write`); no se concede lo que quien edita no tiene; las dependencias entre permisos deben quedar satisfechas; un rol tiene a lo sumo un alcance de datos (ninguno = solo lo propio); quien pertenece al rol que edita solo puede quitarle permisos.
+- Todo cambio exige un **motivo** (mínimo 5 caracteres), queda en el historial del rol y renueva al instante la sesión de las personas que lo tienen. Si dos administradores editan a la vez, el segundo recibe un aviso para recargar.
+- «Restaurar plantilla» devuelve el rol a los permisos con los que nació. Un rol editado deja de recibir los cambios masivos de plantilla de la plataforma.
+- Crear o borrar roles propios queda para una fase posterior (H-9). El móvil no edita roles; recibe los permisos nuevos en su próximo refresco.
+
+## F14 · F8 — la app móvil (2026-11-08)
+
+- **Quién usa la app:** administrador, gerente, supervisor y cobrador. El auditor y la persona de consulta entran solo por la web; si a alguien le cambian el rol a uno de esos mientras usa la app, su sesión móvil termina en el próximo refresco con un aviso.
+- **Sin conexión:** el cobrador puede trabajar hasta 8 h; quien asigna cartera o administra personas, 2 h. El cobrador independiente (cuenta de una sola persona) conserva 8 h.
+- **Datos personales:** en el móvil el documento de identidad va siempre protegido; teléfonos y direcciones se ven en claro (queda registrado cada acceso). Un documento o RUC protegido nunca se guarda como si fuera un valor real.
+- **Menú y acciones:** la app solo ofrece lo que el rol permite (la API valida siempre). Al reconectar, primero se renuevan los permisos y después se sube lo guardado; lo que el servidor rechaza queda visible en «Pendientes» con el motivo en claro y la opción de descartarlo.
+- **Alta de cliente:** con una sola oficina posible no se pide nada; con varias, hay que elegirla. Si el documento ya está registrado y lo llevan otras personas, se puede crear el propio préstamo sobre ese cliente. La ficha avisa (sin datos) cuando el cliente tiene créditos que la persona no ve.
+
+## F14 · F9 — verificación y despliegue (2026-11-08)
+- No cambia lo que ve ni lo que puede hacer ninguna persona: es la comprobación de todo lo anterior y la preparación del despliegue.
+- **Antes de desplegar**, se ensaya la actualización sobre una copia de la base (restaura, migra, aplica las reglas de seguridad, comprueba que nadie pierda permisos y que las copias de roles por cuenta digan lo mismo que el rol de origen).
+- **Al desplegar**, el sistema comprueba la base (aislamiento por cuenta, roles, versiones de autorización, plataforma, catálogo de permisos, archivos) **antes de reiniciar**; si algo no está como debe, el despliegue se detiene y sigue corriendo la versión anterior.
+- Las dos barreras opcionales (alcance por oficina en la base y documento protegido en el móvil) se encienden de forma gradual y por decisión de la persona que opera; los pasos y criterios están en `docs/epics/F14/RELEASE-CHECKLIST.md`.
+

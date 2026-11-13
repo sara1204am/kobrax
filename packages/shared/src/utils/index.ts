@@ -37,3 +37,6 @@ export * from './collection-profile.js';
 export * from './income-profile.js';
 export * from './account-preferences.js';
 export * from './account-billing.js';
+export * from './office-tree.js';
+export * from './pii-fields.js';
+export * from './role-edit.js';

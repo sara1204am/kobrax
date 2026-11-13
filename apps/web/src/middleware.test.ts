@@ -1,3 +1,5 @@
+import { readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 // @vitest-environment node
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { NextRequest } from 'next/server';
@@ -9,8 +11,17 @@ import { config, middleware } from './middleware';
  * arregla. Fue lo que pasaba con «Exportar» de Mora: «No se pudo exportar» para siempre.
  */
 describe('middleware · rutas que renuevan la sesión', () => {
-  it.each(['/api/mora/:path*', '/api/assignments/:path*', '/api/arrear-categories/:path*', '/mora/:path*'])('cubre %s', (route) => {
+  it.each(['/api/mora/:path*', '/api/assignments/:path*', '/api/arrear-categories/:path*', '/mora/:path*', '/api/roles/:path*'])('cubre %s', (route) => {
     expect(config.matcher).toContain(route);
+  });
+});
+
+describe('middleware · cobertura de las carpetas privadas (F14 · F6)', () => {
+  it('toda carpeta de app/(panel) está en el matcher: una ruta nueva sin entrada no tendría sesión ni refresco', () => {
+    const dir = join(__dirname, 'app', '(panel)');
+    const folders = readdirSync(dir).filter((f) => statSync(join(dir, f)).isDirectory());
+    expect(folders).toEqual(expect.arrayContaining(['organizacion', 'actividad', 'seguridad']));
+    for (const f of folders) expect(config.matcher, `/${f}/:path*`).toContain(`/${f}/:path*`);
   });
 });
 

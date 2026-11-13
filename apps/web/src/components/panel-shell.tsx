@@ -2,17 +2,20 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { AuthAccountOption, NotificationPayload } from '@kobrax/shared';
 import { LocaleSwitch } from './locale-switch';
 import { useAccountBrand } from './account-brand';
-import { crumbsFor, type NavItem, type NavKey } from '@/lib/nav';
-import { postJson } from '@/lib/client';
+import { crumbsFor, type Crumb, type NavItem, type NavKey } from '@/lib/nav';
+
+const ROLE_NAME_KEYS = ['ACCOUNT_ADMIN', 'MANAGER', 'SUPERVISOR', 'COLLECTOR', 'AUDITOR', 'VIEWER'];
+import { hardNavigate, postJson } from '@/lib/client';
 import { notificationHref } from '@/lib/notifications';
 import { publishSessionEvent } from '@/lib/session-sync';
 import { SessionWatcher } from './session-watcher';
 import { BillingAlert } from './billing-alert';
+import { SupportBanner } from './support-banner';
 
 /** Fila de cualquiera de los dos menús de la topbar: 44 px de toque, ancho completo. */
 const MENU_ITEM =
@@ -46,6 +49,7 @@ export function PanelShell({
   nav,
   badges,
   billingMissing,
+  supportSession,
   children,
 }: {
   user: ShellUser;
@@ -55,6 +59,8 @@ export function PanelShell({
   badges?: Record<string, { count: number; urgent?: boolean }>;
   /** Datos fiscales obligatorios sin cargar; con alguno, el panel muestra el aviso de facturación. */
   billingMissing?: string[];
+  /** F14 · F6: la plataforma está dentro de esta cuenta con una sesión de soporte; muestra el aviso con su vencimiento. */
+  supportSession?: { id: string; expiresAt: string };
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -133,6 +139,7 @@ export function PanelShell({
         />
         <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-5 sm:px-5 md:px-6 lg:px-8">
           <SessionWatcher session={{ userId: user.userId, accountId: user.accountId, sessionId: user.sessionId }} />
+          {supportSession && <SupportBanner expiresAt={supportSession.expiresAt} />}
           <BillingAlert missing={billingMissing ?? []} />
           {children}
         </main>
@@ -177,7 +184,7 @@ function NavList({
   const labelClass = collapsible ? 'hidden xl:inline' : '';
 
   return (
-    <nav aria-label={t('nav.label')} className="flex-1 overflow-y-auto px-3 py-2">
+    <nav aria-label={t('nav.label')} className="k-scroll-dark flex-1 overflow-y-auto px-3 py-2">
       <ul className="space-y-1">
         {items.map((item) => {
           const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -185,6 +192,12 @@ function NavList({
           // recién al activarse, la fila se correría 3 px cada vez que cambiás de pantalla.
           const base =
             'flex min-h-[44px] items-center gap-3 rounded-xl border-l-[3px] border-transparent px-3 text-[14px] font-medium transition-colors';
+
+          if (item.built && item.children) {
+            return (
+              <NavGroup key={item.href} item={item} active={active} pathname={pathname} base={base} labelClass={labelClass} collapsible={collapsible} />
+            );
+          }
 
           return (
             <li key={item.href}>
@@ -232,6 +245,64 @@ function NavList({
         })}
       </ul>
     </nav>
+  );
+}
+
+/**
+ * Un grupo del menú (Seguridad): no es una pantalla, es un botón que despliega o pliega sus hijos.
+ * Arranca abierto si ya estás dentro de la sección; el resto del tiempo lo decide el click.
+ */
+function NavGroup({
+  item,
+  active,
+  pathname,
+  base,
+  labelClass,
+  collapsible,
+}: {
+  item: NavItem;
+  active: boolean;
+  pathname: string;
+  base: string;
+  labelClass: string;
+  collapsible: boolean;
+}) {
+  const t = useTranslations('panel');
+  const [open, setOpen] = useState(active);
+  return (
+    <li>
+      <button
+        type="button"
+        aria-expanded={open}
+        title={t(`nav.${item.label}`)}
+        onClick={() => setOpen((o) => !o)}
+        className={`${base} w-full text-left ${active ? 'border-k-soft-periw bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'}`}
+      >
+        <Icon name={item.label} />
+        <span className={`flex-1 ${labelClass}`}>{t(`nav.${item.label}`)}</span>
+        <Icon name="chevron" className={`h-4 w-4 shrink-0 transition-transform ${labelClass} ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <ul className={`mt-1 space-y-1 ${collapsible ? 'hidden xl:block' : ''}`}>
+          {item.children?.map((child) => {
+            const childActive = pathname === child.href || pathname.startsWith(`${child.href}/`);
+            return (
+              <li key={child.href}>
+                <Link
+                  href={child.href}
+                  aria-current={childActive ? 'page' : undefined}
+                  className={`flex min-h-[40px] items-center rounded-xl border-l-[3px] border-transparent pl-10 pr-3 text-[13px] font-medium transition-colors ${
+                    childActive ? 'border-k-soft-periw bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'
+                  }`}
+                >
+                  {t(`nav.${child.label}`)}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </li>
   );
 }
 
@@ -355,6 +426,10 @@ function Topbar({
   const t = useTranslations('panel');
   const pathname = usePathname();
   const crumbs = crumbsFor(pathname);
+  const tRoles = useTranslations('permissions.roleNames');
+  // El rol se muestra con su nombre traducido; un rol propio de la cuenta (clave sin traducción) va tal cual.
+  const crumbText = (crumb: Crumb) =>
+    crumb.roleKey ? (ROLE_NAME_KEYS.includes(crumb.roleKey) ? tRoles(crumb.roleKey) : crumb.roleKey) : t(crumb.label);
   const brand = useAccountBrand();
   const current = accounts.find((a) => a.id === user.accountId);
   /*
@@ -399,10 +474,10 @@ function Topbar({
               )}
               {crumb.href ? (
                 <Link href={crumb.href} className="truncate text-k-text-2 hover:text-k-text">
-                  {t(crumb.label)}
+                  {crumbText(crumb)}
                 </Link>
               ) : (
-                <span className="truncate font-medium text-k-text">{t(crumb.label)}</span>
+                <span className="truncate font-medium text-k-text">{crumbText(crumb)}</span>
               )}
             </li>
           ))}
@@ -596,7 +671,6 @@ function SidebarIdentity({ user, collapsible = false }: { user: ShellUser; colla
  * usuario; en el sidebar colapsado (1024–1279) queda sólo el ícono, con `title` de respaldo.
  */
 function SidebarLogout({ collapsible = false }: { collapsible?: boolean }) {
-  const router = useRouter();
   const t = useTranslations('panel');
   const [busy, setBusy] = useState(false);
 
@@ -608,7 +682,7 @@ function SidebarLogout({ collapsible = false }: { collapsible?: boolean }) {
           setBusy(true);
           await postJson('/api/auth/logout', {});
           publishSessionEvent('logout');
-          router.replace('/login');
+          hardNavigate('/login');
         }}
         disabled={busy}
         title={t('logout')}
@@ -701,6 +775,9 @@ const ICONS: Record<
   // Flecha hacia abajo a una bandeja: lo opuesto de `upload`, a propósito.
   export: 'M12 4v11m0 0-3.5-3.5M12 15l3.5-3.5M5 17v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2',
   profile: 'M12 12.2a3.6 3.6 0 1 0 0-7.2 3.6 3.6 0 0 0 0 7.2zM4.8 20.5c0-3.7 3.2-5.8 7.2-5.8s7.2 2.1 7.2 5.8',
+  organization: 'M12 4.5v4m0 0H6.5v3.5M12 8.5h5.5v3.5M4.5 12h4v4h-4zM15.5 12h4v4h-4zM10 16.5h4V20h-4z',
+  activity: 'M4 12h3.5l2.5-6 4 12 2.5-6H20',
+  accessSecurity: 'M12 3.5l7 2.8v5.4c0 3.9-2.9 6.8-7 8.6-4.1-1.8-7-4.7-7-8.6V6.3zM9.2 11.8l2 2 3.6-3.6',
   security: 'M12 3.5l7 2.8v5.4c0 3.9-2.9 6.8-7 8.6-4.1-1.8-7-4.7-7-8.6V6.3zM9.2 11.8l2 2 3.6-3.6',
   menu: 'M4 7h16M4 12h16M4 17h16',
   chevron: 'M7 10l5 5 5-5',

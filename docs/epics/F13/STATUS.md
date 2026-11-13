@@ -4,35 +4,56 @@
 > Última actualización: **2026-10-29**.
 
 ## Fase vigente
-**Arnés (G0) — creado y auto-validado.** Siguiente etapa: Discovery (G1), **todavía no autorizada**.
+**Construcción P1–P4 hecha y verificada en ramas locales (sin push). Cerrada con salvedades (G7).** Rama de integración `f13/multi-oficina` = `f13/p4-movil`. Código en el worktree `C:\Startup Kobrax\kobrax-f13-web`.
 
 ## Gates de la épica
 
 | Gate | Estado | Justificación / evidencia | Fecha |
 |---|---|---|---|
 | G0 Arnés completo y validado | **PASS** | Estructura creada; validación en `execution/VERIFICATIONS.md` (V-001…V-004): enlaces resueltos, README ≤60 líneas, sin contradicciones entre RULES/GATES/STATUS, mapa de «dónde responder» cubre el criterio de éxito. La usuaria aún no lo ha revisado. | 2026-10-29 |
-| G1 Discovery completo | **NOT STARTED** | Esperar autorización explícita. Pistas previas en `discovery/00-leads.md` (no cuentan como discovery). | — |
-| G2 Arquitectura objetivo | NOT STARTED | Depende de G1. | — |
-| G3 Roadmap y planes aprobados | NOT STARTED | Depende de G2. `ROADMAP.md` es hoy solo hipótesis. | — |
-| G4–G7 | NOT STARTED | Son por fase; no existe ninguna fase aprobada. | — |
+| G1 Discovery completo | **PASS (confirmado por la usuaria, 2026-11-02)** | Archivos `00…10` completos; `09-brechas.md` consolidado. **Salvedad registrada:** las filas de `hub/HUB.md` siguen `SEMBRADO` (el criterio de G1 pedía `VERIFICADO`); se verifican por entrada al planear cada fase (A4). Hallazgos de agentes sin recontrastar están marcados; los críticos fueron releídos (09 §1). | 2026-11-02 |
+| G2 Arquitectura objetivo | **PASS por delegación (2026-11-02)** | `target/01…09` escritos y revisados por una revisión independiente (Fable, 2026-11-02) que pidió cambios ya incorporados a ADR-0002/0004 y `target/01,03`. ADR-0003 y ADR-0004 APROBADAS por la usuaria; ADR-0002 adoptada por delegación («empieza con todas las fases hasta el final»), junto con R13, D-5 y AUDITOR/VIEWER (revisables). | 2026-11-02 |
+| G3 Roadmap y planes aprobados | **PASS por delegación (2026-11-02)** | Fases P1–P4 ejecutadas siguiendo `discovery/09-brechas.md` §10; los planes por fase se materializaron como briefings a agentes (no como `plans/*.md` T4): **desviación del marco**, ver «Desviaciones». | 2026-11-02 |
+| G4 Plan de fase | **DESVIADO** | No se escribieron `plans/P*.md` (T4) ni se corrió `/epic-fase validar`; el plan de cada fase fue el briefing al agente, basado en `target/` y `09-brechas`. La usuaria delegó la ejecución completa. | 2026-11-02 |
+| G5 Verificación | **PASS con salvedades** | Evidencia real en `execution/VERIFICATIONS.md`: API 1816/1816 (base 1732), integración 158/158, shared 465/465, móvil 977/977 (= base), web 7 fallos = los 7 preexistentes. **Salvedades:** sin navegador real, sin prueba de carga, migración sin probar sobre copia de producción. | 2026-11-03 |
+| G6 Revisión y transversal | **PASS** | Revisión independiente (Fable) del diff completo: 0 P0; P1 (alta de crédito sin oficina, alcance de `GET /credits/:id`) y P2 corregidos o documentados como limitación conocida. Verificado de nuevo por el coordinador tras las correcciones (VERIFICATIONS). | 2026-11-03 |
+| G7 Cierre | **PASS con salvedades** | `HANDOFF`, `STATUS`, `VERIFICATIONS`, docs de producto actualizados. Salvedades: HUB/IMPACT-MAP no actualizados entrada por entrada (desviación registrada); UI no vista en navegador real; migración no probada sobre copia de producción. | 2026-11-03 |
 
 Vocabulario: PASS · FAIL · BLOCKED · NOT_APPLICABLE · (NOT STARTED = aún no se evalúa).
 
 ## Autorizaciones vigentes
 | Puede hacerse | No puede hacerse |
 |---|---|
-| Crear y editar documentación bajo `docs/epics/_framework/`, `docs/epics/F13/`, `docs/epics/F14/` y el skill `.claude/skills/epic-fase/` | Modificar código de producto, `schema.prisma`, migraciones, API, web, móvil, infraestructura |
-| Leer cualquier archivo del repo (solo lectura) | Empezar Discovery sin autorización |
-| Actualizar el índice `docs/epics/README.md` | Dar por aprobada una PROPUESTA de ADR |
+| Construir P1–P4 y tocar el móvil si hace falta (delegación de la usuaria, 2026-11-02) | Push, PR o merge a `main` sin orden de la usuaria |
+| Probar en las bases `kobrax_f13` / `kobrax_it` | Tocar la base de desarrollo `kobrax` o los servidores de la usuaria |
 
 ## Decisiones (resumen; detalle en `decisions/DECISIONS.md`)
-- Aprobada: ADR-0001 (F13 absorbe F3; el número F13 se mantiene).
-- Propuestas sin aprobar: ADR-0002 (frontera F13/F14), ADR-0003 (representación del árbol), ADR-0004 (tenant sin jerarquía).
+- Aprobadas: ADR-0001, ADR-0003, ADR-0004 (revisada). Adoptada por delegación: ADR-0002. Requisitos R1–R15 y restricciones A-1…A-10 en `decisions/DECISIONS.md`.
+- Adoptadas por la IA sin respuesta explícita (revisables): R13 (MANAGER = `data:scope:subtree`, asignado a la raíz), D-5 (reasignación masiva), AUDITOR/VIEWER con alcance total.
 
-## Bloqueos y preguntas abiertas
-- Autorización para iniciar Discovery.
-- Estado de la alineación móvil↔web (`../F10/plans/alineacion-web/README.md`, ronda 3): F13 y F14 deben coordinarse con ella antes de tocar el móvil.
-- Los cuatro puntos del handoff anterior siguen DESCONOCIDOS: si `Role.level` se usa, si analítica se protege con `report:read`, si el JWT/sesión móvil expone `branch_id`, si hay policies RLS por alcance fuera de `prisma/rls/`.
+## Bloqueos y preguntas abiertas (para la usuaria)
+- **Resueltas por la usuaria el 2026-11-03 (rama `f13/p5-decisiones`):**
+  1. **MANAGER se asigna e invita por API**, y EXIGE oficina (`MANAGER_NEEDS_OFFICE`, 422): su alcance es esa oficina y lo que cuelga de ella. La web pide la oficina al invitar a un gerente.
+  2. **ENTERPRISE `branches = 100`** queda como está.
+  3. **El supervisor lee oficinas** (`office:read`, migración `20261103000000`), acotado por el servidor a las suyas y su subárbol (la ruta completa sí se ve; el detalle de otra oficina es 404).
+  4. **D-7 cerrado:** Cartera (lista y ficha), Clientes, Pagos y Exportes aplican la MISMA regla de visibilidad que Mora (`visibleCreditIdsSql` / `visibleClientIdsSql` en `mora-query.ts`). Un cliente sin créditos vivos es visible (si no, el cobrador no vería al que acaba de dar de alta). La copia completa (`/exports/backup`) es sólo para quien ve toda la cuenta (403 `EXPORT_BACKUP_FORBIDDEN`).
+- **P6 · pantallas y cableado (2026-11-04, rama `f13/p6-oficina-ubicacion`):**
+  1. La oficina guarda su **ubicación** (latitud/longitud, migración `20261104000000`, CHECK «las dos o ninguna»); el modal la elige en un mapa. El responsable se elige con buscador sobre todos los miembros y se puede **invitar a alguien desde ahí**.
+  2. **Tipos de oficina** pasan a **Cuenta › Catálogos** (tarjeta propia). Los botones de Oficinas son botones del sistema de diseño.
+  3. **Ficha de oficina en pestañas** (Información general · Oficinas · Equipo · Historial) con la **cartera en la cabecera**: créditos asignados y en mora, cartera total y cartera en mora (**saldo adeudado, no la cuota**), por moneda, **incluido el subárbol**. El equipo es el de todo el subárbol, con la oficina como columna, tabla `DataTable` con búsqueda y orden (sin filtros).
+  4. **Inicio del cobrador:** tiene tablero propio (`report:read`, migración `20261104010000`), acotado por la API a SUS créditos; el filtro de cobrador sólo ofrece a quien corresponde al alcance. Los filtros de Mora arrancan ocultos.
+  5. Seed: personal en cada agencia y todos los créditos con responsable de su agencia.
+- **🔴 Abierto (P6): la lista de personas no se acota por oficina.** `GET /users` (Equipo) devuelve toda la cuenta a quien tiene `user:read` (el MANAGER): un gerente regional ve —y puede *sumar a su oficina*— a personal de otra regional. Cartera, Clientes, Pagos, Mora y Exportes sí están acotados. Pendiente de decisión: acotar `/users` y el «añadir persona» al subárbol (+ personas sin oficina).
+- **Clientes sin crédito vivo** son visibles para todos (regla D-7: el que acaba de dar de alta un cliente debe verlo). El seed tiene 3 de antes. Cerrarlo exige atar el cliente a quien lo creó o a una oficina.
+- **Limitación nueva (D-7):** en Clientes (lista no-portfolio) y Pagos, el alcance se resuelve con `id IN (…)`; una cartera visible de más de ~32 000 registros rebasa el límite de parámetros de Postgres. Cartera ya pagina en SQL y no tiene el problema; Clientes tiene la vista `portfolio` en SQL. Pendiente: pasar Pagos y Clientes a paginación en SQL si algún tenant lo alcanza.
+- **Importación:** sin oficina deducible usa la de quien importa; si tampoco hay, 422. Confirmar.
+- **Pagos en analítica** para SUPERVISOR/SUBTREE: oficina histórica del pago en su subárbol o créditos propios. Confirmar.
+- **Antes de desplegar:** correr las migraciones sobre una copia de producción y revisar `verify/oficinas-arbol.sql`.
 
-## Trabajo ajeno en el árbol (no es de F13)
-La rama `feat/cuenta-refactor` tiene cambios sin confirmar de otra tarea (cuenta/facturación). El arnés no los toca ni los incluye en ningún commit de F13.
+## Desviaciones del marco (registradas, no ocultas)
+- No hay `plans/P*.md` (T4) ni `/epic-fase validar`: G4 desviado por delegación (ver tabla).
+- `execution/PHASES-LOG.md`, `HUB` e `IMPACT-MAP` no se actualizaron entrada por entrada; las filas HUB siguen `SEMBRADO` salvo lo anotado en `execution/VERIFICATIONS.md`. Pendiente de G7.
+- Dos agentes trabajaron en ramas/worktrees aparte (`f13/p2-alcance`, `f13/p3-web`) y se integraron por merge en `f13/p4-movil`.
+
+## Trabajo ajeno (no es de F13)
+Los 7 fallos de web y los 2 errores de type-check del móvil (`app/cuenta/datos.tsx`) son preexistentes (D-8) y no se tocaron.

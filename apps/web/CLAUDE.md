@@ -107,7 +107,7 @@ src/
 │   │                               # login/select-account, forgot/reset-password
 │   ├── api/                        # BFF: auth/* y account/*
 │   ├── dashboard/                  # aterrizaje post-login (mínimo)
-│   ├── settings/security/          # contraseña, sesiones activas, MFA
+│   ├── settings/perfil/            # Mi perfil en pestañas: datos-personales, preferencias, seguridad
 │   ├── layout.tsx · page.tsx · globals.css
 │   └── middleware.ts
 ├── components/                     # ui.tsx, auth-shell.tsx, otp-input.tsx,

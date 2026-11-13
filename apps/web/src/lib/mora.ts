@@ -145,3 +145,11 @@ export const PRIORITY_TONE: Record<CollectionPriority, Tone> = {
   HIGH: 'warning',
   CRITICAL: 'danger',
 };
+
+/**
+ * ¿Ve el botón de castigar? `credit:write` y alcance total (`data:scope:all`) o de subárbol (`data:scope:subtree`, el gerente
+ * regional de F13). El supervisor (`data:scope:branch`) no. Sólo oculta: el servidor sigue siendo la autoridad.
+ */
+export function canWriteOffCredit(permissions: readonly string[]): boolean {
+  return permissions.includes('credit:write') && (permissions.includes('data:scope:all') || permissions.includes('data:scope:subtree'));
+}

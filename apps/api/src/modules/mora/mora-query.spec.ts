@@ -6,6 +6,7 @@ import { buildMoraOrder, buildMoraWhere, categoryCodes, escapeLike, moraAccessCo
 const NOW = new Date('2026-10-01T12:00:00Z');
 const ADMIN: MoraScope = { accountId: 'acc', userId: 'u-admin', kind: 'ALL', ownOnly: false, canAssign: true };
 const SUPERVISOR: MoraScope = { accountId: 'acc', userId: 'u-sup', kind: 'BRANCH', ownOnly: false, canAssign: true };
+const MANAGER: MoraScope = { accountId: 'acc', userId: 'u-mgr', kind: 'SUBTREE', ownOnly: false, canAssign: true };
 const COLLECTOR: MoraScope = { accountId: 'acc', userId: 'u-col', kind: 'OWN', ownOnly: true, canAssign: false };
 
 const CATS: MoraCategoryRange[] = DEFAULT_ARREAR_CATEGORIES.map((c) => ({ code: c.code, name: c.name, color: c.color, fromDays: c.fromDays, toDays: c.toDays }));
@@ -152,6 +153,14 @@ describe('alcance (D8) — moraScopeOf', () => {
     assert.equal(t([]).kind, 'OWN');
   });
 
+  it('F13 · data:scope:subtree → su subárbol; entre subtree y branch manda subtree; el total manda sobre todo', () => {
+    assert.equal(t([Permission.DATA_SCOPE_SUBTREE]).kind, 'SUBTREE');
+    assert.equal(t([Permission.DATA_SCOPE_SUBTREE, Permission.DATA_SCOPE_BRANCH]).kind, 'SUBTREE');
+    assert.equal(t([Permission.DATA_SCOPE_SUBTREE, Permission.DATA_SCOPE_ALL]).kind, 'ALL');
+    assert.equal(t([Permission.DATA_SCOPE_SUBTREE]).canAssign, true);
+    assert.equal(t([Permission.DATA_SCOPE_SUBTREE]).ownOnly, false);
+  });
+
   it('si tiene los dos, manda el total', () => {
     assert.equal(t([Permission.DATA_SCOPE_BRANCH, Permission.DATA_SCOPE_ALL]).kind, 'ALL');
   });
@@ -194,14 +203,27 @@ describe('alcance (D8) — qué ve cada uno', () => {
     assert.doesNotMatch(a.sql, /assigned_manager_id IS NULL/);
   });
 
-  it('supervisor (BRANCH): lo suyo O los créditos CON responsable de su agencia (user_accounts.branch_id)', () => {
+  it('supervisor (BRANCH): lo suyo O los créditos CON responsable en el subárbol de sus asignaciones vigentes', () => {
     const a = access(SUPERVISOR);
     // lo suyo (mismo predicado que el cobrador)
     assert.match(a.sql, /cr\.assigned_manager_id = \? OR EXISTS/);
     // su agencia, y sólo si alguien lo atiende
-    assert.match(a.sql, /cr\.assigned_manager_id IS NOT NULL AND cr\.branch_id IS NOT NULL AND cr\.branch_id = \(\s*SELECT ua\.branch_id FROM user_accounts ua/);
-    assert.match(a.sql, /ua\.user_id = \? AND ua\.account_id = cr\.account_id AND ua\.is_active = true/);
+    assert.match(a.sql, /cr\.assigned_manager_id IS NOT NULL AND cr\.branch_id IS NOT NULL AND EXISTS \(\s*SELECT 1 FROM user_branch_assignments ab/);
+    assert.match(a.sql, /ab\.revoked_at IS NULL/);
+    assert.match(a.sql, /uaa\.is_active = true/);
+    assert.match(a.sql, /ob\.path LIKE mine\.path \|\| '%'/);
+    // ya no mira la oficina suelta del miembro
+    assert.doesNotMatch(a.sql, /user_accounts ua\b|ua\.branch_id/);
     assert.ok(a.values.filter((v) => v === 'u-sup').length >= 3);
+  });
+
+  it('gerente regional (SUBTREE): lo suyo O el subárbol de sus oficinas SIN exigir responsable O estar asignado a la raíz', () => {
+    const a = access(MANAGER);
+    assert.match(a.sql, /cr\.assigned_manager_id = \? OR EXISTS/);
+    assert.match(a.sql, /ob\.path LIKE mine\.path \|\| '%'/);
+    assert.match(a.sql, /rb\.is_root = true/);
+    assert.doesNotMatch(a.sql, /assigned_manager_id IS NOT NULL/);
+    assert.ok(a.values.filter((v) => v === 'u-mgr').length >= 3);
   });
 
   it('un crédito SIN responsable queda fuera del cobrador y del supervisor, y sólo lo ve el alcance total', () => {
@@ -251,7 +273,7 @@ describe('buildMoraWhere — filtros', () => {
 
   it('oficina y saldo', () => {
     const w = where({ branchId: 'b1', balanceMin: 100, balanceMax: 900 });
-    assert.match(w.sql, /cr\.branch_id = ?/);
+    assert.match(w.sql, /cr\.branch_id IN \(SELECT nb\.id FROM branches nb WHERE nb\.account_id = cr\.account_id AND nb\.path LIKE/);
     assert.match(w.sql, /cr\.outstanding_balance >= ?/);
     assert.ok(w.values.includes('b1') && w.values.includes(100) && w.values.includes(900));
   });

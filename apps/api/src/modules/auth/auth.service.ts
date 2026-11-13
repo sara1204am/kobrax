@@ -1,12 +1,14 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
+import type { PrismaClient } from '@prisma/client';
 import { compare, hash } from 'bcryptjs';
-import { KOBRAX, preferencesOf, type AccountPreferences, type AuthAccountOption, type AuthTokens, type LoginResult } from '@kobrax/shared';
+import { KOBRAX, isMobileRole, piiChannelOf, preferencesOf, type AccountPreferences, type AuthAccountOption, type AuthTokens, type LoginResult, type MeOffice } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { TokenService } from './token.service';
 import { PermissionsService } from './permissions.service';
 import { SessionService } from './session.service';
+import { AuthzVersionService } from './authz-version.service';
 import { MfaService } from './mfa.service';
 import { CRITICAL_ROLES, canPostponeEnrollment } from './mfa-policy';
 import {
@@ -16,6 +18,7 @@ import {
   invalidPreAuth,
   invalidToken,
   mfaInvalid,
+  mobileRoleNotAllowed,
   mfaRequiredByPolicy,
   noActiveTenant,
   refreshRetry,
@@ -62,6 +65,7 @@ export class AuthService implements OnModuleInit {
     private readonly sessions: SessionService,
     private readonly mfa: MfaService,
     private readonly audit: AuditService,
+    private readonly authz: AuthzVersionService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -261,10 +265,16 @@ export class AuthService implements OnModuleInit {
    */
   private async proceedFromMemberships(
     userId: string,
-    active: MembershipRow[],
+    activeAll: MembershipRow[],
     meta: SessionMeta,
     mfaVerified = false,
   ): Promise<LoginResult> {
+    let active = activeAll;
+    // F14 · F8 (D-3): desde el móvil sólo se ofrecen las empresas donde la persona tiene un rol de campo.
+    if (piiChannelOf(meta.deviceType) === 'mobile') {
+      active = active.filter((m) => isMobileRole(m.role_name));
+      if (active.length === 0) throw mobileRoleNotAllowed();
+    }
     if (active.length === 1) {
       const m = active[0]!;
       const tokens = await this.issueTokens(userId, m.account_id, m.role_id, meta);
@@ -353,6 +363,10 @@ export class AuthService implements OnModuleInit {
     roleId: string;
     permissions: string[];
     sessionId?: string;
+    roleKey?: string;
+    /** F14 · F6: la persona de plataforma (sesión de soporte). Su `userId` es de `platform_users`, no de `users`. */
+    actorType?: 'PLATFORM';
+    supportSessionId?: string;
   }): Promise<{
     userId: string;
     email: string;
@@ -366,8 +380,15 @@ export class AuthService implements OnModuleInit {
     /** Sesión del token: el panel la compara entre pestañas (W-LOG-54). */
     sessionId?: string;
     /** La marca del negocio activo (nombre, teléfono, logo): la lee cualquier miembro, sin `account:read`. */
-    account: { name: string; phone: string | null; logoUrl: string | null; preferences: AccountPreferences } | null;
+    account: { name: string; phone: string | null; logoUrl: string | null; timezone: string | null; soloUser: boolean; preferences: AccountPreferences } | null;
+    /** F14 · F5: clave del rol de la cuenta. */
+    roleKey?: string;
+    /** F14 · F8 (D-7): las oficinas de esta persona (las de su membresía). */
+    offices: MeOffice[];
+    /** F14 · F6: sólo si quien navega es la plataforma en una sesión de soporte: el panel avisa «Sesión de soporte · vence HH:MM». */
+    supportSession?: { id: string; expiresAt: string };
   }> {
+    if (user.actorType === 'PLATFORM') return this.meOfPlatform(user);
     // users/profiles/roles son tablas globales (sin RLS) → acceso directo.
     const [dbUser, role] = await Promise.all([
       this.prisma.user.findUnique({ where: { id: user.userId }, include: { profile: true } }),
@@ -379,16 +400,29 @@ export class AuthService implements OnModuleInit {
     // `/auth/me` no pasa por `TenantGuard` (no hay contexto de request de tenant), así que `withTenant` avisaría en
     // cada llamada. Es una lectura de tres columnas de la cuenta del propio token —la policy de `accounts` es por id,
     // no por alcance de usuario—, por eso va con `withSystemTenant` y no se amplía el acceso de nadie.
-    let account: { businessName: string; phone: string | null; logoUrl: string | null; configuration?: unknown } | null = null;
+    // (`as`: se asigna dentro del callback de la transacción; sin él TypeScript lo da por `null` para siempre)
+    let account = null as { businessName: string; phone: string | null; logoUrl: string | null; timezone?: string | null; configuration?: unknown } | null;
+    let offices: MeOffice[] = [];
+    let soloUser = false;
     try {
-      account = await this.prisma.withSystemTenant(user.accountId, (tx) =>
-        tx.account.findFirst({
+      await this.prisma.withSystemTenant(user.accountId, async (tx) => {
+        // La marca primero y en su variable: si lo que sigue (lo nuevo de F14 · F8) fallara, la marca que el panel ya usaba NO se pierde.
+        account = await tx.account.findFirst({
           where: { id: user.accountId, deletedAt: null },
-          select: { businessName: true, phone: true, logoUrl: true, configuration: true },
-        }),
-      );
+          select: { businessName: true, phone: true, logoUrl: true, timezone: true, configuration: true },
+        });
+        // F14 · F8 (D-7): las oficinas vigentes de la persona. Lectura de lo SUYO (su propia asignación), por eso va con el contexto de sistema como la marca.
+        const assigned = await tx.userBranchAssignment.findMany({
+          where: { accountId: user.accountId, userId: user.userId, revokedAt: null, branch: { active: true, deletedAt: null } },
+          select: { branch: { select: { id: true, name: true, isRoot: true } } },
+          orderBy: { createdAt: 'asc' },
+        });
+        offices = assigned.map((a) => ({ id: a.branch.id, name: a.branch.name, isRoot: a.branch.isRoot }));
+        // F14 · F8 (D-2): ¿la cuenta tiene una sola persona activa? (el cobrador independiente)
+        soloUser = (await tx.userAccount.count({ where: { accountId: user.accountId, isActive: true } })) === 1;
+      });
     } catch {
-      // sin marca: el panel sale sin logo
+      // sin marca (o sin lo nuevo): lo que ya se leyó se entrega; el panel sale sin logo si faltó la marca
     }
 
     return {
@@ -410,8 +444,64 @@ export class AuthService implements OnModuleInit {
       requiresPasswordChange: dbUser.requiresPasswordChange,
       sessionId: user.sessionId,
       account: account
-        ? { name: account.businessName, phone: account.phone, logoUrl: account.logoUrl, preferences: preferencesOf(account.configuration) }
+        ? { name: account.businessName, phone: account.phone, logoUrl: account.logoUrl, timezone: account.timezone ?? null, soloUser, preferences: preferencesOf(account.configuration) }
         : null,
+      roleKey: user.roleKey,
+      offices,
+    };
+  }
+
+  /**
+   * `/auth/me` de la persona de plataforma. No es un usuario de la empresa: no tiene perfil ni `users` propio; lo que ve el
+   * panel es su correo, los permisos del token (ya recortados a la sesión de soporte) y cuándo vence el acceso.
+   */
+  private async meOfPlatform(user: { userId: string; accountId: string; permissions: string[]; sessionId?: string; supportSessionId?: string }) {
+    const person = await this.prisma.platformUser.findUnique({ where: { id: user.userId }, select: { id: true, email: true, isActive: true } });
+    if (!person || !person.isActive) throw invalidToken();
+    let supportSession: { id: string; expiresAt: string } | undefined;
+    let account: { businessName: string; phone: string | null; logoUrl: string | null; timezone?: string | null; configuration?: unknown } | null = null;
+    if (user.accountId) {
+      try {
+        // Una sola transacción de sistema para las dos lecturas.
+        const found = await this.prisma.withSystemTenant(user.accountId, async (tx) => {
+          const [session, acc] = await Promise.all([
+            user.supportSessionId
+              ? tx.supportSession.findFirst({
+                  where: { id: user.supportSessionId, accountId: user.accountId },
+                  select: { id: true, expiresAt: true, revokedAt: true, consentStatus: true },
+                })
+              : null,
+            tx.account.findFirst({
+              where: { id: user.accountId, deletedAt: null },
+              select: { businessName: true, phone: true, logoUrl: true, timezone: true, configuration: true },
+            }),
+          ]);
+          return { session, acc };
+        });
+        account = found.acc;
+        // Sólo se informa una sesión VIGENTE: revocada, vencida o con el consentimiento rechazado/retirado no es un acceso que mostrar.
+        const s = found.session;
+        if (s && !s.revokedAt && s.expiresAt.getTime() > Date.now() && s.consentStatus !== 'DENIED' && s.consentStatus !== 'REVOKED') {
+          supportSession = { id: s.id, expiresAt: s.expiresAt.toISOString() };
+        }
+      } catch {
+        // sin marca ni aviso: la identidad igual se entrega
+      }
+    }
+    return {
+      userId: person.id,
+      email: person.email,
+      profile: null,
+      accountId: user.accountId,
+      role: 'PLATFORM_SUPPORT',
+      permissions: user.permissions,
+      mfaEnabled: true,
+      mfaRequired: false,
+      requiresPasswordChange: false,
+      sessionId: user.sessionId,
+      account: account ? { name: account.businessName, phone: account.phone, logoUrl: account.logoUrl, timezone: account.timezone ?? null, soloUser: false, preferences: preferencesOf(account.configuration) } : null,
+      offices: [],
+      supportSession,
     };
   }
 
@@ -426,6 +516,29 @@ export class AuthService implements OnModuleInit {
     await this.prisma.user.update({ where: { id: userId }, data });
   }
 
+  /** `av` de la membresía y `pv` global, leídos de la DB dentro de la transacción del tenant. */
+  private async versionsOf(tx: PrismaClient, userId: string, accountId: string): Promise<{ av: number; pv: number }> {
+    const ua = await tx.userAccount.findFirst({ where: { userId, accountId }, select: { authzVersion: true } });
+    return { av: ua?.authzVersion ?? 1, pv: await this.authz.currentPolicyVersion(tx) };
+  }
+
+  /** Nombre del rol de la membresía: la clave del rol de la cuenta, o el nombre global si la cuenta aún no tiene copia. */
+  private async roleNameOf(roleKey: string | undefined, roleId: string, tx?: PrismaClient): Promise<string> {
+    if (roleKey) return roleKey;
+    const role = await (tx ?? this.prisma).role.findUnique({ where: { id: roleId }, select: { name: true } });
+    return role?.name ?? '';
+  }
+
+  private async isMobileMember(roleKey: string | undefined, roleId: string, tx?: PrismaClient): Promise<boolean> {
+    return isMobileRole(await this.roleNameOf(roleKey, roleId, tx));
+  }
+
+  /** F14 · F8 (D-3, H-5): el canal móvil es de los roles de campo (administrador, gerente, supervisor, cobrador). */
+  private async assertMobileRole(deviceType: string | undefined, roleKey: string | undefined, roleId: string): Promise<void> {
+    if (piiChannelOf(deviceType) !== 'mobile') return;
+    if (!(await this.isMobileMember(roleKey, roleId))) throw mobileRoleNotAllowed();
+  }
+
   /** Crea sesión + refresh y firma el access, dentro del contexto RLS del tenant. */
   private async issueTokens(
     userId: string,
@@ -433,7 +546,9 @@ export class AuthService implements OnModuleInit {
     roleId: string,
     meta: SessionMeta,
   ): Promise<AuthTokens> {
-    const permissions = await this.permissions.forRole(roleId);
+    const { permissions, roleKey } = await this.permissions.forMembership(accountId, userId, roleId);
+    // F14 · F8 (D-3, H-5): el canal móvil es de los roles de campo.
+    await this.assertMobileRole(meta.deviceType, roleKey, roleId);
     const familyId = randomBytes(16).toString('hex');
     const place = lookupPlace(meta.ip);
 
@@ -473,13 +588,21 @@ export class AuthService implements OnModuleInit {
         },
       });
 
+      // F14 · F1 (H-2): las versiones salen de la DB en ESTA transacción (la fuente), nunca de un token anterior.
+      const versions = await this.versionsOf(tx, userId, accountId);
       const accessToken = this.token.signAccess({
         sub: userId,
         accountId,
         roleId,
+        roleKey,
         permissions,
         sessionId: session.id,
+        // F14 · F8 (D-5): el canal se fija ACÁ, al iniciar la sesión, con lo que declaró el cliente.
+        ch: piiChannelOf(meta.deviceType),
+        av: versions.av,
+        pv: versions.pv,
       });
+      void this.authz.warm(userId, accountId, versions.av, versions.pv);
       return { accessToken, refreshToken: refresh.token };
     });
   }
@@ -502,6 +625,7 @@ export class AuthService implements OnModuleInit {
       | { kind: 'invalid' }
       | { kind: 'retry' }
       | { kind: 'reuse'; sessionId: string }
+      | { kind: 'mobile_role'; sessionId: string }
       | { kind: 'ok'; tokens: AuthTokens };
 
     const outcome = await this.prisma.withTenant<Outcome>(claims.accountId, async (tx) => {
@@ -534,7 +658,16 @@ export class AuthService implements OnModuleInit {
         where: { userId: claims.sub, accountId: claims.accountId, isActive: true },
       });
       if (!ua) return { kind: 'invalid' };
-      const permissions = await this.permissions.forRole(ua.roleId);
+      const { permissions, roleKey } = await this.permissions.forMembershipIn(tx, ua);
+
+      // F14 · F8 (D-5): el canal es el de la SESIÓN (se fijó al iniciarla); el encabezado del refresco no cuenta.
+      const session = await tx.userSession.findFirst({ where: { id: claims.sessionId }, select: { deviceType: true } });
+      const channel = piiChannelOf(session?.deviceType);
+      // F14 · F8 (D-3): quien pasó a un rol que no es de campo pierde la sesión móvil en su próximo refresco (el refresh ya quedó revocado).
+      if (channel === 'mobile' && !(await this.isMobileMember(roleKey, ua.roleId, tx))) {
+        await tx.userSession.updateMany({ where: { id: claims.sessionId }, data: { revokedAt: new Date(), isActive: false } });
+        return { kind: 'mobile_role', sessionId: claims.sessionId };
+      }
 
       const newRefresh = this.token.signRefresh({
         sub: claims.sub,
@@ -558,13 +691,19 @@ export class AuthService implements OnModuleInit {
         data: { lastSeenAt: new Date() },
       });
 
+      const pv = await this.authz.currentPolicyVersion(tx);
       const accessToken = this.token.signAccess({
         sub: claims.sub,
         accountId: claims.accountId,
         roleId: ua.roleId,
+        roleKey,
         permissions,
         sessionId: claims.sessionId,
+        ch: channel,
+        av: ua.authzVersion,
+        pv,
       });
+      void this.authz.warm(claims.sub, claims.accountId, ua.authzVersion, pv);
       return { kind: 'ok', tokens: { accessToken, refreshToken: newRefresh.token } };
     });
 
@@ -573,6 +712,10 @@ export class AuthService implements OnModuleInit {
     if (outcome.kind === 'reuse') {
       await this.sessions.denylist(outcome.sessionId); // revocación instantánea
       throw reuseDetected();
+    }
+    if (outcome.kind === 'mobile_role') {
+      await this.sessions.denylist(outcome.sessionId);
+      throw mobileRoleNotAllowed();
     }
     return outcome.tokens;
   }

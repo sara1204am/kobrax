@@ -1,4 +1,5 @@
 import { describe, it } from 'node:test';
+import { fakePolicy } from '../../common/authz/testing';
 import assert from 'node:assert/strict';
 import { UsersService } from './users.service';
 import { PlanLimitsService } from '../../common/plan/plan-limits.service';
@@ -9,12 +10,14 @@ const OTHER = '22222222-2222-4222-8222-222222222222';
 const ROLE_ADMIN = 'role-admin';
 const ROLE_COLLECTOR = 'role-collector';
 const ROLE_MANAGER = 'role-manager';
+const ROLE_AUDITOR = 'role-auditor';
 const TARGET = '33333333-3333-4333-8333-333333333333';
 
 const ROLES: Record<string, { id: string; name: string; level: number }> = {
   [ROLE_ADMIN]: { id: ROLE_ADMIN, name: 'ACCOUNT_ADMIN', level: 90 },
   [ROLE_COLLECTOR]: { id: ROLE_COLLECTOR, name: 'COLLECTOR', level: 30 },
   [ROLE_MANAGER]: { id: ROLE_MANAGER, name: 'MANAGER', level: 70 },
+  [ROLE_AUDITOR]: { id: ROLE_AUDITOR, name: 'AUDITOR', level: 40 },
 };
 
 function member(over: Record<string, unknown> = {}) {
@@ -38,6 +41,10 @@ function member(over: Record<string, unknown> = {}) {
 }
 
 interface Opts {
+  /** F14 · F1 (R-02): ids de miembros que el actor ve; por defecto, todos. */
+  visible?: string[];
+  /** `false` = quien actúa no administra la cuenta (sin `user:write`), como el gerente regional. Por defecto sí. */
+  canWrite?: boolean;
   /** Miembro que resuelve el scope de `updateMember` (`null` → 404). */
   found?: Record<string, unknown> | null;
   /** Otros ACCOUNT_ADMIN activos que quedan en el tenant. */
@@ -58,9 +65,14 @@ interface Opts {
   targetBusyDates?: string[];
   /** La agencia a la que se mueve a la persona: lo que devuelve su búsqueda (`null` = no existe en esta cuenta). */
   branch?: { active: boolean } | null;
+  /** Asignaciones vigentes de la persona a editar (F13). */
+  assignments?: { id: string; branchId: string }[];
+  /** Otra petición ganó la carrera del índice único parcial de asignaciones. */
+  assignRace?: boolean;
 }
 
 function makeService(opts: Opts = {}) {
+  const policy = fakePolicy();
   const calls = {
     listArgs: undefined as Record<string, unknown> | undefined,
     updated: undefined as Record<string, unknown> | undefined,
@@ -73,10 +85,28 @@ function makeService(opts: Opts = {}) {
     deleted: [] as string[],
     mail: [] as { to: string; text: string }[],
     handover: [] as string[],
+    bumps: [] as { accountId: string; ids: string[] }[],
+    published: [] as number[],
+    revoked: [] as { userId: string; accountId: string }[],
+    assignRevoked: [] as string[],
+    assignCreated: [] as Record<string, unknown>[],
     applied: [] as { creditId: string; to: string | null }[],
     reason: undefined as string | undefined,
   };
   const tx = {
+    // F13: la asignación vigente de la persona (fuente del alcance) que `updateMember` mantiene junto al espejo `branch_id`.
+    userBranchAssignment: {
+      findMany: async () => opts.assignments ?? [],
+      updateMany: async (a: { where: { id: { in: string[] } } }) => {
+        calls.assignRevoked.push(...a.where.id.in);
+        return { count: a.where.id.in.length };
+      },
+      create: async (a: { data: Record<string, unknown> }) => {
+        if (opts.assignRace) throw Object.assign(new Error('unique'), { code: 'P2002' });
+        calls.assignCreated.push(a.data);
+        return a.data;
+      },
+    },
     account: {
       findFirst: async () => ({
         id: 'acc-A',
@@ -172,7 +202,7 @@ function makeService(opts: Opts = {}) {
     role: { findUnique: async (args: { where: { id: string } }) => ROLES[args.where.id] ?? null },
     user: tx.user,
   };
-  const tenant = { accountId: 'acc-A', userId: SELF };
+  const tenant = { accountId: 'acc-A', userId: SELF, can: () => opts.canWrite !== false };
   const audit = { record: async (e: { action: string }) => void calls.audit.push(e.action) };
   const mail = { send: async (to: string, _s: string, text: string) => void calls.mail.push({ to, text }) };
   // El servicio de topes va DE VERDAD, no como doble: es el que decide si entra uno más, y con un
@@ -194,8 +224,26 @@ function makeService(opts: Opts = {}) {
     mail as never,
     plan,
     assignments as never,
+    // F14 · F1: dobles que registran el bump de versión y el cierre de sesiones de la cuenta.
+    {
+      bumpInTx: async (_tx: unknown, accountId: string, ids: string[]) => {
+        calls.bumps.push({ accountId, ids });
+        return ids.map((id) => ({ outboxId: `o-${id}`, accountId, userId: 'u', version: 2 }));
+      },
+      publish: async (p: unknown[]) => void calls.published.push(p.length),
+    } as never,
+    {
+      revokeAccountSessions: async (userId: string, accountId: string) => {
+        calls.revoked.push({ userId, accountId });
+        return 2;
+      },
+    } as never,
+    // F14 · F1 (R-02): por defecto el actor ve a todos (alcance ALL); una prueba puede acotar con `visible`.
+    { visibleMemberIds: async (_tx: unknown, ids: string[]) => new Set(opts.visible ?? ids) } as never,
+    undefined,
+    policy.service,
   );
-  return { service, calls };
+  return { service, calls, asked: policy.asked };
 }
 
 describe('UsersService.list — aislamiento por tenant', () => {
@@ -230,6 +278,46 @@ describe('UsersService.updateMember — agencia', () => {
     await service.updateMember(OTHER, { branchId: BRANCH });
     assert.equal(calls.updated!.branchId, BRANCH);
     assert.deepEqual(calls.audit, ['UPDATE']);
+  });
+
+  it('F13 · espeja en user_branch_assignments: revoca la vigente anterior y crea la nueva (rol siempre null)', async () => {
+    const { service, calls } = makeService({ found: member({ branchId: 'b-vieja' }), assignments: [{ id: 'as-vieja', branchId: 'b-vieja' }] });
+    await service.updateMember(OTHER, { branchId: BRANCH });
+    assert.deepEqual(calls.assignRevoked, ['as-vieja']);
+    assert.equal(calls.assignCreated.length, 1);
+    assert.equal(calls.assignCreated[0]!.branchId, BRANCH);
+    assert.equal(calls.assignCreated[0]!.userId, OTHER);
+    assert.equal(calls.assignCreated[0]!.roleId, undefined);
+    assert.equal(calls.updated!.branchId, BRANCH, 'el espejo legado queda igual que la asignación');
+  });
+
+  it('🔴 F13 · si el índice único parcial gana una carrera → 409 BRANCH_ASSIGNMENT_EXISTS, no 500', async () => {
+    const { service } = makeService({ found: member({ branchId: null }), assignments: [], assignRace: true });
+    await rejectsWithCode(service.updateMember(OTHER, { branchId: BRANCH }), 'BRANCH_ASSIGNMENT_EXISTS');
+  });
+
+  it('F13 · quien ya está en esa oficina no genera asignación nueva', async () => {
+    const { service, calls, asked } = makeService({ found: member({ branchId: BRANCH }), assignments: [{ id: 'as-1', branchId: BRANCH }] });
+    await service.updateMember(OTHER, { branchId: BRANCH });
+    // F14 · F2: reenviar la oficina actual no es un movimiento jerárquico: la política `member.assignRole` no se consulta.
+    assert.equal(asked.some((a) => a.name === 'member.assignRole'), false);
+    assert.deepEqual(calls.assignRevoked, []);
+    assert.deepEqual(calls.assignCreated, []);
+  });
+
+  it('F13 · null revoca la asignación y limpia el espejo', async () => {
+    const { service, calls } = makeService({ found: member({ branchId: 'b-vieja' }), assignments: [{ id: 'as-vieja', branchId: 'b-vieja' }] });
+    await service.updateMember(OTHER, { branchId: null });
+    assert.deepEqual(calls.assignRevoked, ['as-vieja']);
+    assert.deepEqual(calls.assignCreated, []);
+    assert.equal(calls.updated!.branchId, null);
+  });
+
+  it('F13 · sin branchId en el parche no toca las asignaciones', async () => {
+    const { service, calls } = makeService({ assignments: [{ id: 'as-1', branchId: 'x' }] });
+    await service.updateMember(OTHER, { isActive: true });
+    assert.deepEqual(calls.assignRevoked, []);
+    assert.deepEqual(calls.assignCreated, []);
   });
 
   it('null la saca de su agencia', async () => {
@@ -276,7 +364,7 @@ describe('UsersService.updateMember — guardas', () => {
     });
     await service.updateMember(OTHER, { isActive: false });
     assert.equal(calls.updated!.isActive, false);
-    assert.deepEqual(calls.audit, ['UPDATE']);
+    assert.deepEqual(calls.audit, ['SESSION_REVOKE', 'UPDATE']);
     // El conteo excluye al propio usuario que se está editando.
     assert.deepEqual(calls.countWhere!.userId, { not: OTHER });
   });
@@ -293,9 +381,15 @@ describe('UsersService.updateMember — guardas', () => {
     assert.deepEqual(calls.countWhere!.user, { status: 'ACTIVE' });
   });
 
-  it('rechaza un rol que el móvil no administra (MANAGER es de la web)', async () => {
+  it('rechaza un rol que no se asigna por aquí (AUDITOR es de la web)', async () => {
     const { service } = makeService();
-    await rejectsWithCode(service.updateMember(OTHER, { roleId: ROLE_MANAGER }), 'USER_ROLE_NOT_ALLOWED');
+    await rejectsWithCode(service.updateMember(OTHER, { roleId: ROLE_AUDITOR }), 'USER_ROLE_NOT_ALLOWED');
+  });
+
+  it('F13: MANAGER se puede asignar, pero SIN oficina se rechaza (MANAGER_NEEDS_OFFICE)', async () => {
+    const { service, calls } = makeService();
+    await rejectsWithCode(service.updateMember(OTHER, { roleId: ROLE_MANAGER }), 'MANAGER_NEEDS_OFFICE');
+    assert.equal(calls.updated, undefined);
   });
 
   it('acepta un rol de MOBILE_ROLES y audita', async () => {
@@ -385,9 +479,14 @@ describe('UsersService.invite — alta por invitación (S2)', () => {
     assert.equal(calls.mail.length, 0);
   });
 
-  it('rechaza un rol que el móvil no administra', async () => {
+  it('rechaza un rol que no se asigna por aquí', async () => {
     const { service } = makeService({ seats: 0 });
-    await rejectsWithCode(service.invite({ ...INVITE, roleId: ROLE_MANAGER }), 'USER_ROLE_NOT_ALLOWED');
+    await rejectsWithCode(service.invite({ ...INVITE, roleId: ROLE_AUDITOR }), 'USER_ROLE_NOT_ALLOWED');
+  });
+
+  it('F13: invitar a un MANAGER exige oficina', async () => {
+    const { service } = makeService({ seats: 0 });
+    await rejectsWithCode(service.invite({ ...INVITE, roleId: ROLE_MANAGER }), 'MANAGER_NEEDS_OFFICE');
   });
 
   it('correo ya registrado → 409 (lo caza el @unique, no un chequeo previo)', async () => {
@@ -431,17 +530,6 @@ describe('UsersService.remove — cancelar la invitación (S2-D5)', () => {
   it('no deja borrarse a uno mismo', async () => {
     const { service } = makeService();
     await rejectsWithCode(service.remove(SELF), 'USER_CANNOT_EDIT_SELF');
-  });
-});
-
-describe('UsersService.listRoles', () => {
-  it('sólo ofrece los 3 roles del móvil, de mayor a menor nivel', async () => {
-    const { service, calls } = makeService();
-    const roles = await service.listRoles();
-    assert.deepEqual(calls.rolesWhere!.name, {
-      in: ['ACCOUNT_ADMIN', 'SUPERVISOR', 'COLLECTOR'],
-    });
-    assert.equal(roles[0]!.name, 'ACCOUNT_ADMIN');
   });
 });
 
@@ -510,5 +598,75 @@ describe('UsersService.updateMember · desactivar con trabajo a su nombre (F4/11
     await service.updateMember(OTHER, { isActive: true } as never);
     assert.equal(calls.updated!.isActive, true);
     assert.equal(calls.applied.length, 0);
+  });
+});
+
+describe('UsersService.updateMember — versión de autorización y sesiones (F14 · F1, R-01)', () => {
+  it('cambio de rol: sube la versión de ESA membresía y NO cierra sesiones (renueva con AUTHZ_STALE)', async () => {
+    const { service, calls } = makeService({ found: member() });
+    await service.updateMember(OTHER, { roleId: ROLE_ADMIN });
+    assert.deepEqual(calls.bumps, [{ accountId: 'acc-A', ids: ['ua1'] }]);
+    assert.deepEqual(calls.published, [1]);
+    assert.deepEqual(calls.revoked, []);
+  });
+
+  it('desactivar la membresía: sube la versión y cierra las sesiones SOLO de esta cuenta', async () => {
+    const { service, calls } = makeService({ found: member() });
+    await service.updateMember(OTHER, { isActive: false });
+    assert.equal(calls.bumps.length, 1);
+    assert.deepEqual(calls.revoked, [{ userId: OTHER, accountId: 'acc-A' }]);
+  });
+
+  it('reactivar: sube la versión, no hay sesiones que cerrar', async () => {
+    const { service, calls } = makeService({ found: member({ isActive: false }), seats: 1, maxUsers: 5 });
+    await service.updateMember(OTHER, { isActive: true });
+    assert.equal(calls.bumps.length, 1);
+    assert.deepEqual(calls.revoked, []);
+  });
+
+  it('un parche que no toca rol, oficina ni estado no sube nada', async () => {
+    const { service, calls } = makeService({ found: member() });
+    await service.updateMember(OTHER, {});
+    assert.deepEqual(calls.bumps, []);
+    assert.deepEqual(calls.published, [0]);
+  });
+});
+
+describe('UsersService — alcance de Personas y cierre de sesiones (F14 · F1, R-02)', () => {
+  it('list: sólo devuelve a los miembros que el actor ve según su alcance por oficina', async () => {
+    const { service } = makeService({ visible: [] });
+    assert.deepEqual(await service.list(), []);
+  });
+
+  it('cerrar sesiones de alguien fuera de mi alcance → 404 y no se revoca nada', async () => {
+    const { service, calls } = makeService({ found: member(), visible: [] });
+    await rejectsWithCode(service.revokeMemberSessions(OTHER), 'USER_NOT_FOUND');
+    assert.deepEqual(calls.revoked, []);
+  });
+
+  it('cerrar sesiones de un miembro visible: revoca las de ESTA cuenta y audita SESSION_REVOKE', async () => {
+    const { service, calls } = makeService({ found: member() });
+    assert.deepEqual(await service.revokeMemberSessions(OTHER), { sessions: 2 });
+    assert.deepEqual(calls.revoked, [{ userId: OTHER, accountId: 'acc-A' }]);
+    assert.deepEqual(calls.audit, ['SESSION_REVOKE']);
+  });
+
+  it('🔴 el gerente (sin user:write) no cierra las sesiones de un administrador ni de otro gerente aunque los vea', async () => {
+    for (const name of ['ACCOUNT_ADMIN', 'MANAGER']) {
+      const { service, calls } = makeService({ canWrite: false, found: member({ role: { ...ROLES[ROLE_COLLECTOR], name } }) });
+      await rejectsWithCode(service.revokeMemberSessions(OTHER), 'USER_SESSIONS_REVOKE_FORBIDDEN');
+      assert.deepEqual(calls.revoked, []);
+    }
+  });
+
+  it('el gerente sí cierra las sesiones de un cobrador de su oficina', async () => {
+    const { service, calls } = makeService({ canWrite: false, found: member() });
+    assert.deepEqual(await service.revokeMemberSessions(OTHER), { sessions: 2 });
+    assert.equal(calls.revoked.length, 1);
+  });
+
+  it('no se cierran las propias sesiones por este camino', async () => {
+    const { service } = makeService({ found: member() });
+    await rejectsWithCode(service.revokeMemberSessions(SELF), 'USER_CANNOT_EDIT_SELF');
   });
 });

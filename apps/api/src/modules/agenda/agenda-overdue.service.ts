@@ -81,7 +81,7 @@ export class AgendaOverdueService implements OnApplicationBootstrap, OnModuleDes
   /** Fase de lectura (una transacción RLS): vencidas por responsable → solo miembros activos → sin aviso reciente. */
   private async collectTargets(accountId: string, now: Date): Promise<OverdueTarget[]> {
     const since = new Date(now.getTime() - AGENDA_OVERDUE_DEDUPE_MS);
-    return this.prisma.withTenant(accountId, async (tx) => {
+    return this.prisma.withSystemTenant(accountId, async (tx) => {
       const account = await tx.account.findFirst({ where: { id: accountId }, select: { timezone: true, countryCode: true } });
       const today = civilTodayUTC(timezoneOf(account), now);
 

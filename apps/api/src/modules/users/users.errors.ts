@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   ConflictException,
   NotFoundException,
   UnprocessableEntityException,
@@ -58,4 +59,17 @@ export const reassignTargetInvalid = () =>
   new BadRequestException({
     code: 'USER_REASSIGN_TARGET_INVALID',
     message: 'El trabajo solo se puede pasar a un cobrador o supervisor activo, distinto de quien se desactiva',
+  });
+
+/** Un gerente regional sin oficina no tendría alcance: se exige al asignar el rol (F13). */
+export const managerNeedsOffice = () =>
+  new UnprocessableEntityException({
+    code: 'MANAGER_NEEDS_OFFICE',
+    message: 'El gerente regional necesita una oficina: su alcance es esa oficina y todo lo que cuelga de ella',
+  });
+
+export const cannotRevokeSuperior = () =>
+  new ForbiddenException({
+    code: 'USER_SESSIONS_REVOKE_FORBIDDEN',
+    message: 'No podés cerrar las sesiones de un administrador ni de otro gerente',
   });

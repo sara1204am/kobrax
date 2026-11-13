@@ -136,8 +136,10 @@ describe('ArrearsTable — situación, prioridad y responsable (sin caso)', () =
 
   it('el responsable sale de responsibleId; sin nombre dice «Asignado», no el id', () => {
     renderTable([credit({ responsibleId: 'u1' }), credit({ creditId: 'cr-2', code: 'C-2', responsibleId: 'desconocido' })]);
-    expect(screen.getByText('Carlos Mamani')).toBeInTheDocument();
-    expect(screen.getByText('Asignado')).toBeInTheDocument();
+    // El panel de filtros (abierto) también lista a Carlos como opción: se mira sólo la tabla.
+    const tabla = within(screen.getByRole('table'));
+    expect(tabla.getByText('Carlos Mamani')).toBeInTheDocument();
+    expect(tabla.getByText('Asignado')).toBeInTheDocument();
     expect(screen.queryByText('desconocido')).toBeNull();
   });
 
@@ -167,7 +169,18 @@ describe('ArrearsTable — acciones en lote por crédito', () => {
   });
 });
 
+/** Los filtros de Mora arrancan ocultos (como Rutas): se abren con el botón de la barra. */
+const openFilters = () => userEvent.click(screen.getByRole('button', { name: /Filtros aplicados/ }));
+
 describe('ArrearsTable — filtros', () => {
+  it('arrancan ocultos y el botón los abre', async () => {
+    renderTable([credit()]);
+    expect(screen.queryByRole('combobox', { name: 'Castigo' })).toBeNull();
+    expect(screen.getByRole('button', { name: /Filtros aplicados/ })).toHaveAttribute('aria-expanded', 'false');
+    await openFilters();
+    expect(screen.getByRole('combobox', { name: 'Castigo' })).toBeInTheDocument();
+  });
+
   const CATEGORIES = [
     { id: '1', code: 'A', name: 'Temprana', fromDays: 1, toDays: 30, color: '#0a0', sortOrder: 1 },
     { id: '2', code: 'B', name: 'B', fromDays: 31, toDays: null, color: null, sortOrder: 2 },
@@ -175,7 +188,7 @@ describe('ArrearsTable — filtros', () => {
 
   it('quien reparte ve responsable y sin responsable; ya no hay filtros del caso ni de SLA', async () => {
     renderTable([credit()], { showAssignee: true });
-    await userEvent.click(screen.getByRole('button', { name: /Filtros/i }));
+    await openFilters();
     expect(screen.getByText('Créditos sin responsable')).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Responsable' })).toBeInTheDocument();
     for (const gone of ['Caso', 'Tiempo de gestión', 'Estado']) expect(screen.queryByText(gone)).toBeNull();
@@ -183,27 +196,27 @@ describe('ArrearsTable — filtros', () => {
 
   it('el cobrador no ve los de reparto: la API ya lo acota a lo suyo', async () => {
     renderTable([credit()], { showAssignee: false });
-    await userEvent.click(screen.getByRole('button', { name: /Filtros/i }));
+    await openFilters();
     expect(screen.queryByText('Créditos sin responsable')).toBeNull();
     expect(screen.queryByRole('combobox', { name: 'Responsable' })).toBeNull();
   });
 
   it('🔴 la categoría se ofrece con lo que configuró la cuenta, no con una lista fija; sin categorías no hay filtro', async () => {
     renderTable([credit()], { categories: CATEGORIES });
-    await userEvent.click(screen.getByRole('button', { name: /Filtros/i }));
+    await openFilters();
     const combo = screen.getByRole('combobox', { name: 'Categoría de mora' });
     expect(within(combo).getAllByRole('option').map((o) => o.textContent)).toEqual(['Todos', 'A · Temprana', 'B']);
   });
 
   it('sin categorías configuradas no se dibuja el filtro de categoría', async () => {
     renderTable([credit()], { categories: [] });
-    await userEvent.click(screen.getByRole('button', { name: /Filtros/i }));
+    await openFilters();
     expect(screen.queryByRole('combobox', { name: 'Categoría de mora' })).toBeNull();
   });
 
   it('castigo, prioridad, fuente y «incluir los que están al día» siguen', async () => {
     renderTable([credit()]);
-    await userEvent.click(screen.getByRole('button', { name: /Filtros/i }));
+    await openFilters();
     const castigo = screen.getByRole('combobox', { name: 'Castigo' });
     expect(within(castigo).getAllByRole('option').map((o) => o.textContent)).toEqual(['Todos', 'Sólo castigados', 'Sin castigados']);
     expect(screen.getByRole('combobox', { name: 'Prioridad' })).toBeInTheDocument();

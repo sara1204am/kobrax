@@ -48,13 +48,22 @@
       "export": "Export",
       "profile": "My profile",
       "security": "Security",
-      "pending": "{n, plural, one {# pending task} other {# pending tasks}}"
+      "pending": "{n, plural, one {# pending task} other {# pending tasks}}",
+      "organization": "Organization",
+      "activity": "Activity",
+      "accessSecurity": "Security",
+      "roles": "Roles and permissions",
+      "supportAccess": "Support access"
     },
     "crumbs": {
+      "datos-personales": "Personal details",
+      "preferencias": "Preferences",
+      "seguridad": "Security",
       "avanzado": "Advanced",
       "facturacion": "Billing",
       "actividad": "Activity",
-      "agencias": "Branches",
+      "oficinas": "Offices",
+      "papelera": "Trash",
       "catalogos": "Catalogs",
       "general": "General",
       "plan": "Plan",
@@ -73,7 +82,13 @@
       "credito": "Credit",
       "solicitudes": "Payment requests",
       "nueva": "New",
-      "bitacora": "Activity log"
+      "bitacora": "Activity log",
+      "soporte": "Support",
+      "organizacion": "Organization",
+      "roles": "Roles and permissions",
+      "role": "Role",
+      "comparar": "Compare",
+      "historial": "History"
     },
     "soon": "Soon",
     "openMenu": "Open menu",
@@ -113,7 +128,9 @@
         "selected": "{count} selected",
         "clear": "Clear filters",
         "source": "Source",
-        "allSources": "All"
+        "allSources": "All",
+        "office": "Office",
+        "allOffices": "All offices"
       },
       "priorities": {
         "LOW": "Low",
@@ -158,17 +175,25 @@
       "edit": "Edit",
       "done": "Done",
       "addWidget": "Add widget",
+      "noWidgetMatch": "No widget matches that search.",
       "searchWidgets": "Search widgets",
       "widgetAdded": "Widget added",
       "removeWidget": "Remove widget",
       "duplicateWidget": "Duplicate widget",
       "rename": "Rename",
       "dashboardName": "Dashboard name",
+      "tabs": {
+        "label": "Your dashboards",
+        "new": "New dashboard",
+        "newTitle": "New dashboard",
+        "create": "Create",
+        "namePlaceholder": "E.g.: Indicators, Charts, Agenda"
+      },
       "duplicate": "Duplicate",
       "duplicated": "Dashboard duplicated",
       "delete": "Delete",
       "deleted": "Dashboard deleted",
-      "deleteConfirm": "Delete «{name}»? It stops being available for the whole company.",
+      "deleteConfirm": "Delete «{name}»? It is your dashboard and this cannot be undone from here.",
       "save": "Save",
       "cancel": "Cancel",
       "saveError": "The dashboard could not be saved.",
@@ -188,6 +213,22 @@
         "list": "List",
         "histogram": "Histogram",
         "text": "Text / Note"
+      },
+      "catalogItems": {
+        "kpiStrip": { "name": "Summary of indicators", "description": "A strip with portfolio balance, overdue portfolio (amount and %), loans in arrears and collected.", "keywords": "summary strip indicators kpi balance overdue collected" },
+        "kpiOutstanding": { "name": "Total portfolio balance", "description": "How much is still owed in total, split by source.", "keywords": "balance portfolio total outstanding kpi" },
+        "kpiOverdue": { "name": "Overdue portfolio (amount)", "description": "Amount of loans with past-due installments, split by source.", "keywords": "overdue arrears past due amount kpi" },
+        "kpiOverdueRate": { "name": "% of portfolio overdue", "description": "What share of the portfolio balance is overdue.", "keywords": "percentage rate delinquency overdue kpi" },
+        "kpiCreditsInArrears": { "name": "Number of loans in arrears", "description": "How many loans have past-due installments (count, not amount).", "keywords": "loans credits arrears count number kpi" },
+        "kpiCollected": { "name": "Collected in the period", "description": "What was collected in the filtered period, split by source.", "keywords": "collected collections payments revenue kpi" },
+        "agingDonut": { "name": "Overdue portfolio by days past due (donut)", "description": "Overdue amount split by bucket: 1–30, 31–90, 91–180 days, etc.", "keywords": "donut pie overdue buckets days aging ranges" },
+        "agingBars": { "name": "Overdue portfolio by days past due (bars)", "description": "Loans and overdue amount per day bucket, as bars.", "keywords": "bars overdue buckets days aging ranges" },
+        "agendaDonut": { "name": "Agenda status for the period", "description": "Scheduled items for the period: done, pending and overdue, as a donut.", "keywords": "donut agenda scheduled visits pending done" },
+        "indicatorsList": { "name": "Collection activity indicators", "description": "List of visits, calls, contacts, payment promises and payments recorded.", "keywords": "list activity visits calls promises payments productivity" },
+        "collectorsTable": { "name": "Portfolio by collector", "description": "Table with each collector portfolio, overdue, overdue % and amount collected.", "keywords": "table collectors team performance ranking portfolio overdue" },
+        "visitsMap": { "name": "Visits map for the day", "description": "The stops of the day on a map, visited and pending, per collector.", "keywords": "map visits stops route location collectors" },
+        "trendLine": { "name": "Portfolio and collection trend", "description": "A line over time of portfolio balance and amount collected.", "keywords": "line chart trend evolution history balance collected" },
+        "agendaToday": { "name": "Today agenda", "description": "What is scheduled for today: visits, calls and promises to follow up.", "keywords": "calendar agenda today pending visits calls promises" }
       },
       "buckets": {
         "D1_30": "1 to 30 days",
@@ -549,9 +590,9 @@
           "refTitle": "Loan officer"
         },
         "branch": {
-          "label": "One branch",
-          "hint": "The file carries a branch's portfolio. Only that branch is reconciled.",
-          "refTitle": "Branch"
+          "label": "One office",
+          "hint": "The file carries an office's portfolio and everything under it. Only that part of the tree is reconciled.",
+          "refTitle": "Office"
         },
         "account": {
           "label": "The whole company",
@@ -765,7 +806,7 @@
         "scopeKinds": {
           "account": "Whole company",
           "official": "{name}'s portfolio",
-          "branch": "Branch {name}"
+          "branch": "Office {name}"
         }
       }
     },
@@ -805,7 +846,7 @@
         "code": "Credit no.",
         "overdue": "Overdue",
         "lastAction": "Last action",
-        "branch": "Branch",
+        "branch": "Office",
         "originStatus": "Status at source",
         "principal": "Original amount",
         "installment": "Installment",
@@ -2292,6 +2333,45 @@
       "pendingLink": "Log the result",
       "pendingLogged": "Activity pending result created",
       "pendingError": "WhatsApp opened, but the pending activity could not be saved"
+    },
+    "noAccess": {
+      "title": "You don't have access to this page",
+      "text": "If you think you should, ask your account administrator.",
+      "errorTitle": "We couldn't check your access",
+      "errorText": "There was a problem loading your permissions. Please try again.",
+      "changedTitle": "Your permissions changed",
+      "changedText": "You no longer have access to this page."
+    },
+    "supportBanner": {
+      "title": "Support session.",
+      "expires": "Expires at {time}.",
+      "active": "Access active."
+    },
+    "pages": {
+      "organization": {
+        "title": "Organization",
+        "subtitle": "The account's offices and who works in each one."
+      },
+      "activity": {
+        "title": "Activity",
+        "subtitle": "Who changed what in the account."
+      },
+      "support": {
+        "title": "Support access",
+        "subtitle": "Who from the Kobrax team entered this account, why and until when."
+      },
+      "security": {
+        "title": "Security",
+        "subtitle": "Account access and permissions.",
+        "supportText": "Who from the platform entered your account, and the authorization for them to write.",
+        "empty": "There is nothing to manage here yet.",
+        "rolesText": "What each role can do, compare them and change their permissions.",
+        "rolesTitle": "Roles and permissions"
+      },
+      "roles": {
+        "title": "Roles and permissions",
+        "subtitle": "What each role can do in your account."
+      }
     }
   },
   "account": {
@@ -2304,11 +2384,12 @@
       "cobranza": "Collections",
       "mensajes": "Messages",
       "catalogos": "Catalogs",
-      "agencias": "Branches",
+      "oficinas": "Offices",
       "facturacion": "Billing",
       "billingPending": "Billing details missing",
       "actividad": "Activity",
-      "avanzado": "Advanced"
+      "avanzado": "Advanced",
+      "soporte": "Support access"
     },
     "saveBar": {
       "label": "Unsaved changes",
@@ -2350,7 +2431,7 @@
         "descriptionLabel": "Description (optional)",
         "descriptionPlaceholder": "What this option is for"
       },
-            "intro": "Manage the options your team uses in daily operations.",
+      "intro": "Manage the options your team uses in daily operations.",
       "count": "{count, plural, one {# catalog} other {# catalogs}}",
       "settings": "Business settings",
       "searchCatalog": "Search catalog…",
@@ -2384,7 +2465,7 @@
         "subtitle": "Change how your team sees this option",
         "codeLocked": "The code can't be changed: records and the mobile app store it."
       },
-"names": {
+      "names": {
         "PAYMENT_METHOD": "Payment methods",
         "BANK": "Banks",
         "NO_PAYMENT_REASON": "Reasons for non-payment",
@@ -2441,66 +2522,6 @@
       "save": "Save preferences",
       "saved": "Preferences saved",
       "saveError": "The preferences could not be saved"
-    },
-    "branches": {
-      "title": "Branches",
-      "intro": "Your business locations and who works in each one. A person's branch decides which portfolio they see: a supervisor sees their own branch.",
-      "add": "+ New branch",
-      "empty": "There are no branches yet",
-      "emptyHint": "Not needed if you work from a single office. Create one per location to split the portfolio and the team.",
-      "columns": {
-        "name": "Branch",
-        "city": "City",
-        "manager": "Manager",
-        "members": "Members",
-        "credits": "Credits",
-        "status": "Status",
-        "actions": "Actions"
-      },
-      "active": "Active",
-      "inactive": "Deactivated",
-      "manage": "Members",
-      "manageOf": "Members of {name}",
-      "edit": "Edit",
-      "editOf": "Edit {name}",
-      "addTitle": "New branch",
-      "editTitle": "Edit branch",
-      "fields": {
-        "name": "Name",
-        "code": "Code",
-        "codeHint": "Short, e.g. CEN. Saved in uppercase.",
-        "city": "City",
-        "address": "Address",
-        "manager": "Manager",
-        "noManager": "No manager",
-        "active": "Active branch",
-        "activeHint": "To deactivate it, first move its members to another branch."
-      },
-      "save": "Save",
-      "cancel": "Cancel",
-      "close": "Close",
-      "remove": "Remove branch",
-      "saved": "Branch saved",
-      "created": "Branch created",
-      "removed": "Branch removed",
-      "saveError": "The change could not be saved",
-      "removeTitle": "Remove {name}?",
-      "removeText": "The branch stops showing, but the credits and routes that name it keep their history.",
-      "removeBlocked": "It has {n, plural, one {# active member} other {# active members}}. Move them to another branch before removing it.",
-      "removeOk": "Remove",
-      "membersTitle": "Members of {name}",
-      "currentMembers": "In this branch",
-      "noMembers": "Nobody is in this branch yet.",
-      "takeOut": "Remove",
-      "takeOutOf": "Remove {name} from the branch",
-      "memberRemoved": "Member removed from the branch",
-      "addMembers": "Add people",
-      "scopeWarning": "Changing someone's branch changes the portfolio they see.",
-      "noCandidates": "There are no more active people to add.",
-      "comesFrom": "from {name}",
-      "noBranch": "no branch",
-      "addPicked": "{n, plural, =0 {Add} one {Add # person} other {Add # people}}",
-      "membersAdded": "Members moved to the branch"
     },
     "billing": {
       "title": "Billing details",
@@ -2566,12 +2587,12 @@
     },
     "activity": {
       "title": "Account activity",
-      "intro": "Who changed what in the account settings, team, branches and lists. Only people who can read the audit log see it.",
+      "intro": "Who changed what in the account settings, team, offices and lists. Only people who can read the audit log see it.",
       "filter": "Type of change",
       "all": "All",
       "entities": {
         "account": "Account details",
-        "branch": "Branch",
+        "branch": "Office",
         "catalog_item": "Catalog item",
         "arrear_category": "Arrears category",
         "user_account": "Team member",
@@ -2773,7 +2794,283 @@
     "arrearsMethods": {
       "oldest_unpaid": "From the oldest unpaid instalment",
       "first_default": "From the first default until caught up (as banks do)"
-    }
+    },
+    "offices": {
+      "title": "Offices",
+      "intro": "Your organization's structure: its offices and who works in each. A person's office decides which portfolio they see; whoever is in a regional sees everything under it.",
+      "add": "Add office",
+      "planLimit": "Your plan allows {limit, plural, one {# office} other {# offices}} and you already use {used} (the root counts).",
+      "seePlan": "See the plan",
+      "menu": {
+        "edit": "Edit",
+        "addChild": "Add child",
+        "quickAdd": "Quick add",
+        "detail": "View detail",
+        "move": "Move to…",
+        "deactivate": "Deactivate",
+        "of": "Actions for {name}"
+      },
+      "tree": {
+        "root": "Main office",
+        "collapse": "Collapse {name}",
+        "expand": "Expand {name}",
+        "credits": "{n, plural, one {# loan} other {# loans}}",
+        "members": "{n, plural, one {# person} other {# people}}",
+        "showMore": "Show {n} more"
+      },
+      "toolbar": {
+        "search": "Search by name, code, city or type",
+        "count": "{n, plural, one {# office} other {# offices}}",
+        "level": "Visible levels",
+        "collapseAll": "Collapse all",
+        "expandAll": "Expand all",
+        "less": "One level less",
+        "more": "One level more",
+        "levelNow": "Visible levels: {n}",
+        "shortcuts": "Shortcuts: \"/\" searches · 1-9 sets how many levels show · 0 leaves only the root · Alt+click on the arrow opens the whole branch · arrow keys walk the tree.",
+        "noResults": "No results for \"{q}\".",
+        "results": "{n, plural, one {# result} other {# results}} for \"{q}\".",
+        "clear": "Clear"
+      },
+      "status": {
+        "active": "Active",
+        "inactive": "Deactivated"
+      },
+      "preview": {
+        "parent": "Parent office",
+        "city": "City",
+        "address": "Address",
+        "manager": "Manager",
+        "full": "Full details",
+        "members": "{n, plural, one {# person} other {# people}}",
+        "credits": "{n, plural, one {# credit} other {# credits}}",
+        "children": "{n, plural, one {# child office} other {# child offices}}"
+      },
+      "form": {
+        "close": "Close",
+        "cancel": "Cancel",
+        "save": "Save",
+        "created": "Office created",
+        "saved": "Office saved",
+        "addTitle": "New office",
+        "editTitle": "Edit {name}",
+        "tabsLabel": "Office sections",
+        "tabs": {
+          "data": "Details",
+          "contact": "Contact and location",
+          "team": "Team"
+        },
+        "tabHasErrors": "Missing data",
+        "teamAfterSave": "Save the office to add people.",
+        "fields": {
+          "name": "Name",
+          "code": "Code",
+          "codeHint": "Short, e.g. CEN. Saved in uppercase.",
+          "type": "Type",
+          "pickType": "Pick a type",
+          "parent": "Parent office",
+          "manager": "Manager",
+          "noManager": "No manager",
+          "managerSearch": "Search by name or email",
+          "managerNone": "Nobody matches your search",
+          "addUser": "Add user",
+          "location": "Location on the map",
+          "locationHint": "Tap the map or drag the pin to mark where the office is.",
+          "locationMap": "Map to mark the office location",
+          "locationTap": "Tap the map to mark the office",
+          "latitude": "Latitude",
+          "longitude": "Longitude",
+          "clearPoint": "Remove point",
+          "city": "City",
+          "address": "Address"
+        },
+        "branchingWarning": "This office holds a portfolio. When you open its first child, the portfolio moves to the new offices: after creating it we take you to \"Move portfolio\"."
+      },
+      "quick": {
+        "title": "Quick add under {name}",
+        "under": "Created inside: {path}",
+        "dupCode": "There is already an office with that code."
+      },
+      "move": {
+        "title": "Move {name}",
+        "to": "New parent office",
+        "pick": "Pick where to move it",
+        "confirm": "Move \"{name}\" under \"{to}\"?",
+        "impact": "The whole branch moves: {offices, plural, one {# office} other {# offices}}, with {people, plural, one {# person} other {# people}} and {credits, plural, one {# credit} other {# credits}}. What each person sees changes.",
+        "ok": "Move",
+        "done": "Office moved"
+      },
+      "deactivate": {
+        "title": "Deactivate {name}?",
+        "text": "The office goes to the trash and stops showing; its credits and routes keep their history. It can be restored.",
+        "ok": "Deactivate",
+        "done": "Office deactivated",
+        "root": "The main office cannot be deactivated.",
+        "children": "{n, plural, one {It has # active child office} other {It has # active child offices}}: deactivate or move them first.",
+        "members": "{n, plural, one {It has # active person} other {It has # active people}}: move them to another office first.",
+        "credits": "{n, plural, one {It has # credit} other {It has # credits}}: move them to another office first."
+      },
+      "portfolio": {
+        "pending": "\"{name}\" still holds {n, plural, one {# credit} other {# credits}} and already has child offices. The main office's portfolio moves to the new ones.",
+        "open": "Move portfolio",
+        "askAdmin": "Ask whoever assigns the portfolio to move it.",
+        "title": "Move portfolio",
+        "text": "You are about to move the {n, plural, one {# credit} other {# credits}} of \"{name}\" to another office.",
+        "to": "Destination office",
+        "pick": "Pick the office",
+        "ok": "Move the portfolio",
+        "done": "Portfolio moved",
+        "moved": "{n, plural, one {# credit was moved} other {# credits were moved}}.",
+        "paymentsNote": "Payments already recorded keep the office where they were collected."
+      },
+      "trash": {
+        "link": "{n, plural, =0 {Trash} other {Trash (#)}}",
+        "title": "Office trash",
+        "intro": "Deactivated offices. Restoring one puts it back in the tree, under its parent office.",
+        "empty": "The trash is empty",
+        "emptyHint": "Offices you deactivate show up here.",
+        "name": "Office",
+        "actions": "Actions",
+        "restore": "Restore",
+        "restoreOf": "Restore {name}",
+        "restored": "Office restored"
+      },
+      "types": {
+        "title": "Office types",
+        "intro": "The type is a label (Regional, Branch…), not a rule: you can put any type under any office. A type in use is deactivated, not deleted.",
+        "empty": "There are no types yet.",
+        "code": "Code",
+        "name": "Name",
+        "add": "Add type",
+        "created": "Type created",
+        "saved": "Type saved",
+        "active": "Active",
+        "activeOf": "Type {code} active",
+        "nameOf": "Name of type {code}"
+      },
+      "team": {
+        "current": "In this office",
+        "none": "Nobody is in this office yet.",
+        "takeOut": "Remove",
+        "takeOutOf": "Remove {name} from the office",
+        "removed": "Person removed from the office",
+        "add": "Add people",
+        "oneOffice": "Each person is in a single office: adding someone who is already in another moves them. Changing the office changes the portfolio they see.",
+        "noCandidates": "There are no more active people to add.",
+        "person": "Person",
+        "comesFrom": "now in {name}",
+        "willMove": "{name} is now in \"{from}\" and will move to this office.",
+        "assign": "Assign",
+        "added": "Person assigned to the office",
+        "stats": {
+          "credits": "Loans",
+          "portfolio": "Portfolio",
+          "arrears": "Portfolio in arrears",
+          "person": "Person",
+          "arrearsCredits": "Loans in arrears",
+          "office": "Office"
+        },
+        "table": {
+          "entity": "people",
+          "searchLabel": "Search the team",
+          "searchPlaceholder": "Search by name, email or role",
+          "noResults": "Nobody matches your search",
+          "noResultsHint": "Try another name, email or role."
+        },
+        "office": "Office to register in",
+        "officeHint": "This office or any office under it.",
+        "search": "Search by name or email"
+      },
+      "detail": {
+        "back": "Back to offices",
+        "noAccess": "The office could not be opened",
+        "path": "Office path",
+        "general": "General information",
+        "stats": {
+          "title": "Office portfolio",
+          "assigned": "Assigned loans",
+          "scopeHint": "Includes the offices under this one",
+          "arrearsCredits": "Loans in arrears",
+          "portfolio": "Total portfolio",
+          "arrearsPortfolio": "Portfolio in arrears",
+          "balanceHint": "Outstanding balance, not the installment",
+          "share": "{pct} of the portfolio"
+        },
+        "children": "Child offices",
+        "noChildren": "It has no child offices.",
+        "team": "Team",
+        "history": "History",
+        "noHistory": "No changes recorded.",
+        "tabs": {
+          "info": "General information",
+          "offices": "Offices",
+          "team": "Team",
+          "history": "History"
+        },
+        "sections": "Office sections",
+        "parentLabel": "Parent office",
+        "columns": {
+          "name": "Office",
+          "type": "Type",
+          "city": "City",
+          "manager": "Manager",
+          "members": "People",
+          "credits": "Loans"
+        }
+      },
+      "single": {
+        "title": "Your office",
+        "name": "Name",
+        "team": "Team",
+        "firstAgencyHint": "You work with a single office. When you open another, your organization's tree shows up here.",
+        "firstAgency": "Create the first office",
+        "planBlocks": "Your plan allows {limit, plural, one {# office} other {# offices}}; opening another needs a plan upgrade.",
+        "readOnly": "Read only"
+      },
+      "errors": {
+        "generic": "The action could not be completed",
+        "conflict": "This clashes with an organization rule. Check the data and try again.",
+        "BRANCH_PARENT_INVALID": "The parent office is not valid.",
+        "BRANCH_PARENT_INACTIVE": "The parent office is deactivated.",
+        "BRANCH_TOO_DEEP": "The tree would exceed the allowed number of levels.",
+        "BRANCH_MOVE_CYCLE": "An office cannot be moved inside its own branch.",
+        "BRANCH_ROOT_PROTECTED": "The main office cannot be moved or deactivated.",
+        "BRANCH_HAS_CHILDREN": "It has active child offices: deactivate or move them first.",
+        "BRANCH_HAS_CREDITS": "It has credits: move them to another office first.",
+        "BRANCH_HAS_MEMBERS": "It has active people: move them to another office first.",
+        "BRANCH_ASSIGNMENT_EXISTS": "The person already has an assigned office; assigning another moves them.",
+        "BRANCH_MEMBER_NOT_FOUND": "The person is not in that office.",
+        "CREDIT_OFFICE_OUT_OF_SCOPE": "You have no scope over that office.",
+        "CREDIT_REASSIGN_ARGS": "Give the source office or the credits, not both."
+      }
+    },
+    "support": {
+      "title": "Support access",
+      "intro": "When the Kobrax team needs to help you with a problem, they open temporary access to your account. Here you can see each access, what it allows and until when, and accept it, reject it or cut it off at any time. Everything they do is recorded in the account activity.",
+      "empty": "Nobody from the Kobrax team has asked for access to your account.",
+      "reason": "Reason",
+      "ticket": "Ticket",
+      "expires": "Expires",
+      "permissions": "Can",
+      "readOnly": "View only",
+      "writes": "Can change account settings",
+      "status": {
+        "ACTIVE": "Active",
+        "AWAITING_CONSENT": "Waiting for your approval",
+        "EXPIRED": "Expired",
+        "REVOKED": "Revoked",
+        "DENIED": "Rejected"
+      },
+      "grant": "Accept",
+      "deny": "Reject",
+      "revoke": "Cut access",
+      "working": "One moment…",
+      "error": "The action could not be completed",
+      "consentNote": "They asked to be able to change account settings. Without your approval they can only view.",
+      "banner": "Support session · expires at {time}"
+    },
+    "loadErrorTitle": "The account couldn't be loaded",
+    "loadErrorText": "There was a problem fetching the data. Please try again."
   },
   "exports": {
     "title": "Export",
@@ -2948,8 +3245,8 @@
     "filters": {
       "manager": "Owner",
       "allManagers": "All owners",
-      "branch": "Branch",
-      "allBranches": "All branches",
+      "branch": "Office",
+      "allBranches": "All offices",
       "arrearsRange": "Arrears range",
       "debtRange": "Debt range"
     },
@@ -3000,7 +3297,20 @@
       "summary": "Account summary",
       "timeline": "Activity log"
     },
+    "previewNotice": "{count, plural, =0 {This client has no credits yet.} one {This client already has # credit handled by someone else ({names}).} other {This client already has # credits handled by other people ({names}).}} Creating yours lets you see and edit the client record; the other person's credit stays theirs.",
     "newLoan": "New credit",
+    "registerOffice": {
+      "label": "Office where registered",
+      "hint": "This office or any below it. The head office does not register clients.",
+      "pick": "Pick an office"
+    },
+    "otherCredits": {
+      "notice": "{count, plural, one {This client has # more credit} other {This client has # more credits}} you can't see, with a balance of {total}. Handled by: {names}.",
+      "nobody": "no owner",
+      "cardsTitle": "Loans handled by someone else",
+      "responsible": "Handled by: {names}",
+      "cardsHint": "Informational cards only: you can not open the details of these loans."
+    },
     "loanMode": {
       "A": "I know the instalment",
       "B": "Work out the instalment"
@@ -3472,7 +3782,11 @@
         "days": "{count} days",
         "since": "since {date}",
         "oldestUnpaid": "Oldest unpaid instalment: {number} (due {date})"
-      }
+      },
+      "office": "Credit office",
+      "officeHint": "The credit belongs to one office; it decides who sees it.",
+      "officePick": "Pick the office",
+      "officeRequired": "Pick the credit's office: your account has several offices and it must land in one you have scope over."
     },
     "creditDetail": {
       "management": {
@@ -3604,6 +3918,8 @@
     "duplicate": {
       "checking": "Checking whether they already exist…",
       "documentTaken": "This ID already belongs to {name}.",
+      "documentTakenHidden": "This client is already registered: {name}.",
+      "createMyCredit": "Create my credit for this client",
       "documentTakenDeleted": "This ID belongs to {name}, who was removed. It cannot be used for a new client.",
       "documentHint": "If it is the same person, open their profile instead of creating them again.",
       "openClient": "View client",
@@ -3631,7 +3947,8 @@
     },
     "entity": "members",
     "filters": {
-      "allRoles": "All roles"
+      "allRoles": "All roles",
+      "allOffices": "All offices"
     },
     "noResults": "Nobody matches that search",
     "noResultsHint": "Try another name, the email, or removing a filter.",
@@ -3648,7 +3965,8 @@
       "role": "Role",
       "status": "Status",
       "actions": "Actions",
-      "lastAccess": "Last access"
+      "lastAccess": "Last access",
+      "office": "Office"
     },
     "status": {
       "active": "Active",
@@ -3673,6 +3991,10 @@
       "email": "Email",
       "role": "What will they do?",
       "rolePlaceholder": "Pick a role",
+      "office": "Manager office",
+      "officeOptional": "Office (optional)",
+      "officeNone": "No office for now",
+      "officePlaceholder": "Choose an office",
       "cancel": "Cancel",
       "send": "Send invitation",
       "error": "Could not send the invitation",
@@ -3717,7 +4039,7 @@
       "AUDITOR": "Auditor",
       "VIEWER": "Viewer",
       "ACCOUNT_ADMINHint": "Manages account, team and plan",
-      "SUPERVISORHint": "Manages collections and their agency",
+      "SUPERVISORHint": "Manages collections and their office",
       "COLLECTORHint": "Runs routes and records payments",
       "MANAGERHint": "Oversees operations",
       "AUDITORHint": "Views and audits",
@@ -3876,11 +4198,37 @@
         "loading": "Loading…",
         "retry": "Couldn't load. Retry",
         "end": "{count, plural, one {# record} other {# records}} in total"
-      }
+      },
+      "officeTitle": "Office",
+      "changeOffice": "Change office",
+      "officePick": "Pick the office",
+      "officeSave": "Assign",
+      "officeOne": "Each person is in a single office: assigning them to another moves them and changes the portfolio they see.",
+      "officeMoved": "Office assigned",
+      "officeRemove": "Remove from the office",
+      "officeRemoved": "Person removed from the office",
+      "officeError": "The office could not be assigned"
     }
   },
   "profile": {
     "title": "My profile",
+    "edit": "Edit",
+    "cancel": "Cancel",
+    "email": "Email",
+    "role": "Role",
+    "personalData": "Personal details",
+    "personalDataHint": "How your team sees you. Email and role are set by the account.",
+    "imagesTitle": "Photo and payments",
+    "imagesHint": "Your photo and the QR debtors use to pay you.",
+    "preferencesHint": "What changes only for you.",
+    "accountPrefsHint": "Working days, hours and time zone belong to the business.",
+    "accountPrefsLink": "They are set in Account → Collections.",
+    "tabs": {
+      "label": "My profile sections",
+      "datos-personales": "Personal details",
+      "preferencias": "Preferences",
+      "seguridad": "Security"
+    },
     "subtitle": "How your team sees you and how debtors pay you.",
     "firstName": "First name",
     "lastName": "Last name",
@@ -3912,6 +4260,7 @@
   },
   "security": {
     "title": "Security",
+    "access": "Access",
     "back": "Security",
     "loading": "Loading…",
     "options": {
@@ -4134,5 +4483,361 @@
     "doneTitle": "Password updated",
     "doneSubtitle": "You can now sign in with your new password.",
     "doneLink": "Go to sign in"
+  },
+  "roles": {
+    "title": "Roles and permissions",
+    "subtitle": "What each role can do in your account.",
+    "back": "Roles",
+    "compare": "Compare",
+    "legend": "● = differs from the template. Creating custom roles will come later.",
+    "empty": "This account has no roles yet. Contact support.",
+    "columns": {
+      "role": "Role",
+      "origin": "Origin",
+      "people": "People",
+      "scope": "Scope",
+      "permissions": "Permissions",
+      "modified": "Modified",
+      "state": "Status"
+    },
+    "origin": {
+      "TEMPLATE": "Template",
+      "CUSTOM": "Custom"
+    },
+    "state": {
+      "system": "System",
+      "custom": "Custom",
+      "locked": "Not editable"
+    },
+    "diverged": "Differs from the template",
+    "scope": {
+      "ALL": "Whole account",
+      "SUBTREE": "Its offices and those below",
+      "BRANCH": "Its office",
+      "OWN": "Own only"
+    },
+    "unmodified": "Unchanged",
+    "detail": {
+      "tabs": {
+        "label": "Role sections",
+        "permissions": "Permissions",
+        "people": "People",
+        "history": "History"
+      },
+      "summary": "{granted} granted · {added} added over the template · {removed} removed",
+      "summaryNoTemplate": "{granted} granted",
+      "template": "Template: {name}",
+      "peopleCount": "{n, plural, one {# person} other {# people}}",
+      "edit": "Edit permissions",
+      "restore": "Restore template",
+      "locked": "This role cannot be edited.",
+      "noPeople": "Nobody has this role yet.",
+      "inactive": "Inactive",
+      "granted": "Granted",
+      "notGranted": "Not granted",
+      "addedBadge": "Added",
+      "removedBadge": "Removed",
+      "removedList": "Removed compared to the template",
+      "restoreTitle": "Restore the template of «{name}»",
+      "restoreText": "The role will go back to its template permissions.",
+      "restoreConfirm": "Restore"
+    },
+    "editor": {
+      "title": "Edit permissions · {name}",
+      "cancel": "Cancel",
+      "save": "Save",
+      "scopeTitle": "Data scope",
+      "scopeHelp": "Which data this role sees. Only one.",
+      "changes": "{n, plural, one {# change} other {# changes}}",
+      "highRisk": "{n} high risk",
+      "noChanges": "No changes",
+      "review": "Review changes",
+      "requires": "Requires: {list}",
+      "locked": "Reserved: account administrator only",
+      "origin": {
+        "inherited": "From the template",
+        "custom": "Custom"
+      },
+      "granted": "Granted",
+      "denied": "Denied",
+      "autoAdded": "What it needs was also checked: {list}.",
+      "autoRemoved": "What depended on it was also removed: {list}.",
+      "moduleCount": "{granted} of {total}",
+      "selfNote": "You belong to this role: you can only remove permissions from it.",
+      "saved": "Permissions saved. {n, plural, one {# person will renew} other {# people will renew}} their session.",
+      "reservedShort": "Reserved",
+      "blocked": "It cannot be removed: a reserved permission needs it ({list})."
+    },
+    "confirm": {
+      "title": "Confirm changes to «{name}»",
+      "affects": "{n, plural, one {Affects # person} other {Affects # people}}; their sessions will renew immediately.",
+      "affectsNone": "Nobody has this role yet.",
+      "added": "Added",
+      "removed": "Removed",
+      "highRisk": "High risk: {list}",
+      "reasonLabel": "Reason (required)",
+      "reasonPlaceholder": "Why you are making this change",
+      "reasonHint": "At least {n} characters. It is kept in the role history.",
+      "confirm": "Confirm changes",
+      "cancel": "Cancel",
+      "safe": "This change cannot leave the account without an administrator."
+    },
+    "compareView": {
+      "title": "Compare roles",
+      "with": "with",
+      "onlyDiff": "Show differences only",
+      "permission": "Permission",
+      "difference": "Difference",
+      "same": "Same",
+      "onlyA": "Only {name}",
+      "onlyB": "Only {name}",
+      "pick": "Pick two roles to compare them.",
+      "scope": "Scope",
+      "noDifferences": "Both roles have the same permissions."
+    },
+    "history": {
+      "empty": "This role has no changes yet.",
+      "byPlatform": "Platform",
+      "unknown": "Someone",
+      "added": "Added",
+      "removed": "Removed",
+      "reason": "Reason: {reason}",
+      "loadMore": "Show more",
+      "actions": {
+        "ROLE_PERMISSIONS_UPDATED": "Changed the permissions",
+        "ROLE_RESTORED_TEMPLATE": "Restored the template"
+      },
+      "noDetail": "No permission changes recorded."
+    },
+    "errors": {
+      "generic": "The change could not be saved. Please try again.",
+      "ROLE_PROTECTED": "The administrator role cannot be edited.",
+      "ROLE_RESERVED": "Some reserved permissions cannot be added or removed.",
+      "ROLE_UNKNOWN_PERMISSION": "Some permissions do not exist.",
+      "ROLE_GRANT_EXCEEDS_ACTOR": "You cannot grant permissions you do not have.",
+      "ROLE_DEPENDENCY": "A permission that another one depends on is missing.",
+      "ROLE_SCOPE": "A role cannot have more than one data scope.",
+      "ROLE_SELF_ELEVATION": "You cannot expand the permissions of your own role.",
+      "ROLE_VERSION_CONFLICT": "Someone else changed this role while you were editing. Reload to see the changes.",
+      "ROLE_REASON_REQUIRED": "Give a reason for the change.",
+      "ROLE_NOT_FOUND": "The role does not exist.",
+      "ROLE_NO_TEMPLATE": "This role does not come from a template.",
+      "ROLE_WRITE_FORBIDDEN": "You do not have permission to edit roles.",
+      "reload": "Reload"
+    },
+    "risk": {
+      "label": "Risk",
+      "LOW": "Low",
+      "MEDIUM": "Medium",
+      "HIGH": "High",
+      "CRITICAL": "Critical"
+    },
+    "modules": {
+      "client": "Clients",
+      "credit": "Credits",
+      "assignment": "Assignment",
+      "collection": "Overdue",
+      "payment": "Payments",
+      "route": "Routes",
+      "agenda": "Schedule",
+      "report": "Reports",
+      "catalog": "Catalogs",
+      "office": "Organization",
+      "user": "Team",
+      "role": "Roles",
+      "account": "Account",
+      "audit": "Activity",
+      "support": "Support"
+    },
+    "roleNames": {
+      "ACCOUNT_ADMIN": "Administrator",
+      "MANAGER": "Manager",
+      "SUPERVISOR": "Supervisor",
+      "COLLECTOR": "Collector",
+      "AUDITOR": "Auditor",
+      "VIEWER": "Viewer"
+    }
+  },
+  "permissions": {
+    "collection_read": {
+      "name": "See the overdue center",
+      "description": "View overdue credits and their follow-ups."
+    },
+    "collection_write": {
+      "name": "Manage overdue accounts",
+      "description": "Record follow-ups, promises and notes on an overdue credit."
+    },
+    "collection_export": {
+      "name": "Download the overdue list",
+      "description": "Export the overdue list as CSV or PDF."
+    },
+    "payment_read": {
+      "name": "View payments",
+      "description": "View recorded payments."
+    },
+    "payment_write": {
+      "name": "Record payments",
+      "description": "Record payments and request changes to them."
+    },
+    "payment_approve": {
+      "name": "Approve payments",
+      "description": "Approve or reject payment requests."
+    },
+    "route_read": {
+      "name": "View routes",
+      "description": "View routes and their stops."
+    },
+    "route_write": {
+      "name": "Build routes",
+      "description": "Create and edit field routes."
+    },
+    "route_assign": {
+      "name": "Assign routes",
+      "description": "Assign routes to other team members."
+    },
+    "route_execute": {
+      "name": "Run routes",
+      "description": "Run the stops of a route and record visits."
+    },
+    "agenda_read": {
+      "name": "View the schedule",
+      "description": "View scheduled follow-ups."
+    },
+    "agenda_write": {
+      "name": "Manage the schedule",
+      "description": "Create and close your own follow-ups."
+    },
+    "agenda_assign": {
+      "name": "Schedule for others",
+      "description": "Schedule follow-ups for other team members."
+    },
+    "catalog_read": {
+      "name": "View catalogs",
+      "description": "Read the account catalogs (payment methods, types, etc.)."
+    },
+    "catalog_write": {
+      "name": "Edit catalogs",
+      "description": "Create and change catalog options."
+    },
+    "client_read": {
+      "name": "View clients",
+      "description": "View clients and their basic details."
+    },
+    "client_write": {
+      "name": "Edit clients",
+      "description": "Edit a client details, contacts, locations and attachments."
+    },
+    "client_create": {
+      "name": "Create clients",
+      "description": "Register new clients."
+    },
+    "client_delete": {
+      "name": "Delete clients",
+      "description": "Delete a client (not allowed with active credits)."
+    },
+    "client_pii_read": {
+      "name": "View documents unmasked",
+      "description": "See the ID document and financial data without masking."
+    },
+    "client_contact_read": {
+      "name": "View phones and addresses",
+      "description": "See the exact phone numbers and addresses of a client."
+    },
+    "client_import": {
+      "name": "Import portfolio",
+      "description": "Import clients and credits from a file."
+    },
+    "client_import_replace": {
+      "name": "Import replacing",
+      "description": "Import in replace mode: overwrites the existing portfolio."
+    },
+    "credit_read": {
+      "name": "View credits",
+      "description": "View credits and their status."
+    },
+    "credit_write": {
+      "name": "Edit credits",
+      "description": "Edit a credit, mark arrears manually and link it to a client."
+    },
+    "credit_create": {
+      "name": "Create credits",
+      "description": "Register new credits."
+    },
+    "credit_pii_read": {
+      "name": "View banking and guarantor data",
+      "description": "See the banking details and guarantors of a credit."
+    },
+    "report_read": {
+      "name": "View reports",
+      "description": "View dashboards and analytics."
+    },
+    "report_export": {
+      "name": "Export reports",
+      "description": "Download account exports."
+    },
+    "account_read": {
+      "name": "View the account",
+      "description": "View the account details and plan."
+    },
+    "account_write": {
+      "name": "Manage the account",
+      "description": "Edit the account, request plan changes and transfer ownership."
+    },
+    "user_read": {
+      "name": "View the team",
+      "description": "View the people on the team."
+    },
+    "user_invite": {
+      "name": "Invite people",
+      "description": "Invite new people to the account."
+    },
+    "user_write": {
+      "name": "Manage people",
+      "description": "Change the role, status and office of a person."
+    },
+    "user_sessions_revoke": {
+      "name": "Close sessions",
+      "description": "Close the open sessions of a person."
+    },
+    "role_read": {
+      "name": "View roles and permissions",
+      "description": "View the account roles and their permissions."
+    },
+    "role_write": {
+      "name": "Edit roles",
+      "description": "Change the permissions of the account roles."
+    },
+    "support_consent": {
+      "name": "Authorize support access",
+      "description": "Accept, reject or cut support team access to the account."
+    },
+    "audit_read": {
+      "name": "View activity",
+      "description": "View the account activity log."
+    },
+    "office_read": {
+      "name": "View offices",
+      "description": "View the office tree."
+    },
+    "office_write": {
+      "name": "Manage offices",
+      "description": "Create, move and deactivate offices and their types."
+    },
+    "assignment_write": {
+      "name": "Assign owners",
+      "description": "Choose who handles each credit and distribute the portfolio."
+    },
+    "data_scope_all": {
+      "name": "Whole account",
+      "description": "Sees the data of the whole account."
+    },
+    "data_scope_subtree": {
+      "name": "Its offices and those below",
+      "description": "Sees the data of the offices it is assigned to and those under them."
+    },
+    "data_scope_branch": {
+      "name": "Its office",
+      "description": "Sees the data of its office, with an owner."
+    }
   }
 }

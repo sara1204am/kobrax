@@ -8,6 +8,7 @@ interface Espia {
   creditWhere?: Record<string, unknown>;
   clientWhere?: Record<string, unknown>;
   visitWhere?: Record<string, unknown>;
+  branchWhere?: Record<string, unknown>;
   evidenceWhere?: Record<string, unknown>;
 }
 
@@ -21,6 +22,7 @@ function makeService(
     credits?: number;
     clients?: number;
     users?: number;
+    branches?: number;
     photos?: number;
     visits?: number;
   } = {},
@@ -46,6 +48,12 @@ function makeService(
       },
     },
     userAccount: { count: async () => opts.users ?? 0 },
+    branch: {
+      count: async (args: { where: Record<string, unknown> }) => {
+        espia.branchWhere = args.where;
+        return opts.branches ?? 0;
+      },
+    },
     fieldVisit: {
       count: async (args: { where: Record<string, unknown> }) => {
         espia.visitWhere = args.where;
@@ -59,7 +67,7 @@ function makeService(
       },
     },
   };
-  const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
+  const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx), elevated: async (_tx: unknown, fn: () => Promise<unknown>) => fn() };
   const clock = { monthStart: async () => INICIO_DE_MES };
   const service = new PlanLimitsService(prisma as never, { accountId: 'acc-A' } as never, clock as never);
   return { service, tx: tx as never, espia };
@@ -111,12 +119,28 @@ describe('PlanLimitsService.monthlyUsage (L2 — sólo para avisar)', () => {
     assert.deepEqual(espia.visitWhere, { createdAt: { gte: INICIO_DE_MES } });
   });
 
-  it('usageAll trae los cinco contadores, para que /accounts/me los mande de una', async () => {
-    const { service, tx } = makeService({ users: 1, credits: 2, clients: 3, photos: 4, visits: 5 });
+  it('F13 · las oficinas son las no borradas de la cuenta, la raíz incluida', async () => {
+    const { service, tx, espia } = makeService({ branches: 3 });
+    assert.equal(await service.usage('branches', tx), 3);
+    assert.deepEqual(espia.branchWhere, { deletedAt: null });
+  });
+
+  it('F13 · el tope de oficinas frena el alta: FREE = 1 (sólo la raíz), PROFESSIONAL = 3', async () => {
+    const free = makeService({ branches: 1 });
+    await rejectsWithCode(free.service.assertRoom('branches', free.tx), 'PLAN_LIMIT_REACHED');
+    const pro = makeService({ planCode: 'PROFESSIONAL', branches: 2 });
+    await pro.service.assertRoom('branches', pro.tx);
+    const pro3 = makeService({ planCode: 'PROFESSIONAL', branches: 3 });
+    await rejectsWithCode(pro3.service.assertRoom('branches', pro3.tx), 'PLAN_LIMIT_REACHED');
+  });
+
+  it('usageAll trae los seis contadores, para que /accounts/me los mande de una', async () => {
+    const { service, tx } = makeService({ users: 1, credits: 2, clients: 3, branches: 6, photos: 4, visits: 5 });
     assert.deepEqual(await service.usageAll(tx), {
       users: 1,
       credits: 2,
       clients: 3,
+      branches: 6,
       photosPerMonth: 4,
       actionsPerMonth: 5,
     });

@@ -96,6 +96,18 @@ function psql(sql: string): void {
 /** Cliente superusuario de la base de prueba: para preparar datos y mirar lo que quedó. */
 export const db = () => new PrismaClient({ datasources: { db: { url: SUPER_URL } } });
 
+/**
+ * Cliente con el rol de la API (`kobrax_app`, NOBYPASSRLS) sobre la base de prueba: para consultar CRUDO, sin pasar por ningún helper
+ * de la app, y ver lo que la base niega por sí sola (F14 · F2b).
+ */
+export const appDb = () => new PrismaClient({ datasources: { db: { url: APP_URL } } });
+
+/** Lo que el servidor de Postgres de la prueba escribió en su log desde `since` (ISO): para ver los `RAISE LOG` del modo `log`. */
+export function postgresLogSince(since: string): string {
+  const r = spawnSync('docker', ['logs', '--since', since, CONTAINER], { encoding: 'utf8' });
+  return `${r.stdout}\n${r.stderr}`;
+}
+
 /** Un usuario más en la cuenta de la demo, con el rol pedido. */
 export async function addMember(prisma: PrismaClient, accountId: string, email: string, firstName: string, roleName: string): Promise<string> {
   const role = await prisma.role.findUniqueOrThrow({ where: { name: roleName } });
@@ -115,15 +127,25 @@ export async function addMember(prisma: PrismaClient, accountId: string, email: 
 let api: ChildProcess | null = null;
 
 /** La API compilada contra la base de prueba. Resuelve cuando escucha. */
-export async function startApi(): Promise<void> {
+/**
+ * Borra los contadores de límite de peticiones (`rl:*`) de Redis. El alta de cuenta admite 10 por hora y por IP, y la suite completa crea más
+ * que eso; cada suite empieza con el contador en cero. Solo toca claves `rl:*` del Redis de pruebas.
+ */
+export function resetRateLimits(): void {
+  const container = process.env.IT_REDIS_CONTAINER ?? 'kobrax-redis';
+  spawnSync('docker', ['exec', container, 'sh', '-c', "redis-cli --scan --pattern 'rl:*' | xargs -r redis-cli del"], { encoding: 'utf8' });
+}
+
+export async function startApi(extraEnv: Record<string, string> = {}): Promise<void> {
+  resetRateLimits();
   const uploads = mkdtempSync(join(tmpdir(), 'kobrax-it-'));
   api = spawn('node', ['dist/main.js'], {
     cwd: API_DIR,
-    env: { ...ENV, NODE_ENV: 'test', API_PORT: String(PORT), APP_DATABASE_URL: APP_URL, DATABASE_URL: SUPER_URL, UPLOADS_DIR: uploads },
+    env: { ...ENV, NODE_ENV: 'test', API_PORT: String(PORT), APP_DATABASE_URL: APP_URL, DATABASE_URL: SUPER_URL, UPLOADS_DIR: uploads, ...extraEnv },
   });
   let log = '';
   await new Promise<void>((ok, fail) => {
-    const timer = setTimeout(() => fail(new Error(`La API no arrancó en 60 s:\n${log}`)), 60_000);
+    const timer = setTimeout(() => fail(new Error(`La API no arrancó en 120 s:\n${log}`)), 120_000);
     const onData = (chunk: Buffer) => {
       log += chunk.toString();
       if (log.includes('escuchando')) {
@@ -166,6 +188,23 @@ export async function login(email: string): Promise<string> {
   return body.data.accessToken;
 }
 
+/**
+ * Login de un rol CRÍTICO (ACCOUNT_ADMIN) sin enrolar TOTP: exige que la API haya arrancado con `MFA_CRITICAL_GRACE_UNTIL`
+ * en el futuro (`startApi({ MFA_CRITICAL_GRACE_UNTIL: '2099-01-01' })`). Lo que se prueba no es el segundo factor.
+ */
+export async function loginSkippingMfa(email: string): Promise<string> {
+  const post = async (path: string, body: unknown) =>
+    (await (await fetch(`${API}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json()) as {
+      data?: { step: string; accessToken?: string; preAuthToken?: string };
+    };
+  const first = await post('/auth/login', { email, password: PASSWORD });
+  if (first.data?.step === 'done' && first.data.accessToken) return first.data.accessToken;
+  if (first.data?.step !== 'mfa_setup' || !first.data.preAuthToken) throw new Error(`login de ${email}: ${JSON.stringify(first)}`);
+  const skipped = await post('/auth/mfa/setup/skip', { preAuthToken: first.data.preAuthToken });
+  if (skipped.data?.step !== 'done' || !skipped.data.accessToken) throw new Error(`mfa/setup/skip de ${email}: ${JSON.stringify(skipped)}`);
+  return skipped.data.accessToken;
+}
+
 export async function call<T>(token: string, method: string, path: string, body?: unknown): Promise<Envelope<T>> {
   const res = await fetch(`${API}${path}`, {
     method,
@@ -183,4 +222,21 @@ export async function importReport<T>(token: string, file: string, opts: { dryRu
   if (opts.assignments) form.append('assignments', JSON.stringify(opts.assignments));
   const res = await fetch(`${API}/imports/portfolio`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
   return envelope<T>(res);
+}
+
+/** Las tablas con policy de alcance de F2b (`rls/006_scope_policies.sql`). */
+export const SCOPE_TABLES = ['credits', 'clients', 'payments', 'agenda_items', 'route_plans'] as const;
+
+/** Ejecuta SQL como superusuario sobre la base de pruebas, vía psql dentro del contenedor. Falla (lanza) si el SQL falla. */
+export function psqlTest(sql: string): void {
+  const r = spawnSync('docker', ['exec', '-i', CONTAINER, 'psql', '-U', 'postgres', '-d', TEST_DB, '-v', 'ON_ERROR_STOP=1', '-q'], { input: sql, encoding: 'utf8' });
+  if (r.status !== 0) throw new Error(`psql falló (${r.status}): ${r.stderr}`);
+}
+
+/** Instala (re-aplica `rls/006`) o quita las policies de alcance: para medir contra la línea base «sin F2b». */
+export function installScopePolicies(): void {
+  psqlTest(readFileSync(join(__dirname, '../../../../packages/database/prisma/rls/006_scope_policies.sql'), 'utf8'));
+}
+export function uninstallScopePolicies(): void {
+  psqlTest(SCOPE_TABLES.map((t) => `DROP POLICY IF EXISTS scope_${t} ON ${t};`).join(' '));
 }

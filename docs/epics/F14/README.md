@@ -1,6 +1,12 @@
-# EPIC-F14 · Roles y permisos — **reservado, no iniciado**
+# EPIC-F14 · Roles y permisos — **en curso (auditoría hecha, 2026-11-04)**
 
-> **Estado: RESERVADO.** No tiene arnés propio todavía. Esto es solo el contrato de entrada para que no se pierda lo conversado.
+> **Estado: EN CURSO.** F13 ya está en `dev` (PR #26). Rama de trabajo: `f14/roles-permisos`. Todavía no tiene arnés propio completo; lo hecho hasta ahora es la **auditoría de lo implementado**.
+
+## Entregables
+- [`ROLES-PERMISOS-AUDITORIA.md`](./ROLES-PERMISOS-AUDITORIA.md) — matriz rol × permiso, qué puede hacer cada rol por módulo, alcance por oficina, lo que ve cada rol en la web, verificación en vivo, **13 hallazgos priorizados** y el diseño para «sólo `SUPER_ADMIN` y `ACCOUNT_ADMIN` modifican permisos».
+- [`ROLES-PERMISOS-ENDPOINTS.md`](./ROLES-PERMISOS-ENDPOINTS.md) — anexo con los 202 endpoints y el permiso que exige cada uno.
+
+> Antes de esta auditoría esta carpeta era solo un contrato de entrada («reservado»). Lo que sigue abajo se conserva como contexto.
 > Se instancia copiando el esqueleto de `../F13/` según `../_framework/README.md` §5, **después de F13/G2** (arquitectura aprobada).
 
 ## Qué se sabe (2026-10-29, dicho por la usuaria)

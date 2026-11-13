@@ -10,6 +10,7 @@ import { getSession, isSessionValid } from '@/session';
 import { API_BASE } from '@/api';
 import { clearLoginEmail, loadForgotDraft, loadLoginEmail, saveLoginEmail } from '@/auth-draft';
 import { validateLogin, type LoginFieldErrors } from '@/auth-validation';
+import { clearSessionNotice, subscribeSessionNotice, takeSessionNotice } from '@/session-notice';
 
 export default function LoginScreen() {
   const passwordRef = useRef<TextInput>(null);
@@ -40,6 +41,17 @@ export default function LoginScreen() {
     };
   }, []);
 
+  // Si la sesión terminó porque el rol ya no usa la app (F14 · F8), se dice acá, una vez.
+  useEffect(() => {
+    const notice = takeSessionNotice();
+    if (notice) setError(notice);
+    // Si se fija con esta pantalla ya montada (un refresco en segundo plano), también se muestra.
+    return subscribeSessionNotice((message) => {
+      takeSessionNotice();
+      setError(message);
+    });
+  }, []);
+
   useEffect(() => {
     void (async () => {
       const session = await getSession();
@@ -63,6 +75,7 @@ export default function LoginScreen() {
       return;
     }
     void clearLoginEmail(); // ya entró (o avanzó al MFA): el borrador cumplió
+    clearSessionNotice(); // un aviso de fin de sesión que nadie vio no se le muestra a la próxima persona
     goToStep(res.step);
   }
 

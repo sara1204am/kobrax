@@ -295,11 +295,14 @@ export function ScopeStep({
   config,
   busy,
   onSave,
+  officeScope = true,
 }: {
   screen: ConfigScreen;
   config: ImportConfig;
   busy: boolean;
   onSave: (patch: ImportConfigPatch) => void;
+  /** F13: «una oficina» sólo se ofrece si la cuenta tiene más de una (o si ya es el alcance guardado). */
+  officeScope?: boolean;
 }) {
   const t = useTranslations('panel.import');
   const [kind, setKind] = useState<ScopeKind>(config.scope.kind);
@@ -323,7 +326,7 @@ export function ScopeStep({
           // se elija a quién: el par incompleto lo rechaza el servidor.
           if (next === 'account') onSave({ scope: { kind: next, ref: null } });
         }}
-        options={SCOPE_KINDS.map((value) => ({
+        options={SCOPE_KINDS.filter((k) => officeScope || k !== 'branch').map((value) => ({
           value,
           title: t(`scopes.${value}.label`),
           hint: t(`scopes.${value}.hint`),

@@ -32,11 +32,78 @@ describe('visibleNav', () => {
   });
 
   it('un permiso de más no cuela un ítem que no existe en el menú', () => {
-    expect(labels([Permission.AUDIT_READ])).toEqual(['home', 'profile']);
+    expect(labels([Permission.CATALOG_READ])).toEqual(['home', 'profile']);
   });
 
   it('security queda oculto del sidebar: vive dentro de Mi perfil', () => {
     expect(labels(ROLE_PERMISSIONS[RoleType.ACCOUNT_ADMIN])).not.toContain('security');
+  });
+});
+
+describe('F14 · F6 · secciones del menú por plantilla de rol (ADR-F14-09)', () => {
+  const sees = (role: RoleType) => labels(ROLE_PERMISSIONS[role]);
+
+  it('cada sección nueva pide SU permiso y ninguna depende de account:read', () => {
+    expect(NAV.find((i) => i.label === 'organization')).toMatchObject({ href: '/organizacion', permission: Permission.OFFICE_READ });
+    expect(NAV.find((i) => i.label === 'activity')).toMatchObject({ href: '/actividad', permission: Permission.AUDIT_READ });
+    expect(NAV.find((i) => i.label === 'team')).toMatchObject({ permission: Permission.USER_READ });
+    const kids = (p: string[]) => visibleNav(p).find((i) => i.label === 'accessSecurity')?.children?.map((c) => c.label);
+    expect(kids([Permission.ROLE_READ])).toEqual(['roles']);
+    expect(kids([Permission.SUPPORT_CONSENT])).toEqual(['supportAccess']);
+    expect(kids([Permission.ROLE_READ, Permission.SUPPORT_CONSENT])).toEqual(['roles', 'supportAccess']);
+    expect(NAV.find((i) => i.label === 'accessSecurity')?.anyOf).toEqual([Permission.ROLE_READ, Permission.USER_SESSIONS_REVOKE, Permission.SUPPORT_CONSENT]);
+  });
+
+  it('Seguridad aparece con cualquiera de sus permisos, y con ninguno no', () => {
+    expect(labels([Permission.SUPPORT_CONSENT])).toContain('accessSecurity');
+    expect(labels([Permission.ROLE_READ])).toContain('accessSecurity');
+    // Sola, no abre ninguna pantalla: un grupo sin hijos no se dibuja.
+    expect(labels([Permission.USER_SESSIONS_REVOKE])).not.toContain('accessSecurity');
+    expect(labels([Permission.CLIENT_READ])).not.toContain('accessSecurity');
+  });
+
+  it('R-10 · el supervisor ve Organización y Equipo, aunque no tenga account:read', () => {
+    expect(sees(RoleType.SUPERVISOR)).toEqual(expect.arrayContaining(['organization', 'team']));
+    expect(sees(RoleType.SUPERVISOR)).not.toContain('account');
+  });
+
+  it('R-10 · el auditor ve Actividad, aunque no tenga account:read', () => {
+    expect(sees(RoleType.AUDITOR)).toContain('activity');
+    expect(sees(RoleType.AUDITOR)).not.toContain('account');
+  });
+
+  it('el cobrador y la consulta no ven Organización, Equipo, Seguridad, Actividad ni Cuenta', () => {
+    for (const role of [RoleType.COLLECTOR, RoleType.VIEWER]) {
+      for (const hidden of ['organization', 'team', 'accessSecurity', 'activity', 'account']) expect(sees(role)).not.toContain(hidden);
+    }
+  });
+
+  it('el administrador ve todas las secciones', () => {
+    expect(sees(RoleType.ACCOUNT_ADMIN)).toEqual(expect.arrayContaining(['organization', 'team', 'accessSecurity', 'activity', 'account']));
+  });
+
+  it('las migas de las pantallas movidas salen de su sección nueva', () => {
+    expect(crumbsFor('/organizacion/papelera')).toEqual([
+      { label: 'nav.organization', href: '/organizacion' },
+      { label: 'crumbs.papelera', href: undefined },
+    ]);
+    expect(crumbsFor('/seguridad/soporte')).toEqual([
+      { label: 'nav.accessSecurity', href: undefined },
+      { label: 'crumbs.soporte', href: undefined },
+    ]);
+    // La clave de un rol viaja como dato (`roleKey`): la barra superior pone su nombre traducido.
+    expect(crumbsFor('/seguridad/roles/ACCOUNT_ADMIN/editar')).toEqual([
+      { label: 'nav.accessSecurity', href: undefined },
+      { label: 'crumbs.roles', href: '/seguridad/roles' },
+      { label: 'crumbs.role', roleKey: 'ACCOUNT_ADMIN', href: '/seguridad/roles/ACCOUNT_ADMIN' },
+      { label: 'crumbs.editar', href: undefined },
+    ]);
+    expect(crumbsFor('/seguridad/roles/comparar')).toEqual([
+      { label: 'nav.accessSecurity', href: undefined },
+      { label: 'crumbs.roles', href: '/seguridad/roles' },
+      { label: 'crumbs.comparar', href: undefined },
+    ]);
+    expect(crumbsFor('/actividad')).toEqual([{ label: 'nav.activity', href: undefined }]);
   });
 });
 

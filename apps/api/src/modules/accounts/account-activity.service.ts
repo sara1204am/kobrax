@@ -47,10 +47,12 @@ export class AccountActivityService {
       const page = rows.slice(0, limit);
 
       const actors = await tx.user.findMany({
-        where: { id: { in: [...new Set(page.map((r) => r.userId))] } },
+        where: { id: { in: [...new Set(page.map((r) => r.userId).filter((x): x is string => x != null))] } },
         select: { id: true, email: true, profile: { select: { firstName: true, lastName: true } } },
       });
-      const actorName = (id: string) => {
+      const actorName = (id: string | null, actorType?: string) => {
+        if (actorType === 'PLATFORM') return 'Soporte de Kobrax'; // F14 · F5: actuó plataforma, no un usuario de la cuenta
+        if (id == null) return null;
         const a = actors.find((x) => x.id === id);
         if (!a) return null;
         return [a.profile?.firstName, a.profile?.lastName].filter(Boolean).join(' ') || a.email;
@@ -64,7 +66,7 @@ export class AccountActivityService {
           entity: r.entity,
           action: r.action,
           // Un cambio por consola va a nombre del dueño (la base exige un usuario): decir su nombre sería mentir.
-          actorName: via ? null : actorName(r.userId),
+          actorName: via ? null : actorName(r.userId, r.actorType),
           ip: r.ip,
           changes: r.action === 'UPDATE' ? describeChanges(r.before, r.after) : [],
           via,
