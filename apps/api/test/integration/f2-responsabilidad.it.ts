@@ -154,7 +154,10 @@ describe('F2 · el cliente no tiene dueño: se ve por sus créditos y por su ofi
     assert.equal(other?.count, 1);
     assert.equal(other?.totalOutstanding, 250.5);
     assert.deepEqual(other?.responsibles.map((p) => p.userId), [uid.colPAD]);
-    assert.deepEqual(Object.keys(other!).sort(), ['count', 'responsibles', 'totalOutstanding']);
+    // Agregados + una tarjeta informativa por crédito ajeno (ajuste de la prueba manual): nunca id, mora, cuotas ni detalle.
+    assert.deepEqual(Object.keys(other!).sort(), ['count', 'items', 'responsibles', 'totalOutstanding']);
+    const card = (other as unknown as { items: Record<string, unknown>[] }).items[0]!;
+    assert.deepEqual(Object.keys(card).sort(), ['code', 'currency', 'outstandingBalance', 'responsibles', 'status', 'typeCode']);
   });
 
   it('🔴 IDOR: el detalle del crédito ajeno sigue respondiendo 404 aunque el cliente sea visible', async () => {
