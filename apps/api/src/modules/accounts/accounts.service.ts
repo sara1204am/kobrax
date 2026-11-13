@@ -12,11 +12,11 @@ import {
   type Workspace,
   type WorkspaceModuleKey,
 } from '@kobrax/shared';
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { hash } from 'bcryptjs';
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { DEFAULT_ARREAR_CATEGORIES, KOBRAX, PLANS, TRIAL_DAYS, catalogDefaultRows, isPasswordValid, officePath } from '@kobrax/shared';
+import { DEFAULT_ARREAR_CATEGORIES, KOBRAX, PLANS, TRIAL_DAYS, catalogDefaultRows, isPasswordValid, newAccountOnboarding, officePath, parseOnboarding, resolveOnboarding } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
@@ -108,6 +108,9 @@ export class AccountsService {
             // Sin `limitsOverride`: la cuenta nueva se lleva exactamente los topes de su plan.
             // La excepción es para el cliente que negoció otra cosa, no para el que se registra.
             settings: trialEndsAt ? { trialEndsAt } : {},
+            // F15 · P6 (D-14): la cuenta nueva nace con el asistente de configuración pendiente. Las anteriores no tienen
+            // estado (= sin asistente).
+            configuration: { onboarding: { ...newAccountOnboarding() } },
             countryCode: DEFAULT_COUNTRY,
             currencyCode: DEFAULT_CURRENCY,
           },
@@ -189,13 +192,20 @@ export class AccountsService {
     return { accountId, email };
   }
 
+  /** Quién resuelve el asistente queda registrado (D-14): sin persona en la sesión no se resuelve. */
+  private requireUserId(): string {
+    const id = this.tenant.userId;
+    if (!id) throw new ForbiddenException({ code: 'ONBOARDING_NO_USER', message: 'Solo una persona puede resolver el asistente' });
+    return id;
+  }
+
   async update(dto: UpdateAccountDto): Promise<ReturnType<typeof serializeAccount>> {
-    const { before, updated, workspaceChange } = await this.tx(async (tx) => {
+    const { before, updated, workspaceChange, onboardingChange } = await this.tx(async (tx) => {
       // F15 · A-16: `configuration` se lee y se escribe con la fila bloqueada. Dos administradores que guardan a la vez se
       // serializan y el segundo se encuentra con el `rev` nuevo (409) en vez de pisar al primero. El bloqueo cubre también a
       // quien guarda preferencias o facturación (que reescriben `configuration` entera): sin él, un guardado de esos
       // reinstalaría un workspace viejo (G6 · hallazgo 1).
-      if (dto.preferences || dto.billing || dto.workspace) await tx.$queryRaw`SELECT id FROM accounts WHERE id = ${this.tenant.accountId} FOR UPDATE`;
+      if (dto.preferences || dto.billing || dto.workspace || dto.onboarding) await tx.$queryRaw`SELECT id FROM accounts WHERE id = ${this.tenant.accountId} FOR UPDATE`;
       const before = await tx.account.findFirst({
         where: { id: this.tenant.accountId, deletedAt: null },
       });
@@ -204,8 +214,9 @@ export class AccountsService {
       // se conserva tal cual. Se valida el conjunto ya mezclado: un parche válido por campo puede dejar una jornada al revés.
       let configuration: Record<string, unknown> | undefined;
       let workspaceChange: { before: Workspace; after: Workspace } | undefined;
+      let onboardingChange: { before: ReturnType<typeof parseOnboarding>; after: NonNullable<ReturnType<typeof parseOnboarding>> } | undefined;
       // C-12: sin `|| dto.workspace` un PATCH con sólo el espacio de trabajo se descartaba en silencio.
-      if (dto.preferences || dto.billing || dto.workspace) {
+      if (dto.preferences || dto.billing || dto.workspace || dto.onboarding) {
         configuration = { ...(before.configuration as Record<string, unknown>) };
         if (dto.preferences) {
           const merged = mergePreferences(preferencesOf(before.configuration), dto.preferences as Partial<AccountPreferences>);
@@ -219,6 +230,19 @@ export class AccountsService {
         if (dto.workspace) {
           workspaceChange = await this.applyWorkspace(tx, before.configuration, dto.workspace);
           configuration.workspace = workspaceChange.after;
+        }
+        // F15 · P6: el asistente se resuelve una sola vez. Si ya estaba resuelto se conserva el primero y esto no cambia nada;
+        // quién y cuándo los pone el servidor.
+        if (dto.onboarding) {
+          const resolved = resolveOnboarding(
+            parseOnboarding(before.configuration),
+            { status: dto.onboarding.status, ...(dto.onboarding.preset ? { preset: dto.onboarding.preset } : {}) },
+            { userId: this.requireUserId(), at: new Date().toISOString() },
+          );
+          if (resolved.changed) {
+            configuration.onboarding = resolved.state;
+            onboardingChange = { before: parseOnboarding(before.configuration), after: resolved.state };
+          }
         }
       }
       const updated = await tx.account.update({
@@ -250,7 +274,7 @@ export class AccountsService {
             : {}),
         },
       });
-      return { before, updated, workspaceChange };
+      return { before, updated, workspaceChange, onboardingChange };
     });
 
     // C-13: el cambio de espacio de trabajo se audita SOLO con su subárbol (quién, cuándo, desde dónde, qué). La fila
@@ -264,8 +288,17 @@ export class AccountsService {
         after: { workspace: workspaceChange.after },
       });
     }
-    const touchesOther = Object.entries(dto).some(([key, value]) => key !== 'workspace' && value !== undefined);
-    if (!workspaceChange || touchesOther) {
+    if (onboardingChange) {
+      await this.audit.record({
+        entity: 'account',
+        entityId: updated.id,
+        action: 'UPDATE',
+        before: { onboarding: onboardingChange.before },
+        after: { onboarding: onboardingChange.after },
+      });
+    }
+    const touchesOther = Object.entries(dto).some(([key, value]) => key !== 'workspace' && key !== 'onboarding' && value !== undefined);
+    if ((!workspaceChange && !dto.onboarding) || touchesOther) {
       await this.audit.record({
         entity: 'account',
         entityId: updated.id,

@@ -434,7 +434,16 @@ describe('AuthService.me — sesión del token (W-LOG-54)', () => {
       soloUser: false,
       preferences: { workDays: [1, 2, 3, 4, 5, 6], workStart: '08:00', workEnd: '18:00', weekStart: 'MON', defaultLocale: 'es' },
       workspace: { version: 1, rev: 0, hiddenModules: [], options: {} },
+      onboarding: null,
     });
+  });
+
+  it('🔴 F15 · P6: entrega el estado del asistente a todo miembro (solo el estado: sin quién ni cuándo); null en una cuenta anterior', async () => {
+    const user = { id: 'u1', email: 'c@kobrax.demo', profile: null, mfaEnabled: false, requiresPasswordChange: false };
+    const configuration = { onboarding: { v: 1, status: 'done', decidedBy: 'u9', decidedAt: '2026-11-14T00:00:00.000Z', preset: 'team' } };
+    const me = await makeAuth({ user, brand: { businessName: 'Cobranzas', phone: null, logoUrl: null, configuration } }).service.me({ userId: 'u1', accountId: 'a1', roleId: 'r1', permissions: [] });
+    assert.deepEqual(me.account?.onboarding, { status: 'done' });
+    assert.ok(!JSON.stringify(me.account).includes('u9'), 'quién lo resolvió no viaja por /auth/me');
   });
 
   it('🔴 F15 · A-9: entrega el espacio de trabajo a todo miembro (Completo si nunca se configuró), sin conteos ni datos de la cuenta', async () => {

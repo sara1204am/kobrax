@@ -442,6 +442,70 @@ describe('AccountsService.update', () => {
 const wsInput = (rev: number, hiddenModules: string[] = [], options: Record<string, unknown> = {}) => ({ version: 1, rev, hiddenModules, options });
 const stored = (rev: number, hiddenModules: string[] = [], options: Record<string, unknown> = {}) => ({ workspace: { version: 1, rev, hiddenModules, options } });
 
+describe('AccountsService · asistente de configuración (F15 · P6)', () => {
+  it('toda cuenta nueva nace con el asistente PENDIENTE (D-14), en `configuration.onboarding`', async () => {
+    const { service, calls } = makeSignupService();
+    await service.create(SIGNUP, {});
+    assert.deepEqual(calls.account!.configuration, { onboarding: { v: 1, status: 'pending' } });
+  });
+
+  it('resolverlo guarda estado, quién y cuándo (los pone el servidor) y conserva el resto de `configuration`', async () => {
+    const { service, calls } = makeService({
+      found: account({ configuration: { billing: { legalName: 'Pérez SRL' }, onboarding: { v: 1, status: 'pending' } } }),
+    });
+    await service.update({ onboarding: { status: 'done', preset: 'independent' } } as never);
+    const cfg = calls.updated!.configuration as { billing: unknown; onboarding: { status: string; decidedBy: string; decidedAt: string; preset: string } };
+    assert.equal(cfg.onboarding.status, 'done');
+    assert.equal(cfg.onboarding.decidedBy, 'u1');
+    assert.match(cfg.onboarding.decidedAt, /^\d{4}-\d{2}-\d{2}T/);
+    assert.equal(cfg.onboarding.preset, 'independent');
+    assert.deepEqual(cfg.billing, { legalName: 'Pérez SRL' });
+    assert.equal(calls.locked.length, 1, 'la fila se bloquea: dos administradores no se pisan');
+  });
+
+  it('el primero que lo resuelve gana: un segundo intento no cambia nada (D-14)', async () => {
+    const first = { v: 1, status: 'skipped', decidedBy: 'otra', decidedAt: '2026-11-14T00:00:00.000Z' };
+    const { service, calls } = makeService({ found: account({ configuration: { onboarding: first } }) });
+    await service.update({ onboarding: { status: 'done' } } as never);
+    assert.deepEqual((calls.updated!.configuration as { onboarding: unknown }).onboarding, first);
+    assert.equal(calls.auditEntries.length, 0, 'no hubo cambio: nada que auditar');
+  });
+
+  it('una cuenta anterior a F15 (sin estado) puede resolverlo voluntariamente', async () => {
+    const { service, calls } = makeService({ found: account({ configuration: {} }) });
+    await service.update({ onboarding: { status: 'skipped' } } as never);
+    assert.equal((calls.updated!.configuration as { onboarding: { status: string } }).onboarding.status, 'skipped');
+  });
+
+  it('se audita SOLO el subárbol `onboarding`, no la fila de la cuenta', async () => {
+    const { service, calls } = makeService({ found: account({ taxId: '999', configuration: { onboarding: { v: 1, status: 'pending' } } }) });
+    await service.update({ onboarding: { status: 'done' } } as never);
+    assert.equal(calls.auditEntries.length, 1);
+    const [entry] = calls.auditEntries;
+    assert.deepEqual(entry.before, { onboarding: { v: 1, status: 'pending' } });
+    assert.equal((entry.after as { onboarding: { status: string } }).onboarding.status, 'done');
+    assert.ok(!JSON.stringify(entry).includes('999'), 'el NIT no se copia a la bitácora');
+  });
+
+  it('el asistente y el workspace se guardan en UNA sola llamada (una sola escritura al final del asistente)', async () => {
+    const { service, calls } = makeService({
+      members: 1,
+      found: account({ configuration: { workspace: { version: 1, rev: 0, hiddenModules: [], options: {} }, onboarding: { v: 1, status: 'pending' } } }),
+    });
+    await service.update({ workspace: wsInput(0, ['export']), onboarding: { status: 'done', preset: 'team' } } as never);
+    const cfg = calls.updated!.configuration as { workspace: { rev: number; hiddenModules: string[] }; onboarding: { status: string } };
+    assert.equal(cfg.workspace.rev, 1);
+    assert.deepEqual(cfg.workspace.hiddenModules, ['export']);
+    assert.equal(cfg.onboarding.status, 'done');
+  });
+
+  it('si el workspace falla (rev viejo), el asistente tampoco se resuelve: todo o nada', async () => {
+    const { service, calls } = makeService({ members: 1, found: account({ configuration: { ...stored(3), onboarding: { v: 1, status: 'pending' } } }) });
+    await rejectsWithCode(service.update({ workspace: wsInput(0, ['export']), onboarding: { status: 'done' } } as never), 'WORKSPACE_CONFLICT');
+    assert.equal(calls.updated, undefined);
+  });
+});
+
 describe('AccountsService.update · espacio de trabajo (F15 · P1)', () => {
   it('🔴 C-12: un PATCH con SOLO `workspace` se guarda (no se descarta en silencio) y sube el `rev`', async () => {
     const { service, calls } = makeService({ members: 1 });

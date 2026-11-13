@@ -57,6 +57,15 @@ export class WorkspaceDto {
 }
 
 /**
+ * Resolución del asistente de configuración (F15 · P6). El cliente solo declara cómo terminó (`done` u `skipped`) y,
+ * opcionalmente, el preset informativo; quién y cuándo los pone el SERVIDOR (nunca el cliente).
+ */
+export class OnboardingDto {
+  @IsIn(['done', 'skipped']) status!: 'done' | 'skipped';
+  @IsOptional() @IsIn(['independent', 'team', 'complete', 'custom']) preset?: 'independent' | 'team' | 'complete' | 'custom';
+}
+
+/**
  * Configuración editable del tenant. `planCode`, `limitsOverride`, `accountType` y `status`
  * NO están acá a propósito: no son configuración del producto.
  *
@@ -96,4 +105,6 @@ export class UpdateAccountDto {
   @IsOptional() @ValidateNested() @Type(() => BillingDto) billing?: BillingDto;
   /** F15: reemplaza el subárbol `configuration.workspace` completo, con control optimista por `rev`. */
   @IsOptional() @ValidateNested() @Type(() => WorkspaceDto) workspace?: WorkspaceDto;
+  /** F15 · P6: resuelve el asistente de configuración. El primero que lo resuelve gana (D-14). */
+  @IsOptional() @ValidateNested() @Type(() => OnboardingDto) onboarding?: OnboardingDto;
 }

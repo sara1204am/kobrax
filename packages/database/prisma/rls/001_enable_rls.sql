@@ -77,7 +77,10 @@ DECLARE
     -- F14 · F5: roles de la cuenta y sus permisos.
     'account_roles', 'account_role_permissions',
     -- F14 · F5: accesos de soporte de plataforma a la cuenta (el administrador los ve y los acepta).
-    'support_sessions'
+    'support_sessions',
+    -- F15 · P6: estado de las guías por persona y organización (D-13). La fila es de una persona; el aislamiento entre
+    -- empresas lo da esta política y el filtro por persona lo pone el service.
+    'user_guide_states'
   ];
 BEGIN
   FOREACH t IN ARRAY operational LOOP
