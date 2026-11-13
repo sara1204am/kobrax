@@ -1,4 +1,11 @@
-import { BadRequestException, ConflictException, ForbiddenException, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  InternalServerErrorException,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 
 export const accountNotFound = () =>
   new NotFoundException({ code: 'ACCOUNT_NOT_FOUND', message: 'Cuenta no encontrada' });
@@ -50,3 +57,27 @@ export const ownerPasswordInvalid = () =>
 
 export const ownerCodeInvalid = () =>
   new BadRequestException({ code: 'OWNER_CODE_INVALID', message: 'El código de verificación no es válido' });
+
+/** El documento de espacio de trabajo no cumple el contrato (clave desconocida, troncal, valor fuera de catálogo, tamaño…). Nada se guarda. */
+export const workspaceInvalid = (errors: { code: string; key?: string }[]) =>
+  new UnprocessableEntityException({ code: 'WORKSPACE_INVALID', message: 'El espacio de trabajo no es válido', details: { errors } });
+
+/** Otra persona guardó antes (o el documento viene de una versión más nueva). Se pide recargar; no se pisa nada. */
+export const workspaceConflict = (currentRev: number | null, reason: 'REV' | 'VERSION', storedVersion: number | null) =>
+  new ConflictException({
+    code: 'WORKSPACE_CONFLICT',
+    message:
+      reason === 'VERSION'
+        ? 'El espacio de trabajo lo guardó una versión más nueva de Kobrax y esta no lo puede modificar. Actualiza la aplicación.'
+        : 'El espacio de trabajo cambió mientras lo editabas. Recarga para ver lo último y vuelve a aplicar tu cambio.',
+    // `reason: 'VERSION'` no se arregla recargando: la pantalla debe explicarlo y no ofrecer «Recargar».
+    details: { currentRev, reason, storedVersion },
+  });
+
+/** Un módulo que la organización todavía usa no se puede ocultar (S-1, S-2, S-3, S-7). Los conteos van sólo a quien tiene `account:write`. */
+export const workspaceBlocked = (blocks: { module: string; reason: string; count: number }[]) =>
+  new ConflictException({
+    code: 'WORKSPACE_BLOCKED',
+    message: 'Hay módulos que todavía se usan en tu organización y no se pueden ocultar',
+    details: { blocks },
+  });

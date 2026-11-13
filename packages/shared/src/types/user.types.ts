@@ -1,4 +1,5 @@
 import type { AccountPreferences } from '../utils/account-preferences.js';
+import type { Workspace } from '../utils/workspace.js';
 /**
  * Miembros del tenant y roles asignables: el contrato de `/users` y `/roles`, que el móvil y
  * la web consumen igual.
@@ -67,6 +68,8 @@ export interface AccountBrand {
   soloUser?: boolean;
   /** Cuándo trabaja el equipo y cómo se muestra la semana: la agenda las respeta. Opcional para no romper a un cliente viejo. */
   preferences?: AccountPreferences;
+  /** F15: qué módulos y opciones muestra la organización. Ausente = «Completo» (un cliente viejo no lo conoce). */
+  workspace?: Workspace;
 }
 
 /**

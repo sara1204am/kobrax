@@ -433,7 +433,19 @@ describe('AuthService.me — sesión del token (W-LOG-54)', () => {
       timezone: null,
       soloUser: false,
       preferences: { workDays: [1, 2, 3, 4, 5, 6], workStart: '08:00', workEnd: '18:00', weekStart: 'MON', defaultLocale: 'es' },
+      workspace: { version: 1, rev: 0, hiddenModules: [], options: {} },
     });
+  });
+
+  it('🔴 F15 · A-9: entrega el espacio de trabajo a todo miembro (Completo si nunca se configuró), sin conteos ni datos de la cuenta', async () => {
+    const user = { id: 'u1', email: 'c@kobrax.demo', profile: null, mfaEnabled: false, requiresPasswordChange: false };
+    const nunca = await makeAuth({ user, brand: { businessName: 'Cobranzas', phone: null, logoUrl: null } }).service.me({ userId: 'u1', accountId: 'a1', roleId: 'r1', permissions: [] });
+    assert.deepEqual(nunca.account?.workspace, { version: 1, rev: 0, hiddenModules: [], options: {} });
+
+    const configuration = { billing: { legalName: 'Pérez SRL' }, workspace: { version: 1, rev: 3, hiddenModules: ['routes'], options: { 'client.income': false } } };
+    const con = await makeAuth({ user, brand: { businessName: 'Cobranzas', phone: null, logoUrl: null, configuration } }).service.me({ userId: 'u1', accountId: 'a1', roleId: 'r1', permissions: [] });
+    assert.deepEqual(con.account?.workspace, { version: 1, rev: 3, hiddenModules: ['routes'], options: { 'client.income': false } });
+    assert.ok(!JSON.stringify(con.account).includes('Pérez SRL'), 'la facturación no viaja por /auth/me');
   });
 
   it('entrega las preferencias de trabajo de la cuenta junto con la marca (la agenda las lee sin account:read)', async () => {
