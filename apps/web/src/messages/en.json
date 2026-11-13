@@ -314,6 +314,15 @@
       "title": "We could not reach the server",
       "text": "Try again in a moment. If it keeps happening, let your administrator know."
     },
+    "workspace": {
+      "hiddenModule": {
+        "title": "{module} is hidden for your organization.",
+        "textAdmin": "You can show it again in Account › Workspace.",
+        "textMember": "Ask whoever manages the account to show it.",
+        "goTo": "Go to Workspace",
+        "dismiss": "Dismiss"
+      }
+    },
     "billingAlert": {
       "title": "Billing details are missing.",
       "text": "Fill in {fields} so we can issue your invoice.",
@@ -2388,6 +2397,7 @@
       "facturacion": "Billing",
       "billingPending": "Billing details missing",
       "actividad": "Activity",
+      "espacio-de-trabajo": "Workspace",
       "avanzado": "Advanced",
       "soporte": "Support access"
     },
@@ -2610,6 +2620,115 @@
       "empty_value": "empty",
       "more": "Load more",
       "loadError": "The activity could not be loaded"
+    },
+    "workspace": {
+      "title": "Workspace",
+      "intro": "Choose what you see in Kobrax. What you hide stays saved and does not change what each person can do: hiding is not authorizing. You can go back to «Complete» at any time.",
+      "presets": {
+        "title": "Starting point",
+        "independent": {
+          "title": "Independent",
+          "text": "I work alone. An 8-item menu and simple entry forms."
+        },
+        "team": {
+          "title": "Team",
+          "text": "Several people in one office. No Organization, Import or Export."
+        },
+        "complete": {
+          "title": "Complete",
+          "text": "Everything visible, as today. This is the value of a new account."
+        },
+        "custom": "Custom: a manual adjustment on top of one of the starting points."
+      },
+      "modules": {
+        "title": "Menu modules",
+        "text": "They are removed from the menu, the breadcrumbs and the links. If someone opens a saved address, they go back to Home with a notice.",
+        "hints": {
+          "routes": "Plan and follow visit routes.",
+          "team": "Invite and manage people. It can only be hidden if you are the only person in the account.",
+          "organization": "Offices and hierarchy. It can only be hidden with a single active office.",
+          "import": "Load a portfolio from a file.",
+          "export": "Download data and the backup.",
+          "activity": "Audit log. Only the screen is hidden: auditing keeps recording everything."
+        }
+      },
+      "locked": {
+        "title": "Always visible",
+        "text": "Security includes Roles and Support access: without it nobody could edit permissions."
+      },
+      "credit": {
+        "title": "Credits",
+        "text": "Simplify the entry form. Existing credits open and save exactly as before.",
+        "fixed": {
+          "label": "My credits have an agreed installment",
+          "hint": "Hides rate, interest type, amortization, insurance and charges. The form asks for amount, installment, frequency and first due date."
+        },
+        "advanced": {
+          "label": "Show advanced credit options",
+          "hint": "Interest type, convention, base, insurance and charges."
+        },
+        "arrears": {
+          "label": "Ask how arrears are counted",
+          "hint": "If hidden, each credit uses your account method (Account › Collections)."
+        },
+        "frequencies": {
+          "label": "Payment frequencies I offer",
+          "hint": "At least one must remain. A credit that already uses another frequency still shows it."
+        }
+      },
+      "client": {
+        "title": "Client records",
+        "text": "Sections and fields that are shown. Name, phones, emails and addresses cannot be hidden.",
+        "income": {
+          "label": "Income",
+          "hint": "The client's income and reasons for non-payment."
+        },
+        "guarantors": {
+          "label": "Guarantors",
+          "hint": "People who back the credit."
+        },
+        "collateral": {
+          "label": "Non-personal collateral",
+          "hint": "Assets pledged as collateral."
+        },
+        "attachments": {
+          "label": "Attachments",
+          "hint": "Documents and photos on the record. Files already uploaded are kept."
+        },
+        "gender": {
+          "label": "Gender",
+          "hint": "An entry-form field that is rarely used."
+        },
+        "preferredChannel": {
+          "label": "Preferred contact channel",
+          "hint": "Phone, WhatsApp or visit."
+        },
+        "keepNote": "If a client already has a guarantor or an attachment saved, you will still see it even if you hid the section. Nothing is deleted."
+      },
+      "blocked": {
+        "members": "Your account has {count} people: it can only be hidden if you are the only one.",
+        "offices": "Your account has {count} active offices: it can only be hidden with one."
+      },
+      "menuPreview": "{shown} of {total} items in the menu",
+      "actions": {
+        "save": "Save changes",
+        "saving": "Saving…",
+        "reset": "Reset to Complete",
+        "unsaved": "You have unsaved changes. They apply to the whole organization.",
+        "clean": "No changes."
+      },
+      "saved": "Workspace saved. Other sessions will see it when they reload.",
+      "errors": {
+        "conflict": "The workspace changed while you were editing it. Reload to see the latest and apply your change again.",
+        "reload": "Reload",
+        "version": "It was saved by a newer version of Kobrax and this one cannot modify it. Update the application.",
+        "blocked": "Some modules are still in use in your organization and cannot be hidden:",
+        "blockedMembers": "{module}: your account has {count} people.",
+        "blockedOffices": "{module}: your account has {count} active offices.",
+        "blockedRoutes": "{module}: there are {count} routes in progress.",
+        "invalid": "That configuration is not valid.",
+        "generic": "Could not save. Please try again."
+      }
     },
     "advanced": {
       "backup": {

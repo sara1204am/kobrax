@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Permission, ROLE_PERMISSIONS, RoleType } from '@kobrax/shared';
+import { Permission, ROLE_PERMISSIONS, RoleType, emptyWorkspace, type Workspace } from '@kobrax/shared';
 import { NAV, crumbsFor, visibleNav } from './nav';
 
 const labels = (permissions: string[]) => visibleNav(permissions).map((i) => i.label);
@@ -139,5 +139,41 @@ describe('crumbsFor', () => {
   it('no confunde un prefijo parcial con la sección', () => {
     // `/dashboard-viejo` empieza igual que `/dashboard` pero no cuelga de él.
     expect(crumbsFor('/dashboard-viejo')).toEqual([]);
+  });
+});
+
+describe('visibleNav · espacio de trabajo (F15 · P2)', () => {
+  const admin = ROLE_PERMISSIONS[RoleType.ACCOUNT_ADMIN];
+  const ws = (hiddenModules: Workspace['hiddenModules']): Workspace => ({ ...emptyWorkspace(), hiddenModules });
+  const labelsWs = (permissions: string[], w?: Workspace | null) => visibleNav(permissions, w).map((i) => i.label);
+
+  it('🔴 A-1: sin workspace (o «Completo») el menú es idéntico al de hoy', () => {
+    expect(labelsWs(admin, undefined)).toEqual(labels(admin));
+    expect(labelsWs(admin, null)).toEqual(labels(admin));
+    expect(labelsWs(admin, emptyWorkspace())).toEqual(labels(admin));
+  });
+
+  it('lo que la organización ocultó sale del menú, en el orden de siempre', () => {
+    const lean = labelsWs(admin, ws(['routes', 'team', 'organization', 'import', 'export', 'activity']));
+    expect(lean).toEqual(['home', 'portfolio', 'mora', 'agenda', 'payments', 'accessSecurity', 'account', 'profile']);
+  });
+
+  it('🔴 A-2: el workspace solo QUITA: para quien no tiene el permiso, ocultar no hace aparecer nada', () => {
+    const collector = ROLE_PERMISSIONS[RoleType.COLLECTOR];
+    const base = labels(collector);
+    for (const hidden of [[], ['routes'], ['routes', 'team', 'export']] as Workspace['hiddenModules'][]) {
+      for (const l of labelsWs(collector, ws(hidden))) expect(base).toContain(l);
+    }
+  });
+
+  it('D-5 / D-8: un troncal escrito a mano en la base (Cartera, Seguridad…) nunca se oculta', () => {
+    const w = { ...emptyWorkspace(), hiddenModules: ['portfolio', 'accessSecurity', 'mora'] as never };
+    const shown = labelsWs(admin, w);
+    for (const core of ['portfolio', 'accessSecurity', 'mora']) expect(shown).toContain(core);
+  });
+
+  it('el ítem de Seguridad conserva sus hijos al ocultar otros módulos', () => {
+    const security = visibleNav(admin, ws(['routes'])).find((i) => i.label === 'accessSecurity');
+    expect(security?.children?.length).toBeGreaterThan(0);
   });
 });

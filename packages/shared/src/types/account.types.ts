@@ -1,5 +1,6 @@
 import type { AccountBilling } from '../utils/account-billing.js';
 import type { AccountPreferences } from '../utils/account-preferences.js';
+import type { Workspace } from '../utils/workspace.js';
 import type { PlanLimits } from '../constants/plans.js';
 import type { ArrearsMethod } from '../enums/credit.enum.js';
 
@@ -45,6 +46,8 @@ export interface AccountInfo {
    * cartera que presta en enteros no quiere leer «,00» en cada renglón. Vive en `settings`.
    */
   currencyDecimals: number;
+  /** F15: qué módulos y opciones muestra la organización, con el `rev` que el siguiente guardado debe enviar. Ausente = «Completo». */
+  workspace?: Workspace;
   /**
    * Cómo se cuentan los días de mora por defecto en los créditos nuevos (D20). Viene preseleccionado en
    * el alta; cada crédito guarda el suyo. Vive en `settings`. `oldest_unpaid` si la cuenta no lo eligió.
@@ -81,6 +84,8 @@ export interface AccountInfo {
  * un no-op. El recorte lo hace `diffAccount`.
  */
 export interface AccountPatch {
+  /** F15: reemplaza el espacio de trabajo completo, con control optimista por `rev`. */
+  workspace?: Workspace;
   businessName?: string;
   /** `null` = quitarlo. Es opcional, así que se puede borrar. */
   taxId?: string | null;

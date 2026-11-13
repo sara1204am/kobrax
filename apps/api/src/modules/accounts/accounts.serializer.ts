@@ -1,5 +1,5 @@
 import type { Account } from '@prisma/client';
-import { arrearsMethodOf, billingMissingOf, billingOf, effectiveLimits, preferencesOf } from '@kobrax/shared';
+import { arrearsMethodOf, billingMissingOf, billingOf, effectiveLimits, parseWorkspace, preferencesOf } from '@kobrax/shared';
 
 /** Lo que llegue de settings es JSON de la base: cualquier cosa fuera de 0–2 cae al default 2. */
 function currencyDecimalsOf(settings: unknown): number {
@@ -61,6 +61,8 @@ export function serializeAccount(
     address: a.address,
     city: a.city,
     preferences: preferencesOf(a.configuration),
+    // F15: qué módulos y opciones muestra la organización. `rev` es lo que el guardado siguiente debe enviar (control optimista).
+    workspace: parseWorkspace(a.configuration),
     billing,
     billingMissing: billingMissingOf(billing),
     currencyDecimals: currencyDecimalsOf(a.settings),

@@ -22,4 +22,16 @@ describe('notificationHref', () => {
   it('una gestión eliminada (sin enlace) cae al crédito: nunca a una gestión que ya no existe', () => {
     expect(notificationHref({ type: NotificationType.AGENDA_CHANGED, agendaItemId: null, creditId: 'c1' })).toBe('/mora/c1');
   });
+
+  it('🔴 F15 · A-5: con Rutas oculto, un aviso de ruta NO apunta a /rutas; cae a lo siguiente o a ningún lado', () => {
+    const hidden = { showsModule: (k: string) => k !== 'routes' };
+    expect(notificationHref({ type: NotificationType.ROUTE_ASSIGNED, agendaItemId: null, creditId: null, routeId: 'r1' }, hidden as never)).toBeUndefined();
+    // Si el aviso también habla de una gestión, el destino es la gestión.
+    expect(notificationHref({ type: NotificationType.ROUTE_ASSIGNED, agendaItemId: 'g1', creditId: null, routeId: 'r1' }, hidden as never)).toBe('/agenda/g1');
+  });
+  it('con Rutas visible (o sin workspace) el aviso de ruta sigue llevando a la ruta', () => {
+    const shown = { showsModule: () => true };
+    expect(notificationHref({ type: NotificationType.ROUTE_ASSIGNED, agendaItemId: null, creditId: null, routeId: 'r1' }, shown as never)).toBe('/rutas/r1');
+    expect(notificationHref({ type: NotificationType.ROUTE_ASSIGNED, agendaItemId: null, creditId: null, routeId: 'r1' })).toBe('/rutas/r1');
+  });
 });

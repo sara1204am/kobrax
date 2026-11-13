@@ -141,4 +141,17 @@ describe('ItemActions · completar con motivo y plantilla (F4/13 · E4/E5)', () 
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).queryByLabelText('Plantilla usada (opcional)')).toBeNull();
   });
+
+  it('🔴 F15 (G6): una visita que lleva una ruta oculta no ofrece «Completar» (saltaría el GPS y la evidencia de la parada), pero sí reagendar y cancelar', () => {
+    renderActions({ routeStopHref: undefined, completeBlocked: true });
+    expect(screen.queryByRole('button', { name: 'Registrar la ejecución' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Registrar en la ruta')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reagendar' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toBeInTheDocument();
+  });
+
+  it('sin ruta (o con Rutas visible) «Completar» sigue ofreciéndose como siempre', () => {
+    renderActions({ routeStopHref: undefined });
+    expect(screen.getByRole('button', { name: 'Registrar la ejecución' })).toBeInTheDocument();
+  });
 });

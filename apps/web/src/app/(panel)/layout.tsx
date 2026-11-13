@@ -9,6 +9,8 @@ import { getAccount } from './cuenta/get-account';
 import { PanelShell } from '@/components/panel-shell';
 import { AccountBrandProvider } from '@/components/account-brand';
 import { PermissionsProvider } from '@/components/permissions';
+import { WorkspaceProvider } from '@/components/workspace';
+import { HiddenModuleNotice } from '@/components/hidden-module-notice';
 import { ToastProvider } from '@/components/toast';
 import { visibleNav } from '@/lib/nav';
 
@@ -68,6 +70,7 @@ export default async function PanelLayout({ children }: { children: ReactNode })
 
   return (
     <PermissionsProvider permissions={user.permissions}>
+      <WorkspaceProvider workspace={user.account?.workspace}>
       <AccountBrandProvider brand={user.account ?? null}>
       <PanelShell
         user={{
@@ -82,16 +85,21 @@ export default async function PanelLayout({ children }: { children: ReactNode })
         // Si la lista falla, el panel funciona igual: el selector de empresa simplemente no
         // aparece. Es un adorno de la topbar, no la puerta de entrada.
         accounts={accounts.body.data ?? []}
-        nav={visibleNav(user.permissions)}
+        nav={visibleNav(user.permissions, user.account?.workspace)}
         badges={badges}
         billingMissing={billingMissing}
         supportSession={user.supportSession}
       >
         {/* Los avisos se montan una sola vez acá: un provider por pantalla haría que un toast
             disparado antes de navegar se pierda con el desmontaje. */}
-        <ToastProvider>{children}</ToastProvider>
+        <ToastProvider>
+          {/* F15: el aviso de «ese módulo está oculto» (`?oculto=`), en la pantalla a la que se volvió. */}
+          <HiddenModuleNotice canManage={user.permissions.includes(Permission.ACCOUNT_WRITE)} />
+          {children}
+        </ToastProvider>
       </PanelShell>
       </AccountBrandProvider>
+      </WorkspaceProvider>
     </PermissionsProvider>
   );
 }

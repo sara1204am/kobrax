@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakePlanLimits } from '../../common/plan/plan-test-utils';
-import { PLANS, TRIAL_DAYS } from '@kobrax/shared';
+import { PLANS, TRIAL_DAYS, effectiveLimits } from '@kobrax/shared';
 import { AccountsService } from './accounts.service';
 import { rejectsWithCode } from '../auth/auth-test-utils';
 import { AUTH_ERR } from '../auth/auth.errors';
@@ -23,13 +23,24 @@ function account(over: Record<string, unknown> = {}) {
   };
 }
 
-function makeService(opts: { found?: Record<string, unknown> | null; members?: number } = {}) {
+function makeService(opts: { found?: Record<string, unknown> | null; members?: number; offices?: number; routesInProgress?: number } = {}) {
   const calls = {
     findWhere: undefined as Record<string, unknown> | undefined,
     updated: undefined as Record<string, unknown> | undefined,
     audit: [] as string[],
+    auditEntries: [] as { entity: string; action: string; before?: unknown; after?: unknown }[],
+    locked: [] as unknown[][],
+    routeWhere: undefined as Record<string, unknown> | undefined,
   };
   const tx = {
+    // F15: el workspace se guarda con la fila bloqueada (`SELECT … FOR UPDATE`); el fake registra los valores de la consulta.
+    $queryRaw: async (_strings: unknown, ...values: unknown[]) => void calls.locked.push(values),
+    routePlan: {
+      count: async (args: { where: Record<string, unknown> }) => {
+        calls.routeWhere = args.where;
+        return opts.routesInProgress ?? 0;
+      },
+    },
     account: {
       findFirst: async (args: { where: Record<string, unknown> }) => {
         calls.findWhere = args.where;
@@ -42,10 +53,23 @@ function makeService(opts: { found?: Record<string, unknown> | null; members?: n
     },
     userAccount: { count: async () => opts.members ?? 3 },
   };
-  const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
+  const prisma = {
+    withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
+    elevated: async (_tx: unknown, fn: () => Promise<unknown>) => fn(),
+  };
   const tenant = { accountId: 'acc-A', userId: 'u1' };
-  const audit = { record: async (e: { action: string }) => void calls.audit.push(e.action) };
-  const service = new AccountsService(prisma as never, tenant as never, audit as never, fakePlanLimits({ usage: { users: opts.members ?? 3 } }));
+  const audit = {
+    record: async (e: { entity: string; action: string; before?: unknown; after?: unknown }) => {
+      calls.audit.push(e.action);
+      calls.auditEntries.push(e);
+    },
+  };
+  const service = new AccountsService(
+    prisma as never,
+    tenant as never,
+    audit as never,
+    fakePlanLimits({ usage: { users: opts.members ?? 3, branches: opts.offices ?? 1 } }),
+  );
   return { service, calls };
 }
 
@@ -409,5 +433,203 @@ describe('AccountsService.update', () => {
   it('sin la preferencia guardada, la cuenta dice 2: el default es el comportamiento de siempre', async () => {
     const { service } = makeService();
     assert.equal((await service.findMine()).currencyDecimals, 2);
+  });
+});
+
+// ── F15 · P1 · espacio de trabajo ────────────────────────────────────────────────────────────────────────────────────
+
+/** Un documento `workspace` tal como lo manda la web: la `rev` que leyó y lo que quiere. */
+const wsInput = (rev: number, hiddenModules: string[] = [], options: Record<string, unknown> = {}) => ({ version: 1, rev, hiddenModules, options });
+const stored = (rev: number, hiddenModules: string[] = [], options: Record<string, unknown> = {}) => ({ workspace: { version: 1, rev, hiddenModules, options } });
+
+describe('AccountsService.update · espacio de trabajo (F15 · P1)', () => {
+  it('🔴 C-12: un PATCH con SOLO `workspace` se guarda (no se descarta en silencio) y sube el `rev`', async () => {
+    const { service, calls } = makeService({ members: 1 });
+    await service.update({ workspace: wsInput(0, ['routes'], { 'client.income': false }) } as never);
+    const cfg = calls.updated!.configuration as Record<string, unknown>;
+    assert.deepEqual(cfg.workspace, { version: 1, rev: 1, hiddenModules: ['routes'], options: { 'client.income': false } });
+  });
+
+  it('no pisa el resto de `configuration` (importación, preferencias, facturación)', async () => {
+    const { service, calls } = makeService({
+      members: 1,
+      found: account({ configuration: { importConfig: { staleAfterDays: 30 }, preferences: { workEnd: '17:00' }, billing: { legalName: 'Pérez SRL' } } }),
+    });
+    await service.update({ workspace: wsInput(0, ['export']) } as never);
+    const cfg = calls.updated!.configuration as Record<string, unknown>;
+    assert.deepEqual(cfg.importConfig, { staleAfterDays: 30 });
+    assert.deepEqual(cfg.preferences, { workEnd: '17:00' });
+    assert.deepEqual(cfg.billing, { legalName: 'Pérez SRL' });
+    assert.deepEqual((cfg.workspace as { hiddenModules: string[] }).hiddenModules, ['export']);
+  });
+
+  it('reemplaza el subárbol completo: lo que no viene en el documento nuevo desaparece', async () => {
+    const { service, calls } = makeService({ members: 1, found: account({ configuration: stored(3, ['routes', 'export'], { 'client.gender': false }) }) });
+    await service.update({ workspace: wsInput(3, ['routes']) } as never);
+    const cfg = calls.updated!.configuration as { workspace: unknown };
+    assert.deepEqual(cfg.workspace, { version: 1, rev: 4, hiddenModules: ['routes'], options: {} });
+  });
+
+  it('🔴 A-16: dos guardados con el mismo `rev` → el segundo recibe 409 y no escribe nada', async () => {
+    const { service, calls } = makeService({ members: 1, found: account({ configuration: stored(1, ['routes']) }) });
+    await rejectsWithCode(service.update({ workspace: wsInput(0, ['export']) } as never), 'WORKSPACE_CONFLICT');
+    assert.equal(calls.updated, undefined);
+    assert.deepEqual(calls.audit, []);
+  });
+
+  it('el documento se lee y se escribe con la fila de ESTA cuenta bloqueada (A-8)', async () => {
+    const { service, calls } = makeService({ members: 1 });
+    await service.update({ workspace: wsInput(0) } as never);
+    assert.deepEqual(calls.locked, [['acc-A']]);
+  });
+
+  it('un parche que no toca `configuration` (datos del negocio) no bloquea la fila', async () => {
+    const { service, calls } = makeService();
+    await service.update({ businessName: 'X' });
+    assert.deepEqual(calls.locked, []);
+  });
+
+  it('🔴 G6 · hallazgo 1: guardar preferencias o facturación (que reescriben `configuration` entera) también bloquea la fila, para no pisar un workspace guardado en paralelo', async () => {
+    const a = makeService();
+    await a.service.update({ preferences: { workStart: '07:30' } } as never);
+    assert.deepEqual(a.calls.locked, [['acc-A']]);
+    const b = makeService();
+    await b.service.update({ billing: { legalName: 'Pérez SRL' } } as never);
+    assert.deepEqual(b.calls.locked, [['acc-A']]);
+  });
+
+  it('una versión guardada MÁS NUEVA que la que esta API entiende no se pisa (409), y el aviso dice que recargar no lo arregla', async () => {
+    const { service, calls } = makeService({ members: 1, found: account({ configuration: { workspace: { version: 2, rev: 5, hiddenModules: [], options: {} } } }) });
+    await assert.rejects(service.update({ workspace: wsInput(0) } as never), (err: unknown) => {
+      const body = (err as { getResponse: () => { code: string; details: { reason: string; currentRev: number | null; storedVersion: number } } }).getResponse();
+      assert.equal(body.code, 'WORKSPACE_CONFLICT');
+      assert.deepEqual(body.details, { currentRev: null, reason: 'VERSION', storedVersion: 2 });
+      return true;
+    });
+    assert.equal(calls.updated, undefined);
+  });
+
+  it('un conflicto por `rev` informa el rev vigente para que la pantalla recargue', async () => {
+    const { service } = makeService({ members: 1, found: account({ configuration: stored(4) }) });
+    await assert.rejects(service.update({ workspace: wsInput(1) } as never), (err: unknown) => {
+      const body = (err as { getResponse: () => { details: { reason: string; currentRev: number } } }).getResponse();
+      assert.deepEqual(body.details, { currentRev: 4, reason: 'REV', storedVersion: null });
+      return true;
+    });
+  });
+
+  it('G6 · hallazgo 6: un documento con demasiados módulos u opciones se rechaza (422) sin recorrerlo', async () => {
+    const muchas = Object.fromEntries(Array.from({ length: 200 }, (_, i) => [`k${i}`, false]));
+    await rejectsWithCode(makeService({ members: 1 }).service.update({ workspace: wsInput(0, [], muchas) } as never), 'WORKSPACE_INVALID');
+  });
+
+  it('🔴 A-3: lo que no cumple el contrato → 422 y no se guarda nada', async () => {
+    for (const bad of [
+      wsInput(0, ['portfolio']), // troncal
+      wsInput(0, ['accessSecurity']), // D-8: Seguridad es troncal
+      wsInput(0, ['inventado']),
+      wsInput(0, [], { 'client.phone': false }),
+      wsInput(0, [], { 'client.income': true }),
+      wsInput(0, [], { 'credit.frequencies': [] }),
+      { ...wsInput(0), version: 2 },
+    ]) {
+      const { service, calls } = makeService({ members: 1 });
+      await rejectsWithCode(service.update({ workspace: bad } as never), 'WORKSPACE_INVALID');
+      assert.equal(calls.updated, undefined, JSON.stringify(bad));
+      assert.deepEqual(calls.audit, []);
+    }
+  });
+
+  it('S-1: Equipo no se oculta con más de una persona (cuenta también las invitaciones pendientes)', async () => {
+    const { service, calls } = makeService({ members: 3 });
+    await rejectsWithCode(service.update({ workspace: wsInput(0, ['team']) } as never), 'WORKSPACE_BLOCKED');
+    assert.equal(calls.updated, undefined);
+  });
+
+  it('S-1: con una sola persona, Equipo sí se oculta', async () => {
+    const { service, calls } = makeService({ members: 1 });
+    await service.update({ workspace: wsInput(0, ['team']) } as never);
+    assert.deepEqual((calls.updated!.configuration as { workspace: { hiddenModules: string[] } }).workspace.hiddenModules, ['team']);
+  });
+
+  it('S-7 (D-9): Actividad solo se oculta con una única persona', async () => {
+    await rejectsWithCode(makeService({ members: 2 }).service.update({ workspace: wsInput(0, ['activity']) } as never), 'WORKSPACE_BLOCKED');
+    const ok = makeService({ members: 1 });
+    await ok.service.update({ workspace: wsInput(0, ['activity']) } as never);
+    assert.ok(ok.calls.updated);
+  });
+
+  it('S-2: Organización no se oculta con más de una oficina activa', async () => {
+    await rejectsWithCode(makeService({ members: 1, offices: 2 }).service.update({ workspace: wsInput(0, ['organization']) } as never), 'WORKSPACE_BLOCKED');
+    const ok = makeService({ members: 1, offices: 1 });
+    await ok.service.update({ workspace: wsInput(0, ['organization']) } as never);
+    assert.ok(ok.calls.updated);
+  });
+
+  it('S-3: Rutas no se oculta con rutas en curso (el conteo es de la CUENTA)', async () => {
+    const blocked = makeService({ members: 1, routesInProgress: 2 });
+    await rejectsWithCode(blocked.service.update({ workspace: wsInput(0, ['routes']) } as never), 'WORKSPACE_BLOCKED');
+    assert.deepEqual(blocked.calls.routeWhere, { accountId: 'acc-A', status: 'IN_PROGRESS' });
+    const ok = makeService({ members: 1, routesInProgress: 0 });
+    await ok.service.update({ workspace: wsInput(0, ['routes']) } as never);
+    assert.ok(ok.calls.updated);
+  });
+
+  it('las salvaguardas miran solo lo que se oculta AHORA: lo que ya estaba oculto no bloquea otro cambio', async () => {
+    const { service, calls } = makeService({ members: 3, found: account({ configuration: stored(2, ['team']) }) });
+    await service.update({ workspace: wsInput(2, ['team', 'export']) } as never);
+    assert.deepEqual((calls.updated!.configuration as { workspace: { hiddenModules: string[] } }).workspace.hiddenModules, ['export', 'team']);
+  });
+
+  it('volver a mostrar un módulo nunca lo bloquea', async () => {
+    const { service, calls } = makeService({ members: 5, offices: 4, routesInProgress: 9, found: account({ configuration: stored(1, ['team', 'organization', 'routes']) }) });
+    await service.update({ workspace: wsInput(1) } as never);
+    assert.deepEqual((calls.updated!.configuration as { workspace: { hiddenModules: string[] } }).workspace.hiddenModules, []);
+  });
+
+  it('el motivo del bloqueo trae el conteo (solo lo recibe quien tiene account:write)', async () => {
+    const { service } = makeService({ members: 4 });
+    await assert.rejects(service.update({ workspace: wsInput(0, ['team']) } as never), (err: unknown) => {
+      const body = (err as { getResponse: () => { details: { blocks: { module: string; reason: string; count: number }[] } } }).getResponse();
+      assert.deepEqual(body.details.blocks, [{ module: 'team', reason: 'MEMBERS', count: 4 }]);
+      return true;
+    });
+  });
+
+  it('🔴 A-7 / C-13: se audita SOLO el subárbol `workspace` (quién, cuándo y qué), no la fila de la cuenta', async () => {
+    const { service, calls } = makeService({ members: 1, found: account({ taxId: '999', configuration: { billing: { legalName: 'Pérez SRL' }, ...stored(0) } }) });
+    await service.update({ workspace: wsInput(0, ['routes']) } as never);
+    assert.equal(calls.auditEntries.length, 1);
+    const [entry] = calls.auditEntries;
+    assert.equal(entry.entity, 'account');
+    assert.equal(entry.action, 'UPDATE');
+    assert.deepEqual(entry.before, { workspace: { version: 1, rev: 0, hiddenModules: [], options: {} } });
+    assert.deepEqual(entry.after, { workspace: { version: 1, rev: 1, hiddenModules: ['routes'], options: {} } });
+    assert.ok(!JSON.stringify(entry).includes('Pérez SRL'), 'la facturación no se copia a la bitácora');
+    assert.ok(!JSON.stringify(entry).includes('999'), 'el NIT tampoco');
+  });
+
+  it('un parche mixto (datos del negocio + workspace) deja las dos entradas de auditoría', async () => {
+    const { service, calls } = makeService({ members: 1 });
+    await service.update({ businessName: 'Nuevo nombre', workspace: wsInput(0, ['export']) } as never);
+    assert.equal(calls.auditEntries.length, 2);
+  });
+
+  it('S-6: ocultar módulos no cambia los topes del plan', async () => {
+    const { service } = makeService({ members: 1 });
+    const res = await service.update({ workspace: wsInput(0, ['routes', 'team']) } as never);
+    assert.deepEqual(res.limits, effectiveLimits('PROFESSIONAL', null));
+  });
+
+  it('findMine entrega el workspace con su `rev` (para el siguiente guardado) y «Completo» si nunca se configuró', async () => {
+    const nunca = await makeService().service.findMine();
+    assert.deepEqual(nunca.workspace, { version: 1, rev: 0, hiddenModules: [], options: {} });
+    const con = await makeService({ found: account({ configuration: stored(7, ['export'], { 'client.taxId': false }) }) }).service.findMine();
+    assert.deepEqual(con.workspace, { version: 1, rev: 7, hiddenModules: ['export'], options: { 'client.taxId': false } });
+  });
+
+  it('H-15: un workspace malformado guardado a mano se sirve como «Completo», sin romper la lectura', async () => {
+    const res = await makeService({ found: account({ configuration: { workspace: { version: 1, rev: 'x', hiddenModules: 'routes', options: 5 } } }) }).service.findMine();
+    assert.deepEqual(res.workspace, { version: 1, rev: 0, hiddenModules: [], options: {} });
   });
 });

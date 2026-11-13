@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ToastProvider } from '@/components/toast';
+import { WorkspaceProvider } from '@/components/workspace';
 import { LoanForm } from './loan-form';
 
 const { postJson } = vi.hoisted(() => ({ postJson: vi.fn() }));
@@ -62,5 +63,28 @@ describe('LoanForm · oficina del crédito (F13)', () => {
     draw({ offices: OFFICES, defaultOfficeId: 'c' });
     await userEvent.click(screen.getByRole('button', { name: /guardar|crear|registrar/i }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Elige la oficina del crédito');
+  });
+});
+
+describe('LoanForm · espacio de trabajo (F15 · P3)', () => {
+  const wsFija = { version: 1, rev: 1, hiddenModules: [], options: { 'credit.definition': 'agreed_installment' } } as never;
+
+  it('🔴 A-6: con la modalidad fija no hay selector de modalidad y el alta arranca con ella', () => {
+    render(
+      <ToastProvider>
+        <WorkspaceProvider workspace={wsFija}>
+          <LoanForm clientId="cl1" clientName="Ana" assignees={[]} currency="BOB" />
+        </WorkspaceProvider>
+      </ToastProvider>,
+    );
+    expect(screen.queryByText('¿Cómo querés definir el crédito?')).not.toBeInTheDocument();
+    // «Cuota acordada»: el campo de la cuota (que solo existe en esa modalidad) está, y el del interés no.
+    expect(screen.getByLabelText('Cuota acordada')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Interés \(%\)/)).not.toBeInTheDocument();
+  });
+
+  it('A-1: sin workspace el selector de modalidad sigue estando', () => {
+    draw();
+    expect(screen.getByText('¿Cómo querés definir el crédito?')).toBeInTheDocument();
   });
 });

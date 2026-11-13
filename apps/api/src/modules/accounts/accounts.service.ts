@@ -1,4 +1,17 @@
-import { billingOf, mergeBilling, mergePreferences, preferencesOf, validatePreferences, type AccountPreferences } from '@kobrax/shared';
+import {
+  WORKSPACE_VERSION,
+  billingOf,
+  mergeBilling,
+  mergePreferences,
+  parseWorkspace,
+  preferencesOf,
+  validatePreferences,
+  validateWorkspaceInput,
+  workspaceVersionOf,
+  type AccountPreferences,
+  type Workspace,
+  type WorkspaceModuleKey,
+} from '@kobrax/shared';
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { hash } from 'bcryptjs';
@@ -10,10 +23,10 @@ import { AuditService } from '../../common/audit/audit.service';
 import { PlanLimitsService } from '../../common/plan/plan-limits.service';
 import { weakPassword } from '../auth/auth.errors';
 import { serializeAccount } from './accounts.serializer';
-import { UpdateAccountDto } from './dto/account.dto';
+import { UpdateAccountDto, WorkspaceDto } from './dto/account.dto';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { DEFAULT_BRANCH_TYPES, ROOT_BRANCH_TYPE_CODE } from '../branches/default-branch-types';
-import { accountNotFound, emailTaken, preferencesInvalid, roleCatalogMissing } from './accounts.errors';
+import { accountNotFound, emailTaken, preferencesInvalid, roleCatalogMissing, workspaceBlocked, workspaceConflict, workspaceInvalid } from './accounts.errors';
 
 /** Mercado inicial. El registro no los pregunta (S4-D8); se cambian en la pantalla de datos. */
 const DEFAULT_COUNTRY = 'BO';
@@ -177,7 +190,12 @@ export class AccountsService {
   }
 
   async update(dto: UpdateAccountDto): Promise<ReturnType<typeof serializeAccount>> {
-    const { before, updated } = await this.tx(async (tx) => {
+    const { before, updated, workspaceChange } = await this.tx(async (tx) => {
+      // F15 · A-16: `configuration` se lee y se escribe con la fila bloqueada. Dos administradores que guardan a la vez se
+      // serializan y el segundo se encuentra con el `rev` nuevo (409) en vez de pisar al primero. El bloqueo cubre también a
+      // quien guarda preferencias o facturación (que reescriben `configuration` entera): sin él, un guardado de esos
+      // reinstalaría un workspace viejo (G6 · hallazgo 1).
+      if (dto.preferences || dto.billing || dto.workspace) await tx.$queryRaw`SELECT id FROM accounts WHERE id = ${this.tenant.accountId} FOR UPDATE`;
       const before = await tx.account.findFirst({
         where: { id: this.tenant.accountId, deletedAt: null },
       });
@@ -185,7 +203,9 @@ export class AccountsService {
       // Las preferencias viven en `configuration.preferences`; el resto de `configuration` (importación, mora, prioridad)
       // se conserva tal cual. Se valida el conjunto ya mezclado: un parche válido por campo puede dejar una jornada al revés.
       let configuration: Record<string, unknown> | undefined;
-      if (dto.preferences || dto.billing) {
+      let workspaceChange: { before: Workspace; after: Workspace } | undefined;
+      // C-12: sin `|| dto.workspace` un PATCH con sólo el espacio de trabajo se descartaba en silencio.
+      if (dto.preferences || dto.billing || dto.workspace) {
         configuration = { ...(before.configuration as Record<string, unknown>) };
         if (dto.preferences) {
           const merged = mergePreferences(preferencesOf(before.configuration), dto.preferences as Partial<AccountPreferences>);
@@ -195,6 +215,11 @@ export class AccountsService {
         }
         // Los datos de facturación también viven en `configuration`: se mezclan campo a campo, `null` quita el dato.
         if (dto.billing) configuration.billing = mergeBilling(billingOf(before.configuration), dto.billing);
+        // El espacio de trabajo REEMPLAZA su subárbol completo; el resto de `configuration` se conserva.
+        if (dto.workspace) {
+          workspaceChange = await this.applyWorkspace(tx, before.configuration, dto.workspace);
+          configuration.workspace = workspaceChange.after;
+        }
       }
       const updated = await tx.account.update({
         where: { id: before.id },
@@ -225,17 +250,79 @@ export class AccountsService {
             : {}),
         },
       });
-      return { before, updated };
+      return { before, updated, workspaceChange };
     });
 
-    await this.audit.record({
-      entity: 'account',
-      entityId: updated.id,
-      action: 'UPDATE',
-      before,
-      after: updated,
-      redactKeys: ['taxId'],
-    });
+    // C-13: el cambio de espacio de trabajo se audita SOLO con su subárbol (quién, cuándo, desde dónde, qué). La fila
+    // completa de la cuenta lleva datos fiscales que este cambio no tiene por qué copiar a la bitácora.
+    if (workspaceChange) {
+      await this.audit.record({
+        entity: 'account',
+        entityId: updated.id,
+        action: 'UPDATE',
+        before: { workspace: workspaceChange.before },
+        after: { workspace: workspaceChange.after },
+      });
+    }
+    const touchesOther = Object.entries(dto).some(([key, value]) => key !== 'workspace' && value !== undefined);
+    if (!workspaceChange || touchesOther) {
+      await this.audit.record({
+        entity: 'account',
+        entityId: updated.id,
+        action: 'UPDATE',
+        before,
+        after: updated,
+        redactKeys: ['taxId'],
+      });
+    }
     return this.findMine();
+  }
+
+  /**
+   * Valida y arma el nuevo espacio de trabajo. Todo lo que falla lanza antes de escribir: o se guarda completo o no se
+   * guarda nada (A-3). El servidor NO consulta el workspace para aceptar o rechazar operaciones (R2): aquí solo se
+   * decide si ESTE documento se puede guardar.
+   */
+  private async applyWorkspace(tx: PrismaClient, configuration: unknown, input: WorkspaceDto): Promise<{ before: Workspace; after: Workspace }> {
+    const stored = parseWorkspace(configuration);
+    const storedVersion = workspaceVersionOf(configuration);
+    // Una versión más nueva que la que esta API entiende no se toca: sobrescribirla perdería lo que no sabe leer.
+    if (storedVersion !== null && storedVersion > WORKSPACE_VERSION) throw workspaceConflict(null, 'VERSION', storedVersion);
+    const checked = validateWorkspaceInput(input);
+    if (!checked.ok) throw workspaceInvalid(checked.errors);
+    // A-16: control optimista. Con la fila bloqueada, `stored.rev` es lo último que hay.
+    if (input.rev !== stored.rev) throw workspaceConflict(stored.rev, 'REV', null);
+    const next = checked.workspace;
+    // Las salvaguardas miran solo lo que se OCULTA AHORA: un módulo que ya estaba oculto no bloquea otros cambios.
+    const newlyHidden = next.hiddenModules.filter((m) => !stored.hiddenModules.includes(m));
+    const blocks = await this.blocksFor(tx, newlyHidden);
+    if (blocks.length > 0) throw workspaceBlocked(blocks);
+    return { before: stored, after: { ...next, rev: stored.rev + 1 } };
+  }
+
+  /** S-1, S-2, S-3 y S-7: qué módulos de los que se quieren ocultar la organización todavía usa. */
+  private async blocksFor(tx: PrismaClient, modules: WorkspaceModuleKey[]): Promise<{ module: string; reason: string; count: number }[]> {
+    const blocks: { module: string; reason: string; count: number }[] = [];
+    if (modules.includes('team') || modules.includes('activity')) {
+      // Cuenta también a quien tiene la invitación pendiente: ya ocupa asiento (igual que el tope del plan).
+      const members = await this.plan.usage('users', tx);
+      if (members > 1) {
+        if (modules.includes('team')) blocks.push({ module: 'team', reason: 'MEMBERS', count: members });
+        if (modules.includes('activity')) blocks.push({ module: 'activity', reason: 'MEMBERS', count: members });
+      }
+    }
+    if (modules.includes('organization')) {
+      // La raíz cuenta: con una sola oficina activa no hay jerarquía que esconder.
+      const offices = await this.plan.usage('branches', tx);
+      if (offices > 1) blocks.push({ module: 'organization', reason: 'OFFICES', count: offices });
+    }
+    if (modules.includes('routes')) {
+      // El conteo es de la CUENTA, no de lo que ve quien guarda (barrera de alcance F2b).
+      const inProgress = await this.prisma.elevated(tx, () =>
+        tx.routePlan.count({ where: { accountId: this.tenant.accountId, status: 'IN_PROGRESS' } }),
+      );
+      if (inProgress > 0) blocks.push({ module: 'routes', reason: 'ROUTES_IN_PROGRESS', count: inProgress });
+    }
+    return blocks;
   }
 }

@@ -2,7 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 import { compare, hash } from 'bcryptjs';
-import { KOBRAX, isMobileRole, piiChannelOf, preferencesOf, type AccountPreferences, type AuthAccountOption, type AuthTokens, type LoginResult, type MeOffice } from '@kobrax/shared';
+import { KOBRAX, isMobileRole, parseWorkspace, piiChannelOf, preferencesOf, type AccountPreferences, type AuthAccountOption, type AuthTokens, type LoginResult, type MeOffice, type Workspace } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { TokenService } from './token.service';
@@ -380,7 +380,7 @@ export class AuthService implements OnModuleInit {
     /** Sesión del token: el panel la compara entre pestañas (W-LOG-54). */
     sessionId?: string;
     /** La marca del negocio activo (nombre, teléfono, logo): la lee cualquier miembro, sin `account:read`. */
-    account: { name: string; phone: string | null; logoUrl: string | null; timezone: string | null; soloUser: boolean; preferences: AccountPreferences } | null;
+    account: { name: string; phone: string | null; logoUrl: string | null; timezone: string | null; soloUser: boolean; preferences: AccountPreferences; workspace: Workspace } | null;
     /** F14 · F5: clave del rol de la cuenta. */
     roleKey?: string;
     /** F14 · F8 (D-7): las oficinas de esta persona (las de su membresía). */
@@ -444,7 +444,7 @@ export class AuthService implements OnModuleInit {
       requiresPasswordChange: dbUser.requiresPasswordChange,
       sessionId: user.sessionId,
       account: account
-        ? { name: account.businessName, phone: account.phone, logoUrl: account.logoUrl, timezone: account.timezone ?? null, soloUser, preferences: preferencesOf(account.configuration) }
+        ? { name: account.businessName, phone: account.phone, logoUrl: account.logoUrl, timezone: account.timezone ?? null, soloUser, preferences: preferencesOf(account.configuration), workspace: parseWorkspace(account.configuration) }
         : null,
       roleKey: user.roleKey,
       offices,
@@ -499,7 +499,7 @@ export class AuthService implements OnModuleInit {
       mfaRequired: false,
       requiresPasswordChange: false,
       sessionId: user.sessionId,
-      account: account ? { name: account.businessName, phone: account.phone, logoUrl: account.logoUrl, timezone: account.timezone ?? null, soloUser: false, preferences: preferencesOf(account.configuration) } : null,
+      account: account ? { name: account.businessName, phone: account.phone, logoUrl: account.logoUrl, timezone: account.timezone ?? null, soloUser: false, preferences: preferencesOf(account.configuration), workspace: parseWorkspace(account.configuration) } : null,
       offices: [],
       supportSession,
     };

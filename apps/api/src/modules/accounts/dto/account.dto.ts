@@ -4,6 +4,7 @@ import {
   ArrayUnique,
   IsArray,
   IsEmail,
+  IsObject,
   IsIn,
   IsInt,
   IsOptional,
@@ -44,6 +45,18 @@ export class BillingDto {
 }
 
 /**
+ * Espacio de trabajo (F15 · P1): qué módulos y opciones muestra la organización. El DTO sólo fija la FORMA; el contenido
+ * (claves conocidas, troncales, valores del catálogo) lo valida `validateWorkspaceInput` de shared en el service, que
+ * además comprueba el `rev` y las salvaguardas contra el estado real de la cuenta.
+ */
+export class WorkspaceDto {
+  @IsInt() @Min(1) @Max(1000) version!: number;
+  @IsInt() @Min(0) @Max(2_000_000_000) rev!: number;
+  @IsArray() @ArrayMaxSize(32) @IsString({ each: true }) hiddenModules!: string[];
+  @IsObject() options!: Record<string, unknown>;
+}
+
+/**
  * Configuración editable del tenant. `planCode`, `limitsOverride`, `accountType` y `status`
  * NO están acá a propósito: no son configuración del producto.
  *
@@ -81,4 +94,6 @@ export class UpdateAccountDto {
 
   @IsOptional() @ValidateNested() @Type(() => PreferencesDto) preferences?: PreferencesDto;
   @IsOptional() @ValidateNested() @Type(() => BillingDto) billing?: BillingDto;
+  /** F15: reemplaza el subárbol `configuration.workspace` completo, con control optimista por `rev`. */
+  @IsOptional() @ValidateNested() @Type(() => WorkspaceDto) workspace?: WorkspaceDto;
 }

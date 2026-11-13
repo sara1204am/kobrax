@@ -15,6 +15,7 @@ import {
   RepaymentForm,
   CHARGE_KINDS,
   TermUnit,
+  creditFormHasAdvanced,
   paymentPlanCsv,
   paymentPlanFileName,
   periodicRatePercent,
@@ -30,6 +31,7 @@ import {
 import { Segmented } from '@/components/panel-ui';
 import { Button, Field, Input, Select } from '@/components/ui';
 import { dayDate, money } from '@/lib/format';
+import { useWorkspace } from '@/components/workspace';
 import { downloadText } from '@/lib/download';
 
 /**
@@ -60,6 +62,19 @@ export function CreditTermsFields({
   const tp = useTranslations('portfolio');
   const locale = useLocale();
   const set = (patch: Partial<CreditForm>) => onChange({ ...form, ...patch });
+
+  // F15 · P3: lo que la organización simplificó. Solo QUITA y nunca esconde lo ya guardado (R7): un crédito que se abre con otra
+  // modalidad, con una frecuencia que ya no se ofrece o con seguro y cargos los sigue mostrando.
+  const workspace = useWorkspace();
+  const fixedDefinition = workspace.fixed('credit.definition');
+  const hideDefinition = fixedDefinition !== undefined && form.definition === fixedDefinition;
+  const allowedFrequencies = workspace.choices('credit.frequencies');
+  const frequencies = OFFERED_FREQUENCIES.filter(
+    (f) => !allowedFrequencies || allowedFrequencies.includes(f) || f === form.frequency,
+  );
+  const showAdvanced = workspace.shows('credit.advanced') || creditFormHasAdvanced(form);
+  // C-4: el método de mora vive en «Avanzadas» pero es una opción aparte. Oculto, el crédito usa el de la cuenta (ya viene puesto en el formulario).
+  const showArrears = workspace.shows('credit.arrearsMethod');
 
   const calculated = form.definition === CreditDefinition.CALCULATED;
   const agreedInstallment = form.definition === CreditDefinition.AGREED_INSTALLMENT;
@@ -143,21 +158,23 @@ export function CreditTermsFields({
 
   return (
     <>
-      <div className="mb-5 space-y-2">
-        <p className="text-[14px] font-medium text-k-text">{t('definitionLabel')}</p>
-        <div className="flex flex-wrap">
-          <Segmented
-            label={t('definitionLabel')}
-            value={form.definition}
-            onChange={(definition) => set({ definition })}
-            options={Object.values(CreditDefinition).map((d) => ({
-              value: d,
-              label: t(`definition.${d}`),
-            }))}
-          />
+      {!hideDefinition && (
+        <div className="mb-5 space-y-2">
+          <p className="text-[14px] font-medium text-k-text">{t('definitionLabel')}</p>
+          <div className="flex flex-wrap">
+            <Segmented
+              label={t('definitionLabel')}
+              value={form.definition}
+              onChange={(definition) => set({ definition })}
+              options={Object.values(CreditDefinition).map((d) => ({
+                value: d,
+                label: t(`definition.${d}`),
+              }))}
+            />
+          </div>
+          <p className="text-[12px] text-k-muted">{t(`definitionHint.${form.definition}`)}</p>
         </div>
-        <p className="text-[12px] text-k-muted">{t(`definitionHint.${form.definition}`)}</p>
-      </div>
+      )}
 
       <div className="grid gap-5 sm:grid-cols-2">
         {/* Monto a prestar · Interés · Tipo de cuota, en una sola línea. */}
@@ -280,7 +297,7 @@ export function CreditTermsFields({
                 value={form.frequency}
                 onChange={(e) => set({ frequency: e.target.value as PaymentFrequency })}
               >
-                {OFFERED_FREQUENCIES.map((f) => (
+                {frequencies.map((f) => (
                   <option key={f} value={f}>
                     {tp(`frequency.${f}`)}
                   </option>
@@ -308,7 +325,8 @@ export function CreditTermsFields({
 
       {/* Sólo lo que el dominio soporta hoy (D4, D8), más desgravamen y cargos (D18). */}
       {/* Siempre: el método de mora vale para cualquier definición. Lo demás, sólo en «Calcular cuotas». */}
-      {
+      {/* Solo si queda algo dentro: el método de mora, o —en «Calcular cuotas»— lo avanzado. Si no, sería un panel vacío. */}
+      {(showArrears || (calculated && showAdvanced)) && (
         <details className="group mt-5 rounded-xl border border-k-border">
           <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-[14px] font-medium text-k-text hover:bg-k-bg [&::-webkit-details-marker]:hidden">
             <span aria-hidden className="text-k-muted transition-transform group-open:rotate-180">
@@ -318,20 +336,25 @@ export function CreditTermsFields({
           </summary>
           <div className="grid gap-5 border-t border-k-border p-4 sm:grid-cols-2">
             {/* D20: por defecto, el de la cuenta (lo pone quien arma el formulario). */}
-            <Field label={t('arrearsMethod')} hint={t(`arrearsMethodHints.${form.arrearsMethod}`)}>
-              <Select
-                value={form.arrearsMethod}
-                onChange={(e) => set({ arrearsMethod: e.target.value as ArrearsMethod })}
+            {showArrears && (
+              <Field
+                label={t('arrearsMethod')}
+                hint={t(`arrearsMethodHints.${form.arrearsMethod}`)}
               >
-                {Object.values(ArrearsMethod).map((m) => (
-                  <option key={m} value={m}>
-                    {t(`arrearsMethods.${m}`)}
-                  </option>
-                ))}
-              </Select>
-            </Field>
+                <Select
+                  value={form.arrearsMethod}
+                  onChange={(e) => set({ arrearsMethod: e.target.value as ArrearsMethod })}
+                >
+                  {Object.values(ArrearsMethod).map((m) => (
+                    <option key={m} value={m}>
+                      {t(`arrearsMethods.${m}`)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            )}
 
-            {calculated && (
+            {calculated && showAdvanced && (
               <>
                 {/* Con cuota variable el interés es siempre simple: compuesto daría lo mismo (D4). */}
                 {form.amortization !== AmortizationMethod.FIXED_PRINCIPAL && (
@@ -443,7 +466,7 @@ export function CreditTermsFields({
             )}
           </div>
         </details>
-      }
+      )}
     </>
   );
 }
