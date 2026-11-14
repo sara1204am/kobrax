@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { WORKSPACE_PRESETS, emptyWorkspace, presetOf } from '@kobrax/shared';
 import {
   SKIP_BODY,
+  gatedModules,
+  isUntouched,
+  skipBody,
+  startDraft,
   blockedModules,
   changesFromComplete,
   creditDefinitionOf,
@@ -125,5 +129,73 @@ describe('failureOf', () => {
     [{}, 'generic'],
   ])('%j → %s', (data, expected) => {
     expect(failureOf(data)).toBe(expected);
+  });
+});
+
+describe('topes del plan y arranque del asistente', () => {
+  const FREE = { users: 1, branches: 1 };
+  const PRO = { users: 25, branches: 3 };
+
+  it('un solo asiento bloquea Equipo y Actividad; una sola oficina, Organización', () => {
+    expect([...gatedModules(FREE)].sort()).toEqual(['activity', 'organization', 'team']);
+    expect([...gatedModules({ users: 25, branches: 1 })]).toEqual(['organization']);
+    expect(gatedModules(PRO).size).toBe(0);
+    expect(gatedModules({ users: null, branches: null }).size).toBe(0);
+    expect(gatedModules(undefined).size).toBe(0);
+  });
+
+  it('lo que la cuenta ya usa manda: no se bloquea lo que no se puede ocultar', () => {
+    expect(gatedModules(FREE, new Set(['team', 'activity'] as const)).has('team')).toBe(false);
+  });
+
+  it('no se puede volver a mostrar lo que el plan no permite', () => {
+    const gated = gatedModules(FREE);
+    const hidden = setTeamWork(empty(), false, none, gated);
+    expect(isModuleShown(hidden, 'team')).toBe(false);
+    expect(isModuleShown(hidden, 'activity')).toBe(false);
+    const again = setTeamWork(hidden, true, none, gated);
+    expect(isModuleShown(again, 'team')).toBe(false);
+    expect(isModuleShown(again, 'activity')).toBe(false);
+  });
+
+  it('el arranque sale del plan (no se pregunta) y lleva Género apagado', () => {
+    const free = startDraft('FREE', none, gatedModules(FREE));
+    expect(free.hiddenModules).toEqual(
+      expect.arrayContaining(['team', 'activity', 'organization', 'routes', 'import', 'export']),
+    );
+    expect(free.options['client.gender']).toBe(false);
+    const pro = startDraft('PROFESSIONAL', none, gatedModules(PRO));
+    expect(pro.hiddenModules).toEqual(['import', 'export', 'organization']);
+    expect(pro.options['client.gender']).toBe(false);
+    expect(pro.options['client.preferredChannel']).toBeUndefined();
+    expect(startDraft('BUSINESS', none, gatedModules(PRO)).hiddenModules).toEqual([]);
+  });
+
+  it('saveBody nunca deja visible lo que el plan no permite', () => {
+    const body = saveBody(emptyWorkspace(), empty(), gatedModules(FREE));
+    expect([...body.workspace!.hiddenModules].sort()).toEqual(['activity', 'organization', 'team']);
+  });
+
+  it('isUntouched: solo una cuenta que nunca guardó nada arranca de lo recomendado', () => {
+    expect(isUntouched(emptyWorkspace())).toBe(true);
+    expect(isUntouched({ ...emptyWorkspace(), rev: 2 })).toBe(false);
+    expect(isUntouched({ ...emptyWorkspace(), hiddenModules: ['export'] })).toBe(false);
+    expect(isUntouched({ ...emptyWorkspace(), options: { 'client.gender': false } })).toBe(false);
+  });
+
+  it('skipBody: sin nada que ocultar es SKIP_BODY; con plan individual oculta lo que no se usa', () => {
+    expect(skipBody(emptyWorkspace(), gatedModules(PRO))).toBe(SKIP_BODY);
+    const body = skipBody({ ...emptyWorkspace(), rev: 0 }, gatedModules(FREE));
+    expect(body.onboarding).toEqual({ status: 'skipped' });
+    expect([...body.workspace!.hiddenModules].sort()).toEqual(['activity', 'organization', 'team']);
+    const already = {
+      ...emptyWorkspace(),
+      hiddenModules: ['team', 'activity', 'organization'] as never,
+    };
+    expect(skipBody(already, gatedModules(FREE))).toBe(SKIP_BODY);
+  });
+
+  it('failureOf reconoce que el plan no lo permite', () => {
+    expect(failureOf({ error: { code: 'WORKSPACE_PLAN_GATED' } })).toBe('plan');
   });
 });

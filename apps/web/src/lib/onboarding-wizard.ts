@@ -1,7 +1,10 @@
 import {
   HIDEABLE_MODULES,
   WORKSPACE_PRESETS,
+  applyPlanGates,
+  planGatedModules,
   presetOf,
+  recommendSetup,
   sameWorkspace,
   type Workspace,
   type WorkspaceModuleKey,
@@ -16,19 +19,10 @@ import {
  * (`saveBody`). Cerrar a la mitad no deja una configuración a medias: no se escribe nada hasta confirmar.
  */
 
-export const WIZARD_STEPS = [
-  'welcome',
-  'menu',
-  'how',
-  'clients',
-  'credits',
-  'preview',
-  'confirm',
-  'done',
-] as const;
+export const WIZARD_STEPS = ['tools', 'clients', 'credits', 'summary', 'done'] as const;
 export type WizardStep = (typeof WIZARD_STEPS)[number];
-/** Los pasos que se pueden omitir uno por uno («Dejar como está»): del 2 al 5. */
-export const SKIPPABLE_STEPS: readonly WizardStep[] = ['menu', 'how', 'clients', 'credits'];
+/** Los pasos que cuentan en «Paso n de m»: la pantalla final («done») es la bienvenida, no una decisión. */
+export const COUNTED_STEPS = WIZARD_STEPS.filter((s) => s !== 'done');
 
 export type Draft = Pick<Workspace, 'hiddenModules' | 'options'>;
 
@@ -49,12 +43,45 @@ export function blockedModules(usage: Usage | undefined): Set<WorkspaceModuleKey
   return out;
 }
 
+/**
+ * Módulos que el PLAN de la cuenta no puede usar (un solo asiento → Equipo y Actividad; una sola oficina → Organización). Se
+ * ocultan siempre y no se ofrecen: el servidor también lo exige. Lo que la cuenta ya usa (`blocked`) manda sobre esto.
+ */
+export function gatedModules(
+  limits: { users?: number | null; branches?: number | null } | undefined,
+  blocked: ReadonlySet<WorkspaceModuleKey> = new Set(),
+): Set<WorkspaceModuleKey> {
+  return new Set(planGatedModules(limits).filter((m) => !blocked.has(m)));
+}
+
+/** ¿La cuenta nunca guardó nada? Entonces el asistente arranca desde lo recomendado para su plan; si ya hay algo, desde ello (nunca lo pisa). */
+export const isUntouched = (w: Pick<Workspace, 'rev' | 'hiddenModules' | 'options'>): boolean =>
+  w.rev === 0 && w.hiddenModules.length === 0 && Object.keys(w.options).length === 0;
+
+/** El borrador con lo que el plan no permite siempre oculto. */
+export const applyPlanGatesTo = (d: Draft, gated: ReadonlySet<WorkspaceModuleKey>): Draft =>
+  applyPlanGates(d, [...gated]);
+
 export const draftOf = (
   w: Pick<Workspace, 'hiddenModules' | 'options'> | undefined | null,
 ): Draft => ({
   hiddenModules: [...(w?.hiddenModules ?? [])],
   options: { ...(w?.options ?? {}) },
 });
+
+/**
+ * El borrador con el que arranca una cuenta nueva: lo recomendado para SU plan (la modalidad ya se eligió al registrarse; no se
+ * vuelve a preguntar), sin lo que la cuenta ya usa ni lo que el plan no permite. `client.gender` arranca oculto: ninguna pantalla
+ * ni cálculo de Kobrax lo usa y es un dato personal; se puede activar en el paso de clientes.
+ */
+export function startDraft(
+  planCode: string | null | undefined,
+  blocked: ReadonlySet<WorkspaceModuleKey>,
+  gated: ReadonlySet<WorkspaceModuleKey>,
+): Draft {
+  const d = presetDraft(recommendSetup({ planCode }).preset, blocked);
+  return applyPlanGates({ ...d, options: { ...d.options, 'client.gender': false } }, [...gated]);
+}
 
 /** El preset como borrador, sin lo que el servidor rechazaría hoy. */
 export function presetDraft(
@@ -76,8 +103,10 @@ export function setModuleShown(
   key: WorkspaceModuleKey,
   shown: boolean,
   blocked: ReadonlySet<WorkspaceModuleKey>,
+  gated: ReadonlySet<WorkspaceModuleKey> = new Set(),
 ): Draft {
-  if (!HIDEABLE_MODULES.includes(key) || (!shown && blocked.has(key))) return d;
+  if (!HIDEABLE_MODULES.includes(key) || (!shown && blocked.has(key)) || (shown && gated.has(key)))
+    return d;
   const rest = d.hiddenModules.filter((m) => m !== key);
   return { ...d, hiddenModules: shown ? rest : [...rest, key] };
 }
@@ -97,8 +126,15 @@ export function setTeamWork(
   d: Draft,
   yes: boolean,
   blocked: ReadonlySet<WorkspaceModuleKey>,
+  gated: ReadonlySet<WorkspaceModuleKey> = new Set(),
 ): Draft {
-  return setModuleShown(setModuleShown(d, 'team', yes, blocked), 'activity', yes, blocked);
+  return setModuleShown(
+    setModuleShown(d, 'team', yes, blocked, gated),
+    'activity',
+    yes,
+    blocked,
+    gated,
+  );
 }
 
 /** La modalidad fija del alta de crédito, o `null` si cada crédito la elige. */
@@ -141,11 +177,13 @@ export function changesFromComplete(d: Draft): {
  */
 export function saveBody(
   base: Workspace,
-  draft: Draft,
+  rawDraft: Draft,
+  gated: ReadonlySet<WorkspaceModuleKey> = new Set(),
 ): {
   workspace?: Workspace;
   onboarding: { status: 'done'; preset: WorkspacePresetKey | 'custom' };
 } {
+  const draft = applyPlanGates(rawDraft, [...gated]);
   const onboarding = { status: 'done' as const, preset: presetOf(draft) };
   if (sameWorkspace(base, draft)) return { onboarding };
   return {
@@ -162,13 +200,35 @@ export function saveBody(
 /** «Hacerlo después» / cerrar con la X: la cuenta queda como estaba y el asistente no vuelve a salir solo. */
 export const SKIP_BODY = { onboarding: { status: 'skipped' as const } };
 
-export type SaveFailure = 'conflict' | 'blocked' | 'invalid' | 'generic';
+/**
+ * «Hacerlo después» con plan: igual que `SKIP_BODY`, pero si el plan no permite Equipo u Organización también los deja ocultos.
+ * Así una cuenta individual que se salta el asistente tampoco ve lo que no puede usar. Sin nada que ocultar, es `SKIP_BODY`.
+ */
+export function skipBody(
+  base: Workspace,
+  gated: ReadonlySet<WorkspaceModuleKey>,
+): typeof SKIP_BODY & { workspace?: Workspace } {
+  const gatedDraft = applyPlanGates(draftOf(base), [...gated]);
+  if (sameWorkspace(draftOf(base), gatedDraft)) return SKIP_BODY;
+  return {
+    ...SKIP_BODY,
+    workspace: {
+      version: 1,
+      rev: base.rev,
+      hiddenModules: gatedDraft.hiddenModules as WorkspaceModuleKey[],
+      options: gatedDraft.options,
+    },
+  };
+}
+
+export type SaveFailure = 'conflict' | 'blocked' | 'plan' | 'invalid' | 'generic';
 
 /** Qué falló, según el código del servidor (no el status: el 409 también lo usa el cambio de sesión). */
 export function failureOf(data: unknown): SaveFailure {
   const code = (data as { error?: { code?: string } } | null)?.error?.code;
   if (code === 'WORKSPACE_CONFLICT') return 'conflict';
   if (code === 'WORKSPACE_BLOCKED') return 'blocked';
+  if (code === 'WORKSPACE_PLAN_GATED') return 'plan';
   if (code === 'WORKSPACE_INVALID') return 'invalid';
   return 'generic';
 }

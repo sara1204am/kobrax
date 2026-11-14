@@ -2697,11 +2697,11 @@
         },
         "gender": {
           "label": "Gender",
-          "hint": "An entry-form field that is rarely used."
+          "hint": "Optional. Kobrax doesn't use it in any calculation or report: turn it on only if you need it for your operation."
         },
         "preferredChannel": {
           "label": "Preferred contact channel",
-          "hint": "Phone, WhatsApp or visit."
+          "hint": "How the client prefers to be contacted: phone call, WhatsApp or visit. It's a note for your team; Kobrax does not send messages on its own."
         },
         "keepNote": "If a client already has a guarantor or an attachment saved, you will still see it even if you hid the section. Nothing is deleted."
       },
@@ -2719,6 +2719,7 @@
       },
       "saved": "Workspace saved. Other sessions will see it when they reload.",
       "errors": {
+        "plan": "Your plan does not include Team or Offices: they must stay hidden.",
         "conflict": "The workspace changed while you were editing it. Reload to see the latest and apply your change again.",
         "reload": "Reload",
         "version": "It was saved by a newer version of Kobrax and this one cannot modify it. Update the application.",
@@ -4960,143 +4961,110 @@
     }
   },
   "onboarding": {
-    "title": "Set up your workspace",
+    "title": "Set up Kobrax",
     "progress": "Step {n} of {total}",
     "later": "Do it later",
+    "close": "Close",
     "back": "Back",
     "next": "Next",
-    "skipStep": "Leave as is",
-    "useRecommended": "Use the recommended setup and finish",
-    "save": "Save and finish",
-    "presets": {
-      "independent": {
-        "name": "Independent",
-        "desc": "The essentials to work on your own."
-      },
-      "team": {
-        "name": "Team",
-        "desc": "For a team of collectors and supervisors."
-      },
-      "complete": {
-        "name": "Complete",
-        "desc": "Everything visible, as before."
+    "useRecommended": "Use what we recommend for my plan and finish",
+    "save": "Save and get started",
+    "tools": {
+      "title": "Your tools",
+      "intro": "We set Kobrax up for your {plan} plan. Turn on only what you'll use; the rest stays out of your way.",
+      "tools": "Work tools",
+      "team": "Team and offices",
+      "always": "Home, Portfolio, Arrears, Agenda, Payments, Security, Account and My profile are always available.",
+      "inUse": "Your account already uses it, so it cannot be hidden.",
+      "items": {
+        "routes": {
+          "label": "Visit routes",
+          "hint": "Plan and run visits to your clients in the field."
+        },
+        "import": {
+          "label": "Import portfolio",
+          "hint": "Load clients and credits from a file."
+        },
+        "export": {
+          "label": "Export and reports",
+          "hint": "Download your portfolio and reports."
+        },
+        "team": {
+          "label": "Team",
+          "hint": "Invite and manage the people who collect with you. It also shows the account Activity."
+        },
+        "organization": {
+          "label": "Offices",
+          "hint": "Organize several offices or branches and who serves each one."
+        }
       }
-    },
-    "welcome": {
-      "title": "Welcome to Kobrax",
-      "intro": "We only show what you need so you can start faster. It takes a minute.",
-      "recommended": "We recommend",
-      "reassure": "You don't have to set everything up now: you can change it any time in Account › Workspace.",
-      "pick": "Or pick another starting point",
-      "reason": {
-        "free": "You chose the free plan: you work alone, so we show the essentials.",
-        "professional": "You chose Professional: built for a team, so we keep the team tools.",
-        "business": "You chose Business: we keep everything visible for a larger operation.",
-        "fallback": "We start with the simple view; you can always show more."
-      }
-    },
-    "menu": {
-      "title": "Your menu",
-      "intro": "Choose which modules you want in the menu.",
-      "always": "Home, Portfolio, Arrears, Agenda, Payments, Security, Account and My profile are always visible.",
-      "blocked": "It can't be hidden while your account has more than one person or office.",
-      "desc": {
-        "import": "Load your portfolio from a file.",
-        "routes": "Plan and run visits.",
-        "export": "Download reports.",
-        "organization": "Offices and branches.",
-        "team": "Invite and manage people.",
-        "activity": "History of what happens in the account."
-      }
-    },
-    "how": {
-      "title": "How you work",
-      "intro": "Tell us how you work and we'll adjust the menu.",
-      "visits": "Do you visit your clients?",
-      "visitsHint": "Shows Routes to plan and record visits.",
-      "file": "Do you load your portfolio from a file?",
-      "fileHint": "Shows Import.",
-      "team": "Do you work with a team?",
-      "teamHint": "Shows Team and Activity.",
-      "offices": "Do you have several offices?",
-      "officesHint": "Shows Organization.",
-      "reports": "Do you need to download reports?",
-      "reportsHint": "Shows Export."
     },
     "clients": {
-      "title": "Your client record",
-      "intro": "Choose which sections and fields you want when registering a client.",
-      "sections": {
-        "income": "Income",
-        "guarantors": "Guarantors",
-        "collateral": "Collateral",
-        "attachments": "Attachments",
-        "gender": "Gender",
-        "preferredChannel": "Preferred channel"
-      },
-      "note": "Anything already saved on a client is always still shown."
+      "title": "Your client file",
+      "intro": "Choose what's recorded for each client. Whatever you don't use is hidden so signing up a client is shorter.",
+      "core": "Client information",
+      "optional": "Optional data",
+      "note": "What's already saved on a client is always still shown. Nothing is deleted."
     },
     "credits": {
       "title": "Your credits",
-      "intro": "Choose how your credits are defined when you create them.",
+      "intro": "Choose how a credit is defined when you create it.",
+      "definition": "Credit type",
+      "more": "More settings",
       "definitions": {
         "agreed_installment": {
           "name": "Agreed installment",
-          "desc": "You agree the amount of each installment and the number of installments."
+          "desc": "You agree on each installment amount and the number of installments."
         },
         "agreed_total": {
           "name": "Agreed total",
-          "desc": "You agree the total to pay and the number of installments."
+          "desc": "You agree on the total to pay and the number of installments."
         },
         "calculated": {
           "name": "Calculated with interest",
           "desc": "Calculated from an interest rate and a term."
         },
         "choose": {
-          "name": "Let me choose on each credit",
-          "desc": "You are asked every time, as before."
+          "name": "I'll choose on each credit",
+          "desc": "You're asked every time."
         }
       },
       "advanced": "Advanced options",
       "advancedHint": "How arrears are counted and other financial settings."
     },
-    "preview": {
-      "title": "Preview",
-      "intro": "This is how your workspace will look.",
-      "menu": "Your menu",
-      "hidden": "What gets hidden",
-      "none": "Nothing: you'll see everything, as before.",
-      "definition": "Credits are always created as: {name}",
-      "options": {
-        "client_income": "Client income",
-        "client_guarantors": "Client guarantors",
-        "client_collateral": "Client collateral",
-        "client_attachments": "Client attachments",
-        "client_gender": "Client gender",
-        "client_preferredChannel": "Client preferred channel",
-        "client_taxId": "Client tax ID",
-        "credit_advanced": "Advanced credit options",
-        "credit_arrearsMethod": "Arrears calculation method"
-      }
-    },
-    "confirm": {
-      "title": "Confirm",
-      "intro": "Review and save. Everything is written at once.",
-      "summary": "{modules, plural, =0 {No modules hidden} one {# module hidden} other {# modules hidden}} · {options, plural, =0 {no sections hidden} one {# section or field hidden} other {# sections or fields hidden}}.",
-      "guarantee": "This doesn't change permissions, plans or data: only what is shown."
+    "summary": {
+      "title": "Review your setup",
+      "intro": "This is what you'll see in Kobrax. Change anything before saving.",
+      "change": "Change",
+      "menu": "Tools in your menu",
+      "hiddenModules": "You won't see: {list}.",
+      "clients": "Client file",
+      "clientsShown": "You record: {list}.",
+      "clientsNone": "Only the basic client details.",
+      "clientsHidden": "Hidden: {list}.",
+      "credits": "Credits",
+      "creditsFixed": "Always created as: {name}.",
+      "creditsChoose": "You choose the type on each credit.",
+      "advancedOn": "Advanced options visible.",
+      "advancedOff": "Advanced options hidden.",
+      "guarantee": "This does not change permissions, plan or data: only what is shown. You can change it any time in Account › Workspace."
     },
     "done": {
-      "title": "All set",
-      "intro": "Your workspace is configured.",
-      "text": "You can change it any time in Account › Workspace.",
-      "enter": "Enter Kobrax"
+      "title": "Your workspace is ready",
+      "intro": "Kobrax is set up for your {plan} plan.",
+      "menu": "{n, plural, one {Your menu has # section.} other {Your menu has # sections.}}",
+      "change": "Change any setting in Account › Workspace. A good first step: register your first client.",
+      "close": "Done",
+      "enter": "Go to home",
+      "firstClient": "Register my first client"
     },
     "errors": {
-      "conflict": "Someone else changed the configuration in the meantime.",
+      "conflict": "Someone else changed the setup in the meantime.",
       "reload": "Reload",
-      "blocked": "Something your account still uses can't be hidden (people, offices or routes in progress).",
-      "invalid": "The configuration isn't valid. Check your choices.",
-      "generic": "Couldn't save. Please try again."
+      "blocked": "Something your account still uses could not be hidden (people, offices or routes in progress).",
+      "plan": "Your plan does not include Team or Offices: they must stay hidden.",
+      "invalid": "The setup is not valid. Review your choices.",
+      "generic": "Couldn't save. Try again."
     },
     "welcomeCard": {
       "title": "Welcome to {org}",

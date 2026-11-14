@@ -8,7 +8,9 @@ import {
   OFFERED_FREQUENCIES,
   WORKSPACE_MODULES,
   WORKSPACE_PRESETS,
+  applyPlanGates,
   emptyWorkspace,
+  planGatedModules,
   presetOf,
   resolveWorkspace,
   sameWorkspace,
@@ -21,6 +23,7 @@ import {
 } from '@kobrax/shared';
 import { Section } from '@/components/panel-ui';
 import { Button } from '@/components/ui';
+import { SwitchRow } from '@/components/workspace-fields';
 import { useToast } from '@/components/toast';
 import { sendJson } from '@/lib/client';
 
@@ -28,6 +31,7 @@ type Draft = Pick<Workspace, 'hiddenModules' | 'options'>;
 type SaveError =
   | { kind: 'conflict'; reason: 'REV' | 'VERSION' }
   | { kind: 'blocked'; blocks: { module: string; reason: string; count: number }[] }
+  | { kind: 'plan' }
   | { kind: 'invalid' }
   | { kind: 'generic'; message?: string };
 
@@ -53,43 +57,6 @@ const draftOf = (w: Workspace): Draft => ({
   hiddenModules: [...w.hiddenModules],
   options: { ...w.options },
 });
-
-/** Una fila «etiqueta + explicación + interruptor». El interruptor es un checkbox con rol `switch`: se opera con teclado y lector de pantalla. */
-function SwitchRow({
-  label,
-  hint,
-  checked,
-  disabled,
-  onChange,
-}: {
-  label: string;
-  hint?: string;
-  checked: boolean;
-  disabled?: boolean;
-  onChange: (checked: boolean) => void;
-}) {
-  return (
-    <label
-      className={`flex min-h-[44px] items-center gap-4 border-t border-k-border py-3 first:border-t-0 ${disabled ? 'opacity-70' : 'cursor-pointer'}`}
-    >
-      <span className="min-w-0 flex-1">
-        <span className="block text-[14px] font-semibold text-k-text">{label}</span>
-        {hint && (
-          <span className="mt-0.5 block text-[13px] leading-snug text-k-text-2">{hint}</span>
-        )}
-      </span>
-      <input
-        type="checkbox"
-        role="switch"
-        aria-label={label}
-        checked={checked}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.checked)}
-        className="h-5 w-5 shrink-0 accent-k-navy"
-      />
-    </label>
-  );
-}
 
 /**
  * Cuenta › Espacio de trabajo (F15 · P4): qué ve esta organización. Solo quita (R1); no toca permisos, planes ni datos.
@@ -124,6 +91,10 @@ export function WorkspaceEditor({ account }: { account: AccountInfo }) {
     return null;
   };
 
+  /** Lo que el plan no puede usar (un solo asiento, una sola oficina): no se ofrece y siempre queda oculto. Lo que la cuenta ya usa manda. */
+  const gated = planGatedModules(account.limits).filter((m) => blockedBy(m) === null);
+  const withGates = (d: Draft): Draft => applyPlanGates(d, gated);
+
   const isShown = (key: WorkspaceOptionKey) => draft.options[key] !== false;
   const setOption = (key: WorkspaceOptionKey, value: boolean | string | string[] | undefined) => {
     const options = { ...draft.options };
@@ -157,7 +128,7 @@ export function WorkspaceEditor({ account }: { account: AccountInfo }) {
     const p = WORKSPACE_PRESETS[key];
     // Lo que el servidor no dejaría ocultar hoy se deja visible: el preset no puede pedir un guardado que va a rebotar.
     const hiddenModules = p.hiddenModules.filter((m) => blockedBy(m) === null);
-    setDraft({ hiddenModules, options: { ...p.options } });
+    setDraft(withGates({ hiddenModules, options: { ...p.options } }));
     setError(null);
   }
 
@@ -166,7 +137,7 @@ export function WorkspaceEditor({ account }: { account: AccountInfo }) {
     setSaving(true);
     const { ok, data } = await sendJson<AccountInfo>(
       '/api/account/me',
-      { workspace: { version: 1, rev: base.rev, ...draft } },
+      { workspace: { version: 1, rev: base.rev, ...withGates(draft) } },
       'PATCH',
     );
     setSaving(false);
@@ -185,6 +156,7 @@ export function WorkspaceEditor({ account }: { account: AccountInfo }) {
         setError({ kind: 'conflict', reason: e.details?.reason ?? 'REV' });
       else if (e?.code === 'WORKSPACE_BLOCKED')
         setError({ kind: 'blocked', blocks: e.details?.blocks ?? [] });
+      else if (e?.code === 'WORKSPACE_PLAN_GATED') setError({ kind: 'plan' });
       else if (e?.code === 'WORKSPACE_INVALID') setError({ kind: 'invalid' });
       else setError({ kind: 'generic', message: e?.message });
       return;
@@ -213,7 +185,7 @@ export function WorkspaceEditor({ account }: { account: AccountInfo }) {
               onClick={() => applyPreset(key)}
               className={`min-h-[44px] flex-1 basis-[220px] rounded-xl border px-4 py-3 text-left ${
                 preset === key
-                  ? 'border-k-navy bg-k-highlight'
+                  ? 'border-k-periwinkle bg-k-highlight'
                   : 'border-k-border bg-white hover:bg-k-bg'
               }`}
             >
@@ -233,11 +205,12 @@ export function WorkspaceEditor({ account }: { account: AccountInfo }) {
 
       <Section title={t('modules.title')} inner="p-5">
         <p className="mb-2 text-[13px] text-k-text-2">{t('modules.text')}</p>
-        {HIDEABLE_MODULES.map((key) => {
+        {HIDEABLE_MODULES.filter((key) => !gated.includes(key)).map((key) => {
           const why = blockedBy(key);
           return (
             <SwitchRow
               key={key}
+              id={`module-${key}`}
               label={tNav(key)}
               hint={
                 why
@@ -266,18 +239,21 @@ export function WorkspaceEditor({ account }: { account: AccountInfo }) {
       <Section title={t('credit.title')} inner="p-5">
         <p className="mb-2 text-[13px] text-k-text-2">{t('credit.text')}</p>
         <SwitchRow
+          id="credit-fixed"
           label={t('credit.fixed.label')}
           hint={t('credit.fixed.hint')}
           checked={draft.options['credit.definition'] === 'agreed_installment'}
           onChange={(on) => setOption('credit.definition', on ? 'agreed_installment' : undefined)}
         />
         <SwitchRow
+          id="credit-advanced"
           label={t('credit.advanced.label')}
           hint={t('credit.advanced.hint')}
           checked={isShown('credit.advanced')}
           onChange={(on) => setShown('credit.advanced', on)}
         />
         <SwitchRow
+          id="credit-arrears"
           label={t('credit.arrears.label')}
           hint={t('credit.arrears.hint')}
           checked={isShown('credit.arrearsMethod')}
@@ -313,6 +289,7 @@ export function WorkspaceEditor({ account }: { account: AccountInfo }) {
         {CLIENT_OPTIONS.map((key) => (
           <SwitchRow
             key={key}
+            id={`client-${CLIENT_I18N[key]}`}
             label={t(`client.${CLIENT_I18N[key]}.label`)}
             hint={t(`client.${CLIENT_I18N[key]}.hint`)}
             checked={isShown(key)}
@@ -358,6 +335,7 @@ export function WorkspaceEditor({ account }: { account: AccountInfo }) {
               </ul>
             </div>
           )}
+          {error.kind === 'plan' && <p>{t('errors.plan')}</p>}
           {error.kind === 'invalid' && <p>{t('errors.invalid')}</p>}
           {error.kind === 'generic' && <p>{error.message ?? t('errors.generic')}</p>}
         </div>

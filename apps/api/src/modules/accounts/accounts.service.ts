@@ -7,6 +7,7 @@ import {
   preferencesOf,
   validatePreferences,
   validateWorkspaceInput,
+  planGatedModules,
   workspaceVersionOf,
   type AccountPreferences,
   type Workspace,
@@ -26,7 +27,7 @@ import { serializeAccount } from './accounts.serializer';
 import { UpdateAccountDto, WorkspaceDto } from './dto/account.dto';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { DEFAULT_BRANCH_TYPES, ROOT_BRANCH_TYPE_CODE } from '../branches/default-branch-types';
-import { accountNotFound, emailTaken, preferencesInvalid, roleCatalogMissing, workspaceBlocked, workspaceConflict, workspaceInvalid } from './accounts.errors';
+import { accountNotFound, emailTaken, preferencesInvalid, roleCatalogMissing, workspaceBlocked, workspaceConflict, workspaceInvalid, workspacePlanGated } from './accounts.errors';
 
 /** Mercado inicial. El registro no los pregunta (S4-D8); se cambian en la pantalla de datos. */
 const DEFAULT_COUNTRY = 'BO';
@@ -327,6 +328,9 @@ export class AccountsService {
     if (input.rev !== stored.rev) throw workspaceConflict(stored.rev, 'REV', null);
     const next = checked.workspace;
     // Las salvaguardas miran solo lo que se OCULTA AHORA: un módulo que ya estaba oculto no bloquea otros cambios.
+    // Lo que el plan no puede usar no se deja visible (evita ofrecer Equipo a quien tiene un solo asiento). Solo exige ocultar: nunca bloquea mostrar más.
+    const gated = planGatedModules(await this.plan.limitsOf(tx)).filter((m) => !next.hiddenModules.includes(m));
+    if (gated.length > 0) throw workspacePlanGated(gated);
     const newlyHidden = next.hiddenModules.filter((m) => !stored.hiddenModules.includes(m));
     const blocks = await this.blocksFor(tx, newlyHidden);
     if (blocks.length > 0) throw workspaceBlocked(blocks);

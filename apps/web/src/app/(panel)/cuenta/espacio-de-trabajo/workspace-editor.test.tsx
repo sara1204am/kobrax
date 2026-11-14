@@ -217,3 +217,66 @@ describe('WorkspaceEditor (F15 · P4)', () => {
     expect(screen.getByText(/Nada se borra/)).toBeInTheDocument();
   });
 });
+
+describe('WorkspaceEditor · topes del plan (F15)', () => {
+  const free = (workspace?: Workspace) =>
+    ({
+      ...account(workspace),
+      planCode: 'FREE',
+      limits: { users: 1, branches: 1 },
+    }) as unknown as AccountInfo;
+
+  it('🔴 con un solo asiento y una oficina, Equipo, Actividad y Organización no se ofrecen', () => {
+    draw(free());
+    for (const m of ['Equipo', 'Actividad', 'Organización']) {
+      expect(screen.queryByRole('switch', { name: m })).toBeNull();
+    }
+    expect(sw('Rutas')).toBeInTheDocument();
+  });
+
+  it('🔴 guardar siempre manda Equipo, Actividad y Organización ocultos, aunque la cuenta los tuviera visibles', async () => {
+    sendJson.mockResolvedValue(saved({ rev: 1, hiddenModules: ['export'] }));
+    draw(free());
+    await userEvent.click(sw('Exportar'));
+    await userEvent.click(guardar());
+    const body = sendJson.mock.calls[0]![1];
+    expect([...body.workspace.hiddenModules].sort()).toEqual([
+      'activity',
+      'export',
+      'organization',
+      'team',
+    ]);
+  });
+
+  it('el punto de partida «Completo» tampoco los muestra en una cuenta individual', async () => {
+    sendJson.mockResolvedValue(saved({ rev: 1 }));
+    draw(free({ ...emptyWorkspace(), rev: 2, hiddenModules: ['export'] }));
+    await userEvent.click(preset('Completo'));
+    await userEvent.click(guardar());
+    expect([...sendJson.mock.calls[0]![1].workspace.hiddenModules].sort()).toEqual([
+      'activity',
+      'organization',
+      'team',
+    ]);
+  });
+
+  it('si el servidor responde que el plan no lo permite, lo explica', async () => {
+    sendJson.mockResolvedValue({ ok: false, data: { error: { code: 'WORKSPACE_PLAN_GATED' } } });
+    draw(free());
+    await userEvent.click(sw('Rutas'));
+    await userEvent.click(guardar());
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /Tu plan no incluye Equipo ni Oficinas/,
+    );
+  });
+
+  it('un plan para varias personas sí muestra Equipo', () => {
+    draw({
+      ...account(),
+      planCode: 'PROFESSIONAL',
+      limits: { users: 25, branches: 3 },
+    } as unknown as AccountInfo);
+    expect(sw('Equipo')).toBeInTheDocument();
+    expect(sw('Organización')).toBeInTheDocument();
+  });
+});

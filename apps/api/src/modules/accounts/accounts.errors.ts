@@ -74,6 +74,14 @@ export const workspaceConflict = (currentRev: number | null, reason: 'REV' | 'VE
     details: { currentRev, reason, storedVersion },
   });
 
+/** El plan de la cuenta no incluye lo que se quiere dejar visible (Equipo/Actividad con un solo asiento, Organización con una sola oficina). */
+export const workspacePlanGated = (modules: string[]) =>
+  new UnprocessableEntityException({
+    code: 'WORKSPACE_PLAN_GATED',
+    message: 'Tu plan no incluye esos módulos: deben quedar ocultos',
+    details: { modules },
+  });
+
 /** Un módulo que la organización todavía usa no se puede ocultar (S-1, S-2, S-3, S-7). Los conteos van sólo a quien tiene `account:write`. */
 export const workspaceBlocked = (blocks: { module: string; reason: string; count: number }[]) =>
   new ConflictException({

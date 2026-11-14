@@ -52,7 +52,7 @@ async function page(token: string, path: string): Promise<{ status: number; body
   return { status: res.status, body: raw.replace(/<script[\s\S]*?<\/script>/g, '') };
 }
 
-const WIZARD = 'Te damos la bienvenida a Kobrax';
+const WIZARD = 'Tus herramientas';
 const out: string[] = [];
 const check = (label: string, ok: boolean, detail: string) => {
   out.push(`${ok ? 'OK  ' : 'FALLA'} ${label} → ${detail}`);
@@ -88,13 +88,24 @@ async function main() {
     check(`D-14 cuenta nueva ve el asistente en ${path}`, r.status === 200 && r.body.includes(WIZARD) && r.body.includes('aria-modal="true"'), `HTTP ${r.status}`);
   }
 
-  // 2) La recomendación sigue al plan (D-12), con su razón.
+  // 2) La modalidad no se vuelve a preguntar: sale del plan. Lo que el plan no puede usar ni se ofrece (cuenta individual: sin Equipo).
   const f = await page(free.token, '/dashboard');
-  check('D-12 Free → «Independiente» y su razón', f.body.includes('trabajas solo, así que mostramos lo esencial') && f.body.includes('Independiente'), 'plan FREE');
+  check('plan Free: se usa el plan y NO se pregunta la modalidad', f.body.includes('para tu plan Free') && !f.body.includes('Independiente'), 'plan FREE');
+  check('plan Free: no se ofrece Equipo ni Oficinas', !f.body.includes('Equipo y oficinas') && !f.body.includes('Invita y administra'), 'sin configuración de equipo');
   const p = await page(pro.token, '/dashboard');
-  check('D-12 Professional → «Equipo» y su razón', p.body.includes('pensado para un equipo'), 'plan PROFESSIONAL');
+  check('plan Professional: se ofrece Equipo', p.body.includes('para tu plan Professional') && p.body.includes('Equipo y oficinas'), 'plan PROFESSIONAL');
   const b = await page(biz.token, '/dashboard');
-  check('D-12 Business → «Completo» y su razón', b.body.includes('dejamos todo visible'), 'plan BUSINESS');
+  check('plan Business: se ofrece Equipo y Oficinas', b.body.includes('para tu plan Business') && b.body.includes('Equipo y oficinas') && b.body.includes('Organiza varias oficinas'), 'plan BUSINESS');
+
+  // 2b) El servidor también lo exige: una cuenta individual no puede dejar Equipo, Actividad u Oficinas visibles.
+  const gated = await call(free.token, 'PATCH', '/accounts/me', { workspace: { version: 1, rev: 0, hiddenModules: ['routes'], options: {} } });
+  check('plan Free: el servidor rechaza dejar Equipo visible', gated.status === 422 && JSON.stringify(gated.error).includes('WORKSPACE_PLAN_GATED'), `HTTP ${gated.status}`);
+  const gatedOk = await call(free.token, 'PATCH', '/accounts/me', { workspace: { version: 1, rev: 0, hiddenModules: ['team', 'activity', 'organization'], options: {} } });
+  check('plan Free: ocultándolos se guarda', gatedOk.status === 200, `HTTP ${gatedOk.status}`);
+  const proOpen = await call(pro.token, 'PATCH', '/accounts/me', { workspace: { version: 1, rev: 0, hiddenModules: [], options: {} } });
+  check('plan Professional: Equipo visible sí se permite', proOpen.status === 200, `HTTP ${proOpen.status}`);
+  await prisma.account.update({ where: { id: free.accountId }, data: { configuration: { onboarding: { v: 1, status: 'pending' } } } });
+  await prisma.account.update({ where: { id: pro.accountId }, data: { configuration: { onboarding: { v: 1, status: 'pending' } } } });
 
   // 3) Un invitado (sin account:write) no lo recibe, aunque la cuenta esté pendiente.
   const colEmail = `cob-${suffix}@ejemplo.com`;

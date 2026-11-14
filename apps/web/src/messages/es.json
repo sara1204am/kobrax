@@ -2697,11 +2697,11 @@
         },
         "gender": {
           "label": "Género",
-          "hint": "Un campo del alta que casi nunca se usa."
+          "hint": "Opcional. Kobrax no lo usa en ningún cálculo ni reporte: actívalo solo si lo necesitas para tu operación."
         },
         "preferredChannel": {
           "label": "Canal de contacto preferido",
-          "hint": "Teléfono, WhatsApp o visita."
+          "hint": "Cómo prefiere el cliente que lo contactes: llamada, WhatsApp o visita. Es una nota para tu equipo; Kobrax no envía mensajes por su cuenta."
         },
         "keepNote": "Si un cliente ya tiene un garante o un adjunto guardado, lo verás aunque hayas ocultado la sección. Nada se borra."
       },
@@ -2719,6 +2719,7 @@
       },
       "saved": "Espacio de trabajo guardado. Las demás sesiones lo verán al recargar.",
       "errors": {
+        "plan": "Tu plan no incluye Equipo ni Oficinas: deben quedar ocultos.",
         "conflict": "El espacio de trabajo cambió mientras lo editabas. Recarga para ver lo último y vuelve a aplicar tu cambio.",
         "reload": "Recargar",
         "version": "Lo guardó una versión más nueva de Kobrax y esta no lo puede modificar. Actualiza la aplicación.",
@@ -4960,85 +4961,56 @@
     }
   },
   "onboarding": {
-    "title": "Configura tu espacio de trabajo",
+    "title": "Configura Kobrax",
     "progress": "Paso {n} de {total}",
     "later": "Hacerlo después",
+    "close": "Cerrar",
     "back": "Atrás",
     "next": "Siguiente",
-    "skipStep": "Dejar como está",
-    "useRecommended": "Usar la configuración recomendada y terminar",
-    "save": "Guardar y terminar",
-    "presets": {
-      "independent": {
-        "name": "Independiente",
-        "desc": "Lo esencial para trabajar solo."
-      },
-      "team": {
-        "name": "Equipo",
-        "desc": "Para un equipo de cobradores y supervisores."
-      },
-      "complete": {
-        "name": "Completo",
-        "desc": "Todo visible, como hasta ahora."
+    "useRecommended": "Usar lo recomendado para mi plan y terminar",
+    "save": "Guardar y empezar",
+    "tools": {
+      "title": "Tus herramientas",
+      "intro": "Configuramos Kobrax para tu plan {plan}. Activa solo lo que vas a usar; el resto no te estorba.",
+      "tools": "Herramientas de trabajo",
+      "team": "Equipo y oficinas",
+      "always": "Inicio, Cartera, Mora, Agenda, Pagos, Seguridad, Cuenta y Mi perfil siempre están disponibles.",
+      "inUse": "Tu cuenta ya lo usa, así que no se puede ocultar.",
+      "items": {
+        "routes": {
+          "label": "Rutas de visitas",
+          "hint": "Planifica y recorre las visitas a tus clientes en campo."
+        },
+        "import": {
+          "label": "Importar cartera",
+          "hint": "Carga clientes y créditos desde un archivo."
+        },
+        "export": {
+          "label": "Exportar y reportes",
+          "hint": "Descarga tu cartera y tus reportes."
+        },
+        "team": {
+          "label": "Equipo",
+          "hint": "Invita y administra a las personas que cobran contigo. También muestra la Actividad de la cuenta."
+        },
+        "organization": {
+          "label": "Oficinas",
+          "hint": "Organiza varias oficinas o agencias y quién atiende cada una."
+        }
       }
-    },
-    "welcome": {
-      "title": "Te damos la bienvenida a Kobrax",
-      "intro": "Mostramos solo lo que necesitas para que empieces más rápido. Tarda un minuto.",
-      "recommended": "Te recomendamos",
-      "reassure": "No tienes que configurar todo ahora: puedes cambiarlo cuando quieras en Cuenta › Espacio de trabajo.",
-      "pick": "O elige otro punto de partida",
-      "reason": {
-        "free": "Elegiste el plan gratuito: trabajas solo, así que mostramos lo esencial.",
-        "professional": "Elegiste Professional: pensado para un equipo, así que dejamos las herramientas de equipo.",
-        "business": "Elegiste Business: dejamos todo visible para una operación más grande.",
-        "fallback": "Empezamos con la vista sencilla; siempre puedes mostrar más."
-      }
-    },
-    "menu": {
-      "title": "Tu menú",
-      "intro": "Elige qué módulos quieres ver en el menú.",
-      "always": "Inicio, Cartera, Mora, Agenda, Pagos, Seguridad, Cuenta y Mi perfil siempre están visibles.",
-      "blocked": "No se puede ocultar mientras tu cuenta tenga más de una persona u oficina.",
-      "desc": {
-        "import": "Cargar cartera desde un archivo.",
-        "routes": "Planificar y recorrer visitas.",
-        "export": "Descargar reportes.",
-        "organization": "Oficinas y agencias.",
-        "team": "Invitar y administrar personas.",
-        "activity": "Historial de lo que pasa en la cuenta."
-      }
-    },
-    "how": {
-      "title": "Cómo trabajas",
-      "intro": "Cuéntanos cómo trabajas y ajustamos el menú.",
-      "visits": "¿Haces visitas a tus clientes?",
-      "visitsHint": "Muestra Rutas para planificar y registrar visitas.",
-      "file": "¿Cargas tu cartera desde un archivo?",
-      "fileHint": "Muestra Import.",
-      "team": "¿Trabajas con un equipo?",
-      "teamHint": "Muestra Equipo y Actividad.",
-      "offices": "¿Tienes varias oficinas?",
-      "officesHint": "Muestra Organización.",
-      "reports": "¿Necesitas descargar reportes?",
-      "reportsHint": "Muestra Exportar."
     },
     "clients": {
       "title": "La ficha de tus clientes",
-      "intro": "Elige qué secciones y campos quieres ver al registrar un cliente.",
-      "sections": {
-        "income": "Ingresos",
-        "guarantors": "Garantes",
-        "collateral": "Garantías",
-        "attachments": "Adjuntos",
-        "gender": "Género",
-        "preferredChannel": "Canal preferido"
-      },
-      "note": "Lo que ya tengas guardado en un cliente siempre se sigue viendo."
+      "intro": "Elige qué se registra de cada cliente. Lo que no uses se oculta para que el alta sea más corta.",
+      "core": "Información del cliente",
+      "optional": "Datos opcionales",
+      "note": "Lo que ya tengas guardado en un cliente siempre se sigue viendo. Nada se borra."
     },
     "credits": {
       "title": "Tus créditos",
-      "intro": "Elige cómo se definen tus créditos al crearlos.",
+      "intro": "Elige cómo se define un crédito al crearlo.",
+      "definition": "Modalidad del crédito",
+      "more": "Más ajustes",
       "definitions": {
         "agreed_installment": {
           "name": "Cuota acordada",
@@ -5054,47 +5026,43 @@
         },
         "choose": {
           "name": "Que yo elija en cada crédito",
-          "desc": "Se te pregunta cada vez, como hasta ahora."
+          "desc": "Se te pregunta cada vez."
         }
       },
       "advanced": "Opciones avanzadas",
       "advancedHint": "Cómo se cuenta la mora y otros ajustes financieros."
     },
-    "preview": {
-      "title": "Vista previa",
-      "intro": "Así quedará tu espacio de trabajo.",
-      "menu": "Tu menú",
-      "hidden": "Lo que se oculta",
-      "none": "Nada: verás todo, como hasta ahora.",
-      "definition": "Los créditos se crean siempre como: {name}",
-      "options": {
-        "client_income": "Ingresos del cliente",
-        "client_guarantors": "Garantes del cliente",
-        "client_collateral": "Garantías del cliente",
-        "client_attachments": "Adjuntos del cliente",
-        "client_gender": "Género del cliente",
-        "client_preferredChannel": "Canal preferido del cliente",
-        "client_taxId": "NIT del cliente",
-        "credit_advanced": "Opciones avanzadas del crédito",
-        "credit_arrearsMethod": "Método de cálculo de la mora"
-      }
-    },
-    "confirm": {
-      "title": "Confirmar",
-      "intro": "Revisa y guarda. Se escribe todo de una vez.",
-      "summary": "{modules, plural, =0 {Ningún módulo oculto} one {# módulo oculto} other {# módulos ocultos}} · {options, plural, =0 {ninguna sección oculta} one {# sección o campo oculto} other {# secciones o campos ocultos}}.",
-      "guarantee": "Esto no cambia permisos, planes ni datos: solo qué se muestra."
+    "summary": {
+      "title": "Revisa tu configuración",
+      "intro": "Esto es lo que verás en Kobrax. Cambia lo que quieras antes de guardar.",
+      "change": "Cambiar",
+      "menu": "Herramientas en tu menú",
+      "hiddenModules": "No verás: {list}.",
+      "clients": "Ficha de clientes",
+      "clientsShown": "Registras: {list}.",
+      "clientsNone": "Solo los datos básicos del cliente.",
+      "clientsHidden": "Ocultos: {list}.",
+      "credits": "Créditos",
+      "creditsFixed": "Siempre se crean como: {name}.",
+      "creditsChoose": "Eliges la modalidad en cada crédito.",
+      "advancedOn": "Opciones avanzadas visibles.",
+      "advancedOff": "Opciones avanzadas ocultas.",
+      "guarantee": "Esto no cambia permisos, plan ni datos: solo qué se muestra. Puedes cambiarlo cuando quieras en Cuenta › Espacio de trabajo."
     },
     "done": {
-      "title": "Listo",
-      "intro": "Tu espacio de trabajo está configurado.",
-      "text": "Puedes cambiarlo cuando quieras en Cuenta › Espacio de trabajo.",
-      "enter": "Entrar a Kobrax"
+      "title": "Tu espacio de trabajo está listo",
+      "intro": "Kobrax quedó configurado para tu plan {plan}.",
+      "menu": "{n, plural, one {Tu menú tiene # sección.} other {Tu menú tiene # secciones.}}",
+      "change": "Cambia cualquier ajuste en Cuenta › Espacio de trabajo. Un buen primer paso: registrar a tu primer cliente.",
+      "close": "Listo",
+      "enter": "Ir al inicio",
+      "firstClient": "Registrar mi primer cliente"
     },
     "errors": {
       "conflict": "Otra persona cambió la configuración mientras tanto.",
       "reload": "Recargar",
       "blocked": "No se pudo ocultar algo que tu cuenta todavía usa (personas, oficinas o rutas en curso).",
+      "plan": "Tu plan no incluye Equipo ni Oficinas: deben quedar ocultos.",
       "invalid": "La configuración no es válida. Revisa tus elecciones.",
       "generic": "No se pudo guardar. Inténtalo de nuevo."
     },

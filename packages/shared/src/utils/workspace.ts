@@ -431,3 +431,27 @@ export function sameWorkspace(a: Pick<Workspace, 'hiddenModules' | 'options'>, b
   return canonical(a.hiddenModules, a.options) === canonical(b.hiddenModules, b.options);
 }
 
+
+// ── Lo que el plan de la cuenta puede usar (F15 · wizard) ───────────────────────────────────────────────────────────
+
+/**
+ * Módulos que **esta cuenta no puede usar** por los topes que ya rigen en el servidor: con un solo asiento nadie más puede
+ * entrar (Equipo, y Actividad que sin equipo no dice nada) y con una sola oficina no hay jerarquía (Organización). `null` =
+ * sin tope (Kobrax Licencia): nada se bloquea. Son los mismos topes que `PlanLimitsService` hace cumplir al invitar y al
+ * crear oficinas; aquí solo se evita OFRECER lo que el servidor rechazaría después.
+ */
+export function planGatedModules(
+  limits: { users?: number | null; branches?: number | null } | null | undefined,
+): WorkspaceModuleKey[] {
+  const out: WorkspaceModuleKey[] = [];
+  if (typeof limits?.users === 'number' && limits.users <= 1) out.push('team', 'activity');
+  if (typeof limits?.branches === 'number' && limits.branches <= 1) out.push('organization');
+  return out;
+}
+
+/** El documento con los módulos que el plan no permite siempre ocultos (no toca nada más). */
+export function applyPlanGates<T extends Pick<Workspace, 'hiddenModules'>>(workspace: T, gated: readonly WorkspaceModuleKey[]): T {
+  if (gated.every((m) => workspace.hiddenModules.includes(m))) return workspace;
+  const hidden = new Set<WorkspaceModuleKey>([...workspace.hiddenModules, ...gated]);
+  return { ...workspace, hiddenModules: HIDEABLE_MODULES.filter((m) => hidden.has(m)) };
+}

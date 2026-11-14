@@ -23,7 +23,7 @@ function account(over: Record<string, unknown> = {}) {
   };
 }
 
-function makeService(opts: { found?: Record<string, unknown> | null; members?: number; offices?: number; routesInProgress?: number } = {}) {
+function makeService(opts: { found?: Record<string, unknown> | null; members?: number; offices?: number; routesInProgress?: number; limits?: { users?: number; branches?: number } } = {}) {
   const calls = {
     findWhere: undefined as Record<string, unknown> | undefined,
     updated: undefined as Record<string, unknown> | undefined,
@@ -68,7 +68,7 @@ function makeService(opts: { found?: Record<string, unknown> | null; members?: n
     prisma as never,
     tenant as never,
     audit as never,
-    fakePlanLimits({ usage: { users: opts.members ?? 3, branches: opts.offices ?? 1 } }),
+    fakePlanLimits({ limits: opts.limits, usage: { users: opts.members ?? 3, branches: opts.offices ?? 1 } }),
   );
   return { service, calls };
 }
@@ -626,6 +626,26 @@ describe('AccountsService.update · espacio de trabajo (F15 · P1)', () => {
   it('S-2: Organización no se oculta con más de una oficina activa', async () => {
     await rejectsWithCode(makeService({ members: 1, offices: 2 }).service.update({ workspace: wsInput(0, ['organization']) } as never), 'WORKSPACE_BLOCKED');
     const ok = makeService({ members: 1, offices: 1 });
+    await ok.service.update({ workspace: wsInput(0, ['organization']) } as never);
+    assert.ok(ok.calls.updated);
+  });
+
+  it('plan de un solo asiento: Equipo y Actividad deben quedar ocultos (no se ofrece lo que el plan no puede usar)', async () => {
+    const free = { members: 1, limits: { users: 1, branches: 1 } };
+    for (const visible of [[], ['team'], ['activity'], ['organization'], ['team', 'activity']]) {
+      const { service, calls } = makeService(free);
+      await rejectsWithCode(service.update({ workspace: wsInput(0, visible) } as never), 'WORKSPACE_PLAN_GATED');
+      assert.equal(calls.updated, undefined, JSON.stringify(visible));
+    }
+    const ok = makeService(free);
+    await ok.service.update({ workspace: wsInput(0, ['team', 'activity', 'organization']) } as never);
+    assert.ok(ok.calls.updated);
+  });
+
+  it('plan con varias personas y una oficina: solo Organización queda ocultada por el plan', async () => {
+    const pro = makeService({ members: 1, limits: { users: 25, branches: 1 } });
+    await rejectsWithCode(pro.service.update({ workspace: wsInput(0, []) } as never), 'WORKSPACE_PLAN_GATED');
+    const ok = makeService({ members: 1, limits: { users: 25, branches: 1 } });
     await ok.service.update({ workspace: wsInput(0, ['organization']) } as never);
     assert.ok(ok.calls.updated);
   });
