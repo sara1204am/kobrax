@@ -185,7 +185,7 @@ Decisiones tomadas para continuar (delegadas por la titular; revisables):
 | B5 · re-aceptación por cambio material | Pendiente |
 | B6 · solicitudes de derechos | Pendiente |
 
-Notas de B1: las tres tablas son **globales** (por persona, sin RLS) y solo admiten INSERT: trigger `legal_forbid_mutation` en la migración `20261116100000_legal_foundations` y `REVOKE`/`GRANT` en `prisma/rls/007_legal.sql` (se aplica con `db:rls`). Se abrieron 4 rutas públicas `GET /legal/...` y se registraron a conciencia en `authz-coverage.spec.ts` y `docs/epics/F14/authz-snapshot.json`.
+Notas de B1: las tres tablas son **globales** (por persona, sin RLS) y solo admiten INSERT: trigger `legal_forbid_mutation` en la migración `20261116100000_legal_foundations` y `REVOKE`/`GRANT` en `prisma/rls/005b_legal.sql (corre ANTES de 006: ver nota en el archivo)` (se aplica con `db:rls`). Se abrieron 4 rutas públicas `GET /legal/...` y se registraron a conciencia en `authz-coverage.spec.ts` y `docs/epics/F14/authz-snapshot.json`.
 
 Notas de B2:
 

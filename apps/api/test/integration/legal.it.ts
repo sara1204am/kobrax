@@ -1,5 +1,5 @@
 /**
- * Legal (B1) por las vías reales: API compilada y base recreada desde cero con TODAS las migraciones y los scripts rls/ (el 007 incluido).
+ * Legal (B1) por las vías reales: API compilada y base recreada desde cero con TODAS las migraciones y los scripts rls/ (el 005b incluido).
  * Lo que los unitarios no pueden afirmar:
  *   - que la BASE impida UPDATE, DELETE y TRUNCATE sobre la evidencia, también al rol de la aplicación y también al dueño de las tablas;
  *   - que el rol de la aplicación SÍ pueda insertar y leer;
