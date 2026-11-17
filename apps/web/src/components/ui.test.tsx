@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { Field, Input } from './ui';
+import { Button, Field, IconButton, Input } from './ui';
 
 describe('Input · ver contraseña', () => {
   it('alterna entre oculto y visible', async () => {
@@ -41,5 +41,25 @@ describe('Input · ver contraseña', () => {
       </Field>,
     );
     expect(screen.queryByRole('button')).toBeNull();
+  });
+});
+
+describe('Button — tamaños y ancho', () => {
+  it('sin props extra conserva el aspecto de siempre (ancho completo, 48px)', () => {
+    render(<Button>Guardar</Button>);
+    const el = screen.getByRole('button', { name: 'Guardar' });
+    expect(el.className).toContain('w-full');
+    expect(el.className).toContain('h-12');
+  });
+  it('size="sm" y fullWidth={false} ajustan alto y ancho', () => {
+    render(<Button size="sm" fullWidth={false}>Chico</Button>);
+    const el = screen.getByRole('button', { name: 'Chico' });
+    expect(el.className).toContain('h-9');
+    expect(el.className).toContain('w-auto');
+    expect(el.className).not.toContain('w-full');
+  });
+  it('IconButton exige label y lo expone como nombre accesible', () => {
+    render(<IconButton label="Cerrar">x</IconButton>);
+    expect(screen.getByRole('button', { name: 'Cerrar' })).toBeTruthy();
   });
 });

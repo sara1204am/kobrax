@@ -261,11 +261,6 @@ export function Fact({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** La bajada de un control: qué significa lo que acaba de elegir. */
-export function Hint({ children }: { children: ReactNode }) {
-  return <p className="mt-2 text-[13px] text-k-text-2">{children}</p>;
-}
-
 /** Qué mostrar cuando no hay nada que mostrar. */
 export function EmptyState({
   title,

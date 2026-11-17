@@ -73,6 +73,20 @@ export class PaymentsService {
     return rows.map((r) => r.id);
   }
 
+  /**
+   * S-2: el crédito sobre el que se escribe tiene que estar en el alcance de quien escribe. Los listados ya filtraban,
+   * pero registrar/solicitar/confirmar buscaban el crédito sólo por id: con un UUID ajeno un cobrador podía cobrarlo.
+   * Fuera de alcance responde como inexistente (404), igual que la lectura, para no confirmar que el id existe.
+   */
+  private async assertCreditInScope(tx: PrismaClient, creditId: string): Promise<void> {
+    const scope = moraScopeOf(this.tenant);
+    if (seesWholeAccount(scope)) return;
+    const rows = await tx.$queryRaw<{ id: string }[]>(
+      Prisma.sql`SELECT v.id FROM (${visibleCreditIdsSql(scope)}) v WHERE v.id = ${creditId} LIMIT 1`,
+    );
+    if (rows.length === 0) throw resourceNotFound();
+  }
+
   // ── Registro de pago (ledger inmutable) ──────────────────────────────────────
   async register(dto: CreatePaymentDto, idempotencyKey?: string, viaHint?: 'WEB' | 'MOBILE') {
     const run = () => this.tx(async (tx) => {
@@ -118,6 +132,7 @@ export class PaymentsService {
     if (p.amount <= 0) throw paymentInvalid('El monto debe ser mayor a 0');
     if (p.paymentDate) assertPaymentDate(new Date(p.paymentDate));
 
+    await this.assertCreditInScope(tx, p.creditId);
     const credit = await tx.credit.findFirst({ where: { id: p.creditId, deletedAt: null }, include: { installments: true } });
     if (!credit) throw resourceNotFound();
     // El cobro dice en qué visita se hizo: esa visita tiene que existir y ser de ESTE crédito.
@@ -350,8 +365,9 @@ export class PaymentsService {
   // ── Solicitudes de pago digital (QR / link) ──────────────────────────────────
   async createRequest(dto: CreatePaymentRequestDto) {
     const reference = randomBytes(12).toString('base64url');
-    const req = await this.tx((tx) =>
-      tx.paymentRequest.create({
+    const req = await this.tx(async (tx) => {
+      if (dto.creditId) await this.assertCreditInScope(tx, dto.creditId);
+      return tx.paymentRequest.create({
         data: {
           accountId: this.tenant.accountId,
           creditId: dto.creditId,
@@ -364,8 +380,8 @@ export class PaymentsService {
           expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
           createdBy: this.tenant.userId,
         },
-      }),
-    );
+      });
+    });
     await this.audit.record({ entity: 'payment_request', entityId: req.id, action: 'CREATE', after: { amount: Number(req.amount), method: req.method } });
     return serializePaymentRequest(req);
   }

@@ -2,29 +2,12 @@
 # Ubicación: apps/web/CLAUDE.md
 
 ## Responsabilidad
-Panel de administración para supervisores, gerentes y dirección ejecutiva.
-Hoy sólo existe el **núcleo de identidad** (login, MFA, selección de empresa,
-recuperación de contraseña, seguridad de la cuenta). Los módulos operativos se
-construyen de acá en adelante, uno por uno.
+Panel de administración para supervisores, gerentes y dirección ejecutiva: identidad (login, MFA, empresa, recuperación), y los
+módulos operativos del panel `(panel)`: cartera, mora, agenda, rutas, pagos, importación, exportación, equipo, organización
+(oficinas), seguridad/roles, actividad, cuenta y ayuda. El detalle de cada pantalla vive en su carpeta de `src/app/(panel)/`.
 
----
-
-## ⚠️ Estado real (2026-08-07)
-
-Este archivo describía antes un stack que **nunca se instaló** (shadcn/ui, TanStack
-Query, Zustand, next-auth, Recharts, socket.io-client). Nada de eso está en
-`package.json`. Lo que sigue es lo que hay de verdad; si vas a agregar una dep,
-agregala de verdad y actualizá esta lista.
-
-En el mismo corte se borró `src/app/panel/**` (CRUD genérico de clientes /
-créditos) junto con `components/panel.tsx` y `components/panel-nav.tsx`.
-Motivo: se escribieron contra los endpoints genéricos `/clients` y `/credits`, **antes** de que el móvil definiera cartera, agenda, rutas, import y
-cuenta con sus propios endpoints y decisiones. Si necesitás mirar cómo estaban
-resueltas esas tablas, están en el historial de git.
-
-`/dashboard` quedó como aterrizaje mínimo a propósito: es el destino al que
-apuntan `app/page.tsx`, `lib/client.ts`, `login/select-account` y
-`settings/layout`, así que la ruta tiene que existir.
+> Actualizado en la auditoría de 2026-11-17: este archivo describía sólo el núcleo de identidad (2026-08-07). Si agregas una dep
+> o un módulo, actualiza esta lista.
 
 ---
 
@@ -62,8 +45,8 @@ navegador → route handler (src/app/api/**) → API Nest (KOBRAX_API_URL)
   intermedio entre pasos del login). Todas `httpOnly` + `sameSite=strict`.
 - `src/middleware.ts` — **refresh silencioso**: si expiró el access pero hay
   refresh, pide un par nuevo y re-setea las cookies. Si no, redirige a `/login`.
-  Matcher: `/dashboard/:path*`, `/settings/:path*`. **Toda ruta privada nueva
-  tiene que sumarse al matcher.**
+  El matcher lista las rutas privadas (`/dashboard`, `/settings`, `/cuenta`, `/equipo`, `/organizacion`, `/actividad`, `/ayuda`…):
+  **toda ruta privada nueva tiene que sumarse a `config.matcher` de `src/middleware.ts`**.
 - `src/lib/auth-flow.ts` — traduce el `LoginResult` del backend al paso que el
   cliente entiende (`done` / `mfa` / `mfa_setup` / `select_account`).
 - `src/lib/client.ts` — `postJson()` y `routeByStep()` del lado del navegador.
@@ -95,8 +78,7 @@ idiomas.
   atado a `es.json`: los tests afirman sobre el español de verdad, y una clave
   que no exista rompe la prueba.
 
-**Alcance traducido hoy: sólo las pantallas de auth.** Cada módulo traduce lo
-suyo en su etapa; traducir todo de una es traducir texto que va a cambiar.
+**Alcance traducido:** auth y los módulos que ya tienen su namespace en `messages/*.json`; cada módulo traduce lo suyo en su etapa.
 
 ## Estructura actual
 
@@ -118,9 +100,13 @@ src/
 └── test/msw-server.ts
 ```
 
-`components/ui.tsx` (`Button`, `Input`, `Field`, `ErrorBanner`, `SecurityFooter`)
-lo usan **sólo** las pantallas de auth y settings. Es el punto de partida para
-cualquier primitiva nueva: mirá si ya está ahí antes de escribirla.
+Componentes del sistema (mira si ya existe antes de escribir uno):
+`ui.tsx` (`Button` con `size`/`fullWidth`/variantes, `IconButton`, `Input`, `Select`, `Textarea`, `Switch`, `Field`, `ErrorBanner`),
+`form-kit.tsx` (`Tabs` accesibles, `Checkbox`, `ConfirmDialog`, `FormSection`, `FormActions`), `panel-ui.tsx` (`PageHeader`,
+`Section`, `Badge`, `Segmented`, `Card`, `EmptyState`…), `data-table.tsx` (`DataTable`), `modal.tsx` (`Modal`).
+**No escribas `<button>`, `<select>` ni `<textarea>` a mano:** `pnpm --filter @kobrax/web lint` (ratchet en
+`scripts/check-raw-elements.mjs`) falla si crece su cantidad respecto de `scripts/raw-elements-baseline.json`; al migrar una pantalla
+baja el número y se fija con `node scripts/check-raw-elements.mjs --update`.
 
 ---
 

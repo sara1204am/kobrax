@@ -693,3 +693,64 @@ describe('PaymentsService — alcance por oficina (D-7)', () => {
     assert.equal((await service.findOne('p1')).id, 'p1');
   });
 });
+
+/** S-2: escribir (registrar, solicitar, confirmar) exige que el crédito esté en el alcance de quien escribe. */
+describe('PaymentsService — escrituras fuera de alcance (S-2)', () => {
+  function make(can: (p: string) => boolean, inScope: boolean) {
+    const writes: string[] = [];
+    const tx = {
+      $queryRaw: async () => (inScope ? [{ id: 'cr-1' }] : []),
+      credit: {
+        findFirst: async () => {
+          writes.push('credit.read');
+          return null; // si llegara aquí, sería 404 igualmente; lo que se prueba es que NO se llegue
+        },
+      },
+      paymentRequest: {
+        create: async () => {
+          writes.push('request.create');
+          return { id: 'r1', amount: 10, method: 'QR', reference: 'x', status: 'PENDING', createdAt: new Date(), expiresAt: new Date() };
+        },
+        findFirst: async () => ({ id: 'r1', status: 'PENDING', creditId: 'cr-1', amount: 10, method: 'QR' }),
+      },
+    };
+    const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
+    const tenant = { accountId: 'acc-A', userId: 'u1', can };
+    const audit = { record: async () => undefined };
+    const service = new PaymentsService(prisma as never, tenant as never, audit as never, { emit: () => undefined } as never, { timezone: async () => 'America/La_Paz' } as never);
+    return { service, writes };
+  }
+  const own = (p: string) => p === 'data:scope:own';
+  const all = (p: string) => p === 'data:scope:all';
+  const dto = { creditId: '11111111-1111-4111-8111-111111111111', amount: 10, method: 'CASH' };
+
+  it('register con un crédito ajeno → 404 sin tocar el crédito', async () => {
+    const { service, writes } = make(own, false);
+    await rejectsWithCode(service.register(dto as never), 'RESOURCE_NOT_FOUND');
+    assert.deepEqual(writes, []);
+  });
+
+  it('createRequest con un crédito ajeno → 404 y no crea la solicitud', async () => {
+    const { service, writes } = make(own, false);
+    await rejectsWithCode(service.createRequest({ creditId: dto.creditId, amount: 10 } as never), 'RESOURCE_NOT_FOUND');
+    assert.deepEqual(writes, []);
+  });
+
+  it('confirmRequest de una solicitud sobre un crédito ajeno → 404', async () => {
+    const { service, writes } = make(own, false);
+    await rejectsWithCode(service.confirmRequest('r1', {} as never), 'RESOURCE_NOT_FOUND');
+    assert.deepEqual(writes, []);
+  });
+
+  it('createRequest sobre un crédito propio sí crea la solicitud', async () => {
+    const { service, writes } = make(own, true);
+    await service.createRequest({ creditId: dto.creditId, amount: 10 } as never);
+    assert.deepEqual(writes, ['request.create']);
+  });
+
+  it('ALL no hace la consulta de alcance (llega directo al crédito)', async () => {
+    const { service, writes } = make(all, false);
+    await rejectsWithCode(service.register(dto as never), 'RESOURCE_NOT_FOUND');
+    assert.deepEqual(writes, ['credit.read']);
+  });
+});

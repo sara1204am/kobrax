@@ -177,7 +177,10 @@ describe('ExportsService — alcance por oficina (D-7)', () => {
 
   it('backup: 403 EXPORT_BACKUP_FORBIDDEN fuera de «toda la cuenta»; ALL (o subárbol en la raíz) sí', async () => {
     await assert.rejects(makeScoped(branch, 'OFFICES').service.fullBackup(), (e: unknown) => (e as { response?: { code?: string } }).response?.code === 'EXPORT_BACKUP_FORBIDDEN');
-    const ok = await makeScoped(all, 'ALL').service.fullBackup();
+    const withPii = (p: string) => all(p) || p === 'client:pii:read' || p === 'client:contact:read';
+    // S-7: aun con toda la cuenta, sin PII en claro no hay backup (lleva documento, contactos y direcciones descifrados).
+    await assert.rejects(makeScoped(all, 'ALL').service.fullBackup(), (e: unknown) => (e as { response?: { code?: string } }).response?.code === 'EXPORT_BACKUP_FORBIDDEN');
+    const ok = await makeScoped(withPii, 'ALL').service.fullBackup();
     assert.equal(ok.filename, 'backup-cuenta.json.gz');
   });
 });

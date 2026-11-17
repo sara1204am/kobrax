@@ -613,3 +613,40 @@ describe('AuthService — canal móvil y roles de campo (F14 · F8, D-3 y D-5)',
     assert.equal(token.verifyAccess(raro.accessToken!).ch, 'api');
   });
 });
+
+/** S-9: tope de fallos de MFA por usuario (independiente de la IP). */
+describe('AuthService.mfaChallenge — contador por usuario', () => {
+  function make(codeOk: () => boolean) {
+    const store = new Map<string, number>();
+    const redis = {
+      get: async (k: string) => (store.has(k) ? String(store.get(k)) : null),
+      del: async (k: string) => void store.delete(k),
+      multi: () => ({
+        incr: (k: string) => {
+          store.set(k, (store.get(k) ?? 0) + 1);
+          return { expire: () => ({ exec: async () => [] }) };
+        },
+      }),
+    };
+    const mfa = { challenge: async () => codeOk(), isCritical: async () => false };
+    const prisma = { $queryRaw: async () => [], withTenant: async () => [] };
+    const service = new AuthService(prisma as never, token, {} as never, {} as never, mfa as never, { record: async () => {} } as never, {} as never, redis as never);
+    return { service, store };
+  }
+  const pre = () => token.signPreAuth({ sub: 'u-mfa', purpose: 'mfa' });
+
+  it('tras 5 fallos bloquea con 429 aunque el código sea correcto', async () => {
+    let ok = false;
+    const { service } = make(() => ok);
+    for (let i = 0; i < 5; i++) await assert.rejects(() => service.mfaChallenge(pre(), '000000', META), (e: { getStatus?: () => number }) => e.getStatus?.() === 401);
+    ok = true;
+    await assert.rejects(() => service.mfaChallenge(pre(), '123456', META), (e: { getStatus?: () => number }) => e.getStatus?.() === 429);
+  });
+
+  it('el contador es por usuario: otro usuario no queda bloqueado', async () => {
+    const { service, store } = make(() => false);
+    for (let i = 0; i < 5; i++) await service.mfaChallenge(pre(), '000000', META).catch(() => undefined);
+    assert.equal(store.get('mfa:fail:u-mfa'), 5);
+    assert.equal(store.has('mfa:fail:otro'), false);
+  });
+});

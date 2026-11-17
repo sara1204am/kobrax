@@ -162,10 +162,12 @@
     "route": "DELETE /routes/:id/stops/:sid",
     "handler": "RoutesController.removeStop",
     "kind": "permissions",
-    "all": [
-      "route:read"
-    ],
-    "any": []
+    "all": [],
+    "any": [
+      "route:assign",
+      "route:execute",
+      "route:write"
+    ]
   },
   {
     "route": "DELETE /users/:id",
@@ -1217,28 +1219,34 @@
     "route": "PATCH /routes/:id/change-requests/:rid",
     "handler": "RoutesController.decideChange",
     "kind": "permissions",
-    "all": [
-      "route:read"
-    ],
-    "any": []
+    "all": [],
+    "any": [
+      "route:assign",
+      "route:execute",
+      "route:write"
+    ]
   },
   {
     "route": "PATCH /routes/:id/stops/:sid",
     "handler": "RoutesController.updateStop",
     "kind": "permissions",
-    "all": [
-      "route:read"
-    ],
-    "any": []
+    "all": [],
+    "any": [
+      "route:assign",
+      "route:execute",
+      "route:write"
+    ]
   },
   {
     "route": "PATCH /routes/:id",
     "handler": "RoutesController.updateStatus",
     "kind": "permissions",
-    "all": [
-      "route:read"
-    ],
-    "any": []
+    "all": [],
+    "any": [
+      "route:assign",
+      "route:execute",
+      "route:write"
+    ]
   },
   {
     "route": "PATCH /users/:id",
@@ -1868,28 +1876,34 @@
     "route": "POST /routes/:id/change-requests",
     "handler": "RoutesController.requestChange",
     "kind": "permissions",
-    "all": [
-      "route:read"
-    ],
-    "any": []
+    "all": [],
+    "any": [
+      "route:assign",
+      "route:execute",
+      "route:write"
+    ]
   },
   {
     "route": "POST /routes/:id/optimize",
     "handler": "RoutesController.optimize",
     "kind": "permissions",
-    "all": [
-      "route:read"
-    ],
-    "any": []
+    "all": [],
+    "any": [
+      "route:assign",
+      "route:execute",
+      "route:write"
+    ]
   },
   {
     "route": "POST /routes/:id/stops",
     "handler": "RoutesController.addStop",
     "kind": "permissions",
-    "all": [
-      "route:read"
-    ],
-    "any": []
+    "all": [],
+    "any": [
+      "route:assign",
+      "route:execute",
+      "route:write"
+    ]
   },
   {
     "route": "POST /routes/generate",
