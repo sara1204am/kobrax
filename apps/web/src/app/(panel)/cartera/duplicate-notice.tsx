@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import type { ClientDuplicateMatch } from '@kobrax/shared';
+import { Checkbox } from '@/components/form-kit';
 import { usePermissions } from '@/components/permissions';
 
 /** Link a la ficha en otra pestaña: el alta a medio cargar no se pierde por ir a mirar. */
@@ -77,10 +78,13 @@ export function NamesTaken({
           </li>
         ))}
       </ul>
-      <label className="mt-2 flex items-center gap-2 font-medium">
-        <input type="checkbox" checked={accepted} onChange={(e) => onAccept(e.target.checked)} disabled={disabled} />
-        {t('acceptNames')}
-      </label>
+      <Checkbox
+        className="mt-2 font-medium"
+        checked={accepted}
+        onChange={(e) => onAccept(e.target.checked)}
+        disabled={disabled}
+        label={t('acceptNames')}
+      />
     </div>
   );
 }

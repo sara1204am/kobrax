@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { RoleCompare } from '@kobrax/shared';
 import { Badge, EmptyState } from '@/components/panel-ui';
-import { permissionKey } from '@/lib/roles';
+import { permissionKey } from '@/lib/roles';
 import { Select } from '@/components/ui';
+import { Checkbox } from '@/components/form-kit';
 
 /** Dos selectores y una fila por permiso: quién lo tiene. Elegir otro rol escribe la URL (la comparación se comparte por link). */
 export function CompareView({ roles, a, b, compare }: { roles: { key: string }[]; a?: string; b?: string; compare: RoleCompare | null }) {
@@ -46,10 +47,12 @@ export function CompareView({ roles, a, b, compare }: { roles: { key: string }[]
         {select(a, (v) => go(v, b), 'A')}
         <span className="text-[14px] text-k-text-2">{t('compareView.with')}</span>
         {select(b, (v) => go(a, v), 'B')}
-        <label className="ml-auto flex items-center gap-2 text-[13px] text-k-text-2">
-          <input type="checkbox" checked={onlyDiff} onChange={(e) => setOnlyDiff(e.target.checked)} className="accent-k-purple" />
-          {t('compareView.onlyDiff')}
-        </label>
+        <Checkbox
+          className="ml-auto items-center !text-[13px] !text-k-text-2"
+          checked={onlyDiff}
+          onChange={(e) => setOnlyDiff(e.target.checked)}
+          label={t('compareView.onlyDiff')}
+        />
       </div>
 
       {!compare ? (

@@ -20,10 +20,11 @@ import {
 } from '@kobrax/shared';
 import { ActivityContextFields, activityContextPayload, emptyActivityContext } from '@/components/activity-context-fields';
 import type { CatalogOption } from '@/components/client-form';
+import { Checkbox } from '@/components/form-kit';
 import { Modal } from '@/components/modal';
 import { dayDate, money } from '@/lib/format';
 import { postJson } from '@/lib/client';
-import { usePaymentMethods } from '@/lib/use-payment-methods';
+import { usePaymentMethods } from '@/lib/use-payment-methods';
 import { Button, Textarea } from '@/components/ui';
 
 /** La parada sobre la que se registra: lo que el formulario necesita saber de ella. */
@@ -439,10 +440,12 @@ export function RecordVisitDialog({
               )}
 
               {variant === 'NO_CONTACT_VISIT' && (
-                <label className="flex items-center gap-2 text-[14px] text-k-text">
-                  <input type="checkbox" checked={form.noticeLeft} onChange={(e) => set('noticeLeft', e.target.checked)} className="h-4 w-4 rounded border-k-border" />
-                  {t('noticeLeft')}
-                </label>
+                <Checkbox
+                  className="items-center"
+                  checked={form.noticeLeft}
+                  onChange={(e) => set('noticeLeft', e.target.checked)}
+                  label={t('noticeLeft')}
+                />
               )}
 
               {variant === 'SPECIAL' && (
@@ -474,10 +477,12 @@ export function RecordVisitDialog({
 
               {canRevisit && (
                 <div className="rounded-xl border border-k-border bg-k-bg px-4 py-3">
-                  <label className="flex items-center gap-2 text-[14px] font-medium text-k-text">
-                    <input type="checkbox" checked={revisit} onChange={(e) => setRevisit(e.target.checked)} className="h-4 w-4 rounded border-k-border" />
-                    {t('revisit')}
-                  </label>
+                  <Checkbox
+                    className="items-center font-medium"
+                    checked={revisit}
+                    onChange={(e) => setRevisit(e.target.checked)}
+                    label={t('revisit')}
+                  />
                   {revisit && (
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
                       <div>
