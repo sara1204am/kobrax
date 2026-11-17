@@ -82,7 +82,7 @@ export class PaymentsService {
     const scope = moraScopeOf(this.tenant);
     if (seesWholeAccount(scope)) return;
     const rows = await tx.$queryRaw<{ id: string }[]>(
-      Prisma.sql`SELECT v.id FROM (${visibleCreditIdsSql(scope)}) v WHERE v.id = ${creditId}::uuid LIMIT 1`,
+      Prisma.sql`SELECT v.id FROM (${visibleCreditIdsSql(scope)}) v WHERE v.id = ${creditId} LIMIT 1`,
     );
     if (rows.length === 0) throw resourceNotFound();
   }
