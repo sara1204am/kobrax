@@ -31,7 +31,6 @@ function draw(acc: AccountInfo = account()) {
 
 const sw = (name: string) => screen.getByRole('switch', { name });
 const guardar = () => screen.getByRole('button', { name: 'Guardar cambios' });
-const preset = (name: string) => screen.getByRole('button', { name: new RegExp(`^${name}`) });
 const saved = (w: Partial<Workspace>) => ({
   ok: true,
   data: { workspace: { ...emptyWorkspace(), ...w } },
@@ -43,33 +42,32 @@ beforeEach(() => {
 });
 
 describe('WorkspaceEditor (F15 · P4)', () => {
-  it('🔴 A-1: una cuenta que nunca lo configuró está en «Completo»: todo visible y nada que guardar', () => {
+  it('🔴 A-1: una cuenta que nunca lo configuró lo ve todo y no hay nada que guardar', () => {
     draw();
-    expect(preset('Completo')).toHaveAttribute('aria-pressed', 'true');
-    for (const m of ['Rutas', 'Equipo', 'Organización', 'Import', 'Exportar', 'Actividad'])
+    for (const m of [
+      'Rutas de visitas',
+      'Importar cartera',
+      'Exportar y reportes',
+      'Equipo',
+      'Oficinas',
+    ])
       expect(sw(m)).toBeChecked();
     expect(screen.getByText(/14 de 14 ítems en el menú/)).toBeInTheDocument();
     expect(guardar()).toBeDisabled();
   });
 
-  it('«Independiente» apaga los seis módulos, fija la modalidad, baja el menú a 8 y habilita guardar', async () => {
+  it('tiene las mismas secciones que el asistente y ya no ofrece «Punto de partida»', () => {
     draw();
-    await userEvent.click(preset('Independiente'));
-    for (const m of ['Rutas', 'Equipo', 'Organización', 'Import', 'Exportar', 'Actividad'])
-      expect(sw(m)).not.toBeChecked();
-    expect(sw('Mis créditos son de cuota acordada')).toBeChecked();
-    expect(sw('Ingresos')).not.toBeChecked();
-    expect(screen.getByText(/8 de 14 ítems en el menú/)).toBeInTheDocument();
-    expect(preset('Independiente')).toHaveAttribute('aria-pressed', 'true');
-    expect(guardar()).toBeEnabled();
+    for (const h of ['Tus herramientas', 'La ficha de tus clientes', 'Tus créditos'])
+      expect(screen.getByRole('heading', { name: h })).toBeInTheDocument();
+    expect(screen.queryByText('Punto de partida')).toBeNull();
+    expect(screen.getByRole('radio', { name: /Cuota acordada/ })).toBeInTheDocument();
   });
 
-  it('un ajuste a mano sobre un preset lo deja «Personalizado»', async () => {
+  it('elegir una modalidad de crédito habilita guardar', async () => {
     draw();
-    await userEvent.click(preset('Equipo'));
-    await userEvent.click(sw('Rutas'));
-    expect(screen.getByText(/Personalizado/)).toBeInTheDocument();
-    expect(preset('Equipo')).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(screen.getByRole('radio', { name: /Cuota acordada/ }));
+    expect(guardar()).toBeEnabled();
   });
 
   it('🔴 guarda UN documento con el rev leído y solo lo que se oculta (A-16)', async () => {
@@ -77,7 +75,7 @@ describe('WorkspaceEditor (F15 · P4)', () => {
       saved({ rev: 4, hiddenModules: ['routes'], options: { 'client.income': false } }),
     );
     draw(account({ ...emptyWorkspace(), rev: 3 }));
-    await userEvent.click(sw('Rutas'));
+    await userEvent.click(sw('Rutas de visitas'));
     await userEvent.click(sw('Ingresos'));
     await userEvent.click(guardar());
     expect(sendJson).toHaveBeenCalledWith(
@@ -97,7 +95,7 @@ describe('WorkspaceEditor (F15 · P4)', () => {
   it('tras guardar refresca el panel (menú y avisos leen el workspace del layout) y no queda nada pendiente', async () => {
     sendJson.mockResolvedValue(saved({ rev: 1, hiddenModules: ['export'] }));
     draw();
-    await userEvent.click(sw('Exportar'));
+    await userEvent.click(sw('Exportar y reportes'));
     await userEvent.click(guardar());
     expect(refresh).toHaveBeenCalled();
     expect(await screen.findByText(/Sin cambios/)).toBeInTheDocument();
@@ -106,22 +104,18 @@ describe('WorkspaceEditor (F15 · P4)', () => {
 
   it('«Restablecer a Completo» vuelve a mostrar todo (se guarda con el botón)', async () => {
     draw(account({ ...emptyWorkspace(), rev: 2, hiddenModules: ['routes', 'export'] }));
-    expect(sw('Rutas')).not.toBeChecked();
+    expect(sw('Rutas de visitas')).not.toBeChecked();
     await userEvent.click(screen.getByRole('button', { name: 'Restablecer a Completo' }));
-    expect(sw('Rutas')).toBeChecked();
+    expect(sw('Rutas de visitas')).toBeChecked();
     expect(guardar()).toBeEnabled();
   });
 
-  it('🔴 S-1/S-2/S-7 anticipadas: con varias personas u oficinas esos módulos no se pueden apagar, y el preset no los pide', async () => {
+  it('🔴 S-1/S-2/S-7 anticipadas: con varias personas u oficinas esos módulos no se pueden apagar', () => {
     draw(account(undefined, { users: 3, branches: 2 }));
-    for (const m of ['Equipo', 'Actividad', 'Organización']) expect(sw(m)).toBeDisabled();
-    expect(sw('Rutas')).toBeEnabled();
+    for (const m of ['Equipo', 'Oficinas']) expect(sw(m)).toBeDisabled();
+    expect(sw('Rutas de visitas')).toBeEnabled();
     expect(screen.getAllByText(/Tu cuenta tiene 3 personas/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Tu cuenta tiene 2 oficinas activas/).length).toBeGreaterThan(0);
-    await userEvent.click(preset('Independiente'));
-    // El preset deja visible lo que el servidor rechazaría: nunca arma un guardado que va a rebotar.
-    for (const m of ['Equipo', 'Actividad', 'Organización']) expect(sw(m)).toBeChecked();
-    expect(sw('Rutas')).not.toBeChecked();
   });
 
   it('volver a mostrar un módulo ya oculto nunca se bloquea, aunque hoy haya varias personas', () => {
@@ -138,7 +132,7 @@ describe('WorkspaceEditor (F15 · P4)', () => {
       data: { error: { code: 'WORKSPACE_CONFLICT', details: { reason: 'REV', currentRev: 5 } } },
     });
     draw();
-    await userEvent.click(sw('Rutas'));
+    await userEvent.click(sw('Rutas de visitas'));
     await userEvent.click(guardar());
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('cambió mientras lo editabas');
@@ -154,7 +148,7 @@ describe('WorkspaceEditor (F15 · P4)', () => {
       },
     });
     draw();
-    await userEvent.click(sw('Rutas'));
+    await userEvent.click(sw('Rutas de visitas'));
     await userEvent.click(guardar());
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('versión más nueva');
@@ -177,7 +171,7 @@ describe('WorkspaceEditor (F15 · P4)', () => {
       },
     });
     draw();
-    await userEvent.click(sw('Rutas'));
+    await userEvent.click(sw('Rutas de visitas'));
     await userEvent.click(guardar());
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('Rutas: hay 2 rutas en curso.');
@@ -187,7 +181,7 @@ describe('WorkspaceEditor (F15 · P4)', () => {
   it('una configuración inválida y un error cualquiera se dicen sin romper la pantalla', async () => {
     sendJson.mockResolvedValue({ ok: false, data: { error: { code: 'WORKSPACE_INVALID' } } });
     draw();
-    await userEvent.click(sw('Rutas'));
+    await userEvent.click(sw('Rutas de visitas'));
     await userEvent.click(guardar());
     expect(await screen.findByRole('alert')).toHaveTextContent('no es válida');
   });
@@ -214,7 +208,7 @@ describe('WorkspaceEditor (F15 · P4)', () => {
   it('siempre dice que ocultar no cambia permisos ni datos', () => {
     draw();
     expect(screen.getByText(/ocultar no es autorizar/)).toBeInTheDocument();
-    expect(screen.getByText(/Nada se borra/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Nada se borra/).length).toBeGreaterThan(0);
   });
 });
 
@@ -228,16 +222,16 @@ describe('WorkspaceEditor · topes del plan (F15)', () => {
 
   it('🔴 con un solo asiento y una oficina, Equipo, Actividad y Organización no se ofrecen', () => {
     draw(free());
-    for (const m of ['Equipo', 'Actividad', 'Organización']) {
+    for (const m of ['Equipo', 'Oficinas']) {
       expect(screen.queryByRole('switch', { name: m })).toBeNull();
     }
-    expect(sw('Rutas')).toBeInTheDocument();
+    expect(sw('Rutas de visitas')).toBeInTheDocument();
   });
 
   it('🔴 guardar siempre manda Equipo, Actividad y Organización ocultos, aunque la cuenta los tuviera visibles', async () => {
     sendJson.mockResolvedValue(saved({ rev: 1, hiddenModules: ['export'] }));
     draw(free());
-    await userEvent.click(sw('Exportar'));
+    await userEvent.click(sw('Exportar y reportes'));
     await userEvent.click(guardar());
     const body = sendJson.mock.calls[0]![1];
     expect([...body.workspace.hiddenModules].sort()).toEqual([
@@ -248,10 +242,10 @@ describe('WorkspaceEditor · topes del plan (F15)', () => {
     ]);
   });
 
-  it('el punto de partida «Completo» tampoco los muestra en una cuenta individual', async () => {
+  it('«Restablecer a Completo» tampoco los muestra en una cuenta individual', async () => {
     sendJson.mockResolvedValue(saved({ rev: 1 }));
     draw(free({ ...emptyWorkspace(), rev: 2, hiddenModules: ['export'] }));
-    await userEvent.click(preset('Completo'));
+    await userEvent.click(screen.getByRole('button', { name: 'Restablecer a Completo' }));
     await userEvent.click(guardar());
     expect([...sendJson.mock.calls[0]![1].workspace.hiddenModules].sort()).toEqual([
       'activity',
@@ -263,7 +257,7 @@ describe('WorkspaceEditor · topes del plan (F15)', () => {
   it('si el servidor responde que el plan no lo permite, lo explica', async () => {
     sendJson.mockResolvedValue({ ok: false, data: { error: { code: 'WORKSPACE_PLAN_GATED' } } });
     draw(free());
-    await userEvent.click(sw('Rutas'));
+    await userEvent.click(sw('Rutas de visitas'));
     await userEvent.click(guardar());
     expect(await screen.findByRole('alert')).toHaveTextContent(
       /Tu plan no incluye Equipo ni Oficinas/,
@@ -277,6 +271,6 @@ describe('WorkspaceEditor · topes del plan (F15)', () => {
       limits: { users: 25, branches: 3 },
     } as unknown as AccountInfo);
     expect(sw('Equipo')).toBeInTheDocument();
-    expect(sw('Organización')).toBeInTheDocument();
+    expect(sw('Oficinas')).toBeInTheDocument();
   });
 });

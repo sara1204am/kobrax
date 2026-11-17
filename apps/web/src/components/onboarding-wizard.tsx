@@ -451,7 +451,7 @@ export function OnboardingWizard({
           {step === 'done' ? (
             <div className="ml-auto flex flex-wrap gap-2">
               {onClose ? (
-                <Button variant="cta" className="!w-auto px-6" onClick={() => void leave()}>
+                <Button variant="primary" className="!w-auto px-6" onClick={() => void leave()}>
                   {t('done.close')}
                 </Button>
               ) : (
@@ -467,7 +467,7 @@ export function OnboardingWizard({
                     {tourT('wizardCta')}
                   </Button>
                   <Button
-                    variant="cta"
+                    variant="primary"
                     className="!w-auto pl-6 pr-12"
                     onClick={() => void leave('client')}
                   >
@@ -497,7 +497,7 @@ export function OnboardingWizard({
               </div>
               {step === 'summary' ? (
                 <Button
-                  variant="cta"
+                  variant="primary"
                   className="!w-auto pl-6 pr-12"
                   loading={saving}
                   onClick={() => void confirm()}
@@ -506,7 +506,7 @@ export function OnboardingWizard({
                 </Button>
               ) : (
                 <Button
-                  variant="cta"
+                  variant="primary"
                   className="!w-auto pl-6 pr-12"
                   onClick={next}
                   disabled={saving}

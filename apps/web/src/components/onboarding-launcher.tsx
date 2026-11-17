@@ -17,7 +17,7 @@ export function OnboardingLauncher({ account }: { account: AccountInfo }) {
   return (
     <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-k-border bg-white px-4 py-3">
       <p className="text-[13px] text-k-text-2">{t('hint')}</p>
-      <Button variant="ghost" className="!w-auto" onClick={() => setOpen(true)}>
+      <Button variant="primary" className="!w-auto px-5" onClick={() => setOpen(true)}>
         {t('button')}
       </Button>
       {open && <OnboardingWizard account={account} onClose={() => setOpen(false)} />}
