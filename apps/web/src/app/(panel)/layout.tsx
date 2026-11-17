@@ -13,6 +13,8 @@ import { WorkspaceProvider } from '@/components/workspace';
 import { HiddenModuleNotice } from '@/components/hidden-module-notice';
 import { ToastProvider } from '@/components/toast';
 import { OnboardingWizard } from '@/components/onboarding-wizard';
+import { LegalReacceptGate } from '@/components/legal-reaccept-gate';
+import type { LegalOverview } from '@/lib/legal';
 import { OnboardingCards } from '@/components/onboarding-cards';
 import { TourProvider } from '@/components/tour';
 import { visibleNav } from '@/lib/nav';
@@ -32,10 +34,14 @@ const KNOWN_MODULES = new Set<string>(WORKSPACE_MODULES.map((m) => m.key));
  * de acá bajan como props. Ninguna pantalla vuelve a pedir `/auth/me`.
  */
 export default async function PanelLayout({ children }: { children: ReactNode }) {
-  const [me, accounts] = await Promise.all([
+  const [me, accounts, legal] = await Promise.all([
     getMe(),
     apiCall<AuthAccountOption[]>('/auth/accounts', { method: 'GET', auth: true }),
+    // Privacidad: documentos que debe volver a aceptar (cambió algo material). Si no responde, el panel sigue sin el aviso:
+    // es una barrera de interfaz, no una dependencia (la API no corta el resto por esto).
+    apiCall<LegalOverview>('/legal/me', { method: 'GET', auth: true }),
   ]);
+  const legalPending = legal.status === 200 ? (legal.body.data?.pending ?? []) : [];
 
   // La API no contestó: no es que la sesión se venció, es que del otro lado no hay nadie.
   // Mandar a `/login` sería mentir —ahí tampoco va a poder entrar— y además esconde el
@@ -119,6 +125,8 @@ export default async function PanelLayout({ children }: { children: ReactNode })
               {/* Los avisos se montan una sola vez acá: un provider por pantalla haría que un toast
             disparado antes de navegar se pierda con el desmontaje. */}
               <ToastProvider>
+                {/* Privacidad (B5): pantalla bloqueante si cambió algo material en los Términos o la Política. Se puede cerrar sesión. */}
+                {legalPending.length > 0 && <LegalReacceptGate key={legalPending.map((p) => p.versionId).join()} pending={legalPending} />}
                 {/* F15: el aviso de «ese módulo está oculto» (`?oculto=`), en la pantalla a la que se volvió. */}
                 <HiddenModuleNotice
                   canManage={user.permissions.includes(Permission.ACCOUNT_WRITE)}

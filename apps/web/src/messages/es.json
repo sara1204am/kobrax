@@ -62,6 +62,7 @@
     },
     "crumbs": {
       "datos-personales": "Datos personales",
+      "privacidad": "Privacidad",
       "espacio-de-trabajo": "Espacio de trabajo",
       "preferencias": "Preferencias",
       "seguridad": "Seguridad",
@@ -2404,6 +2405,7 @@
       "billingPending": "Faltan datos de facturación",
       "actividad": "Actividad",
       "espacio-de-trabajo": "Espacio de trabajo",
+      "privacidad": "Privacidad",
       "avanzado": "Avanzado",
       "soporte": "Accesos de soporte"
     },
@@ -4353,7 +4355,8 @@
       "label": "Secciones de Mi perfil",
       "datos-personales": "Datos personales",
       "preferencias": "Preferencias",
-      "seguridad": "Seguridad"
+      "seguridad": "Seguridad",
+      "privacidad": "Privacidad"
     },
     "subtitle": "Cómo te ve tu equipo y cómo te cobran los deudores.",
     "firstName": "Nombre",
@@ -4966,6 +4969,106 @@
       "description": "Ve los datos de su oficina, con responsable."
     }
   },
+  "privacy": {
+    "requests": {
+      "self": {
+        "title": "Solicitudes sobre tus datos",
+        "text": "Pide acceso, corrección, eliminación, limitación, oposición o portabilidad de los datos de tu usuario. Las atiende el equipo de Kobrax y verás cada paso aquí."
+      },
+      "org": {
+        "title": "Solicitudes de titulares de cobranza",
+        "text": "Registra y da seguimiento a las solicitudes de las personas cuyos datos administra tu organización. Tu organización es la responsable de atenderlas: Kobrax solo ofrece esta herramienta de registro y seguimiento."
+      },
+      "new": "Nueva solicitud",
+      "type": "Tipo de solicitud",
+      "subject": "Titular (nombre y referencia)",
+      "subjectHint": "Lo justo para ubicar su información. Ej.: nombre y número de crédito.",
+      "description": "Describe la solicitud",
+      "descriptionHint": "Mínimo 10 caracteres.",
+      "submit": "Enviar solicitud",
+      "submitOrg": "Registrar solicitud",
+      "empty": "Todavía no hay solicitudes.",
+      "created": "Solicitud registrada",
+      "error": "No se pudo completar la acción. Inténtalo de nuevo.",
+      "errorTooMany": "Ya tienes varias solicitudes abiertas. Espera a que se atiendan antes de presentar otra.",
+      "timeline": "Seguimiento",
+      "rejection": "Motivo del rechazo: {reason}",
+      "limits": "Esto registra y da seguimiento a la solicitud. No elimina ni exporta datos por sí solo: lo hace la persona responsable, que después marca la solicitud como completada.",
+      "types": {
+        "ACCESS": "Acceso",
+        "RECTIFICATION": "Rectificación",
+        "ERASURE": "Eliminación",
+        "RESTRICTION": "Limitación del tratamiento",
+        "OBJECTION": "Oposición",
+        "PORTABILITY": "Portabilidad",
+        "WITHDRAW_CONSENT": "Retirar un consentimiento",
+        "OTHER": "Otra"
+      },
+      "statuses": {
+        "RECEIVED": "Recibida",
+        "IN_REVIEW": "En revisión",
+        "NEEDS_INFO": "Requiere información",
+        "APPROVED": "Aprobada",
+        "REJECTED": "Rechazada",
+        "COMPLETED": "Completada"
+      },
+      "actors": {
+        "REQUESTER": "Tú",
+        "ORG": "Tu organización",
+        "PLATFORM": "Equipo de Kobrax"
+      },
+      "actions": {
+        "IN_REVIEW": "Pasar a revisión",
+        "NEEDS_INFO": "Pedir información",
+        "APPROVED": "Aprobar",
+        "REJECTED": "Rechazar",
+        "COMPLETED": "Marcar como completada",
+        "confirm": "Confirmar",
+        "cancel": "Cancelar",
+        "note": "Nota (opcional)",
+        "needNote": "¿Qué información falta?",
+        "reason": "Justificación del rechazo"
+      }
+    },
+    "consents": {
+      "title": "Comunicaciones",
+      "text": "Son opcionales, independientes y no afectan tu acceso. Puedes cambiarlas cuando quieras.",
+      "marketing": {
+        "label": "Noticias, promociones, novedades y comunicaciones comerciales de Kobrax",
+        "hint": "Te las enviaremos al correo de tu cuenta."
+      },
+      "granted": "Lo aceptaste el {date}.",
+      "withdrawn": "Lo retiraste el {date}.",
+      "never": "Todavía no lo has aceptado.",
+      "saved": "Preferencia guardada",
+      "error": "No se pudo guardar. Inténtalo de nuevo."
+    },
+    "documents": {
+      "title": "Documentos que aceptaste",
+      "text": "Guardamos qué versión de cada documento aceptaste y cuándo. Puedes volver a leer exactamente esa versión.",
+      "empty": "Todavía no hay constancias registradas para tu usuario.",
+      "accepted": "Aceptado",
+      "acknowledged": "Reconocido",
+      "view": "Ver esta versión",
+      "version": "Versión {version}",
+      "current": "Ver los documentos vigentes",
+      "sources": {
+        "SIGNUP_WEB": "Registro web",
+        "SIGNUP_MOBILE": "Registro en la app",
+        "INVITATION_WEB": "Invitación (web)",
+        "INVITATION_MOBILE": "Invitación (app)",
+        "RE_ACCEPT": "Actualización de documentos",
+        "PROFILE": "Mi perfil",
+        "ORGANIZATION": "Organización"
+      }
+    },
+    "history": {
+      "title": "Historial de tus decisiones",
+      "withdrawn": "Retirado",
+      "granted": "Otorgado"
+    },
+    "loadError": "No se pudo cargar tu información de privacidad."
+  },
   "legal": {
     "document": {
       "version": "Versión {version}",
@@ -4992,6 +5095,16 @@
         "acceptableUse": "Política de Uso Aceptable",
         "aiPolicy": "Política de Inteligencia Artificial"
       }
+    },
+    "reaccept": {
+      "title": "Actualizamos nuestros documentos",
+      "intro": "Para seguir usando Kobrax necesitas revisar y aceptar lo que cambió.",
+      "intro_new": "Para seguir usando Kobrax necesitas revisar y aceptar estos documentos.",
+      "confirm": "Aceptar y continuar",
+      "logout": "Cerrar sesión",
+      "error": "No se pudo guardar tu aceptación. Inténtalo de nuevo.",
+      "changed": "Los documentos cambiaron otra vez. Revísalos y vuelve a marcar las casillas.",
+      "version": "versión {version}"
     },
     "consent": {
       "terms": {

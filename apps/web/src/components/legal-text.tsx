@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { parseLegal as parseLegalShared, parseLegalInline } from '@kobrax/shared';
 
 /**
  * Pinta el texto de un documento legal (markdown mínimo). **Sin `dangerouslySetInnerHTML`**: todo se arma con elementos de React,
@@ -7,76 +8,27 @@ import type { ReactNode } from 'react';
  * Soporta lo que usan los documentos: `#`/`##`/`###`, listas con `-` y numeradas con `1.`, párrafos y `**negrita**`. Los marcadores
  * `[PENDIENTE …]` se resaltan: son lo que un abogado todavía debe completar o confirmar, y no deben pasar desapercibidos.
  */
-const INLINE = /(\*\*[^*]+\*\*|\[PENDIENTE[^\]]*\]|\[[^\]]+\]\(\/[a-z-]+\))/g;
-const LINK = /^\[([^\]]+)\]\((\/[a-z-]+)\)$/;
-
 function inline(text: string): ReactNode[] {
-  return text.split(INLINE).map((part, i) => {
-    if (part.startsWith('**') && part.endsWith('**')) return <strong key={i}>{part.slice(2, -2)}</strong>;
-    const link = LINK.exec(part);
-    // Solo enlaces internos a otro documento (`/ruta`): nunca una URL externa que venga en el texto.
-    if (link)
+  return parseLegalInline(text).map((part, i) => {
+    if (part.kind === 'bold') return <strong key={i}>{part.text}</strong>;
+    // Solo enlaces internos a otro documento (`/ruta`): nunca una URL externa que venga en el texto (lo garantiza el lector compartido).
+    if (part.kind === 'link')
       return (
-        <a key={i} href={link[2]} target="_blank" rel="noopener noreferrer" className="font-medium text-k-purple hover:underline">
-          {link[1]}
+        <a key={i} href={part.href} target="_blank" rel="noopener noreferrer" className="font-medium text-k-purple hover:underline">
+          {part.text}
         </a>
       );
-    if (part.startsWith('[PENDIENTE'))
+    if (part.kind === 'pending')
       return (
         <mark key={i} className="rounded bg-k-warning-bg px-1 text-k-warning-text">
-          {part}
+          {part.text}
         </mark>
       );
-    return part;
+    return part.text;
   });
 }
 
-type Block =
-  | { kind: 'h'; level: 1 | 2 | 3; text: string }
-  | { kind: 'p'; text: string }
-  | { kind: 'ul' | 'ol'; items: string[] };
-
-export function parseLegal(content: string): Block[] {
-  const blocks: Block[] = [];
-  let para: string[] = [];
-  let list: { kind: 'ul' | 'ol'; items: string[] } | null = null;
-  const flushPara = () => {
-    if (para.length) blocks.push({ kind: 'p', text: para.join(' ') });
-    para = [];
-  };
-  const flushList = () => {
-    if (list) blocks.push(list);
-    list = null;
-  };
-  for (const raw of content.replace(/\r\n/g, '\n').split('\n')) {
-    const line = raw.trimEnd();
-    const h = /^(#{1,3})\s+(.*)$/.exec(line);
-    const ul = /^\s*-\s+(.*)$/.exec(line);
-    const ol = /^\s*\d+\.\s+(.*)$/.exec(line);
-    if (h) {
-      flushPara();
-      flushList();
-      blocks.push({ kind: 'h', level: h[1]!.length as 1 | 2 | 3, text: h[2]! });
-    } else if (ul || ol) {
-      flushPara();
-      const kind = ul ? 'ul' : 'ol';
-      if (!list || list.kind !== kind) {
-        flushList();
-        list = { kind, items: [] };
-      }
-      list.items.push((ul ?? ol)![1]!);
-    } else if (line.trim() === '') {
-      flushPara();
-      flushList();
-    } else {
-      flushList();
-      para.push(line.trim());
-    }
-  }
-  flushPara();
-  flushList();
-  return blocks;
-}
+export const parseLegal = parseLegalShared;
 
 const H: Record<1 | 2 | 3, string> = {
   1: 'mt-2 text-[20px] font-semibold text-k-navy',
