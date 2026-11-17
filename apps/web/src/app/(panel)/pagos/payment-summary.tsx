@@ -22,10 +22,10 @@ export interface PaymentTotals {
  * sobre su fondo; es lo que hace legible la etiqueta de 12 px.
  */
 const LOOK: Record<string, { box: string; value: string; label: string; hint: string }> = {
-  today: { box: 'border-[#173F63] bg-[#173F63]', value: 'text-white', label: 'text-[#CFE3F7]', hint: 'text-[#A9CBEA]' },
-  month: { box: 'border-k-border bg-[#EAF3FC]', value: 'text-[#173F63]', label: 'text-[#3F5F7F]', hint: 'text-[#4A6580]' },
-  period: { box: 'border-[#C9DDF1] bg-white', value: 'text-[#173F63]', label: 'text-[#3F5F7F]', hint: 'text-[#5B7795]' },
-  count: { box: 'border-k-border bg-[#F0F4F8]', value: 'text-[#173F63]', label: 'text-[#475D73]', hint: 'text-[#5A6F84]' },
+  today: { box: 'border-k-navy bg-k-navy', value: 'text-white', label: 'text-k-light-bg', hint: 'text-k-light-bg/80' },
+  month: { box: 'border-k-border bg-k-info-bg', value: 'text-k-navy', label: 'text-k-slate', hint: 'text-k-text-2' },
+  period: { box: 'border-k-border bg-white', value: 'text-k-navy', label: 'text-k-slate', hint: 'text-k-text-2' },
+  count: { box: 'border-k-border bg-k-bg', value: 'text-k-navy', label: 'text-k-slate', hint: 'text-k-text-2' },
 };
 
 /**

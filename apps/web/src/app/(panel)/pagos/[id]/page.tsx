@@ -92,12 +92,12 @@ export default async function PagoPage({ params }: { params: { id: string } }) {
 
       <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
         {/* El monto y lo que lo identifica: lo primero que se busca en un pago. */}
-        <section className="flex flex-col rounded-2xl bg-gradient-to-br from-[#173F63] to-[#0E2D4A] p-6 text-white">
-          <p className="text-[13px] text-[#CFE3F7]">{t('detail.amount')}</p>
+        <section className="flex flex-col rounded-2xl bg-k-navy p-6 text-white">
+          <p className="text-[13px] text-k-light-bg">{t('detail.amount')}</p>
           <p className="mt-1 text-[40px] font-semibold leading-tight tabular-nums">{money(payment.amount, currency)}</p>
 
           <div className="mt-5 border-t border-white/20 pt-4">
-            <p className="text-[13px] text-[#CFE3F7]">{t('detail.method')}</p>
+            <p className="text-[13px] text-k-light-bg">{t('detail.method')}</p>
             <p className="mt-1 flex items-center gap-2.5 text-[18px] font-medium">
               <MethodIcon method={payment.method} />
               {t(`method.${payment.method}`)}
@@ -105,7 +105,7 @@ export default async function PagoPage({ params }: { params: { id: string } }) {
           </div>
 
           <div className="mt-4 border-t border-white/20 pt-4">
-            <p className="text-[13px] text-[#CFE3F7]">{t('detail.receiptRef')}</p>
+            <p className="text-[13px] text-k-light-bg">{t('detail.receiptRef')}</p>
             <p className="mt-1 break-all text-[18px] font-medium">{payment.receiptReference ?? '—'}</p>
           </div>
         </section>
@@ -158,7 +158,7 @@ export default async function PagoPage({ params }: { params: { id: string } }) {
       </nav>
 
       <div className="px-4 pb-4">
-        <p role="note" className="flex items-center gap-3 rounded-xl bg-[#EAF3FC] px-4 py-3 text-[14px] text-k-text-2">
+        <p role="note" className="flex items-center gap-3 rounded-xl bg-k-info-bg px-4 py-3 text-[14px] text-k-text-2">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden className="shrink-0 text-k-periwinkle">
             <circle cx="12" cy="12" r="9" />
             <path d="M12 11v5M12 8h.01" />
