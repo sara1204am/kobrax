@@ -66,13 +66,15 @@ export function getInvitation(code: string): Promise<PublicResult<Invitation>> {
   );
 }
 
+/** Quien se une por invitación también acepta los Términos y reconoce la Política: van los ids de las versiones que vio. */
 export function acceptInvitation(
   code: string,
   password: string,
+  legal: { termsVersionId?: string; privacyVersionId?: string } = {},
 ): Promise<PublicResult<{ email: string }>> {
   return publicCall(
     '/auth/invitation/accept',
-    { method: 'POST', body: { code, password } },
+    { method: 'POST', body: { code, password, ...legal } },
     'No pudimos aceptar la invitación',
   );
 }

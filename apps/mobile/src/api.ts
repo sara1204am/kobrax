@@ -117,7 +117,7 @@ export function uploadFailure(e: unknown): { status: 'offline' } | { status: 'er
 export type PublicResult<T> =
   | { status: 'ok'; data: T }
   | { status: 'offline' }
-  | { status: 'error'; message: string };
+  | { status: 'error'; message: string; /** Código de la API (p. ej. `LEGAL_VERSION_STALE`), si lo trae: la pantalla decide con él, no con el texto. */ code?: string };
 
 /**
  * Llamada pública + mapeo a `PublicResult`. Va por `apiFetch` y **no** por `apiMutate`:
@@ -132,7 +132,8 @@ export async function publicCall<T>(
   const res = await apiFetch<T>(path, init);
   if (res.status === 0) return { status: 'offline' };
   if ((res.status === 200 || res.status === 201) && res.data) return { status: 'ok', data: res.data };
-  return { status: 'error', message: res.error?.message ?? fallback };
+  const code = (res.error as { code?: string } | null | undefined)?.code;
+  return { status: 'error', message: res.error?.message ?? fallback, ...(code ? { code } : {}) };
 }
 
 /**
