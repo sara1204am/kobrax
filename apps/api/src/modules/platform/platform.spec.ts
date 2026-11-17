@@ -258,7 +258,7 @@ describe('Invariante: nada de plataforma llega a un rol de empresa (F14 · F5)',
   });
 
   it('la lista de permisos de plataforma es cerrada y todos llevan el prefijo `platform:`', () => {
-    assert.deepEqual([...PLATFORM_PERMISSIONS].sort(), ['platform:accounts:read', 'platform:audit:read', 'platform:roles:rollout', 'platform:roles:write', 'platform:support:open']);
+    assert.deepEqual([...PLATFORM_PERMISSIONS].sort(), ['platform:accounts:read', 'platform:audit:read', 'platform:privacy:manage', 'platform:roles:rollout', 'platform:roles:write', 'platform:support:open']);
   });
 });
 

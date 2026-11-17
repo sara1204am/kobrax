@@ -45,3 +45,4 @@ export * from './pii-fields.js';
 export * from './role-edit.js';
 export * from './onboarding.js';
 export * from './first-steps.js';
+export * from './legal-acceptance.js';

@@ -1,63 +1,17 @@
 /**
- * Aceptación legal en el registro y la invitación (lógica pura, sin React).
+ * Aceptación legal en el registro y la invitación (web).
  *
- * La pantalla muestra casillas; esto decide cuándo se puede enviar y qué viaja a la API. 🔴 **Lo que viaja son los ids de las
- * versiones que la pantalla mostró**, nunca un texto ni un hash: el servidor calcula el hash con su propia copia y rechaza una
- * versión que ya no sea la vigente (`LEGAL_VERSION_STALE`).
+ * La lógica pura (casillas, ids de versión, lector del texto) vive en `@kobrax/shared`, compartida con el móvil: así las dos apps
+ * dicen y envían exactamente lo mismo. Aquí quedan las piezas propias de la web (páginas permanentes y tipos de lo propio de cada persona).
  */
-
-/** Un documento que se exige al crear el acceso, tal como lo devuelve `GET /legal/signup-documents`. */
-export interface SignupDocument {
-  type: 'TERMS' | 'PRIVACY';
-  action: 'ACCEPTED' | 'ACKNOWLEDGED';
-  versionId: string;
-  version: string;
-  title: string;
-  contentSha256: string;
-}
-
-/**
- * Lo que la persona marcó. Todo nace en `false`: nada viene premarcado.
- *
- * No hay casilla de marketing en el registro (decisión de diseño): la API ya soporta `marketingOptIn`, pero ese consentimiento
- * opcional se pedirá, si corresponde, desde Mi perfil › Privacidad y nunca condicionará el acceso.
- */
-export interface LegalChoice {
-  terms: boolean;
-  privacy: boolean;
-}
-
-export const EMPTY_CHOICE: LegalChoice = { terms: false, privacy: false };
-
-/**
- * Los documentos legales solo existen en español por ahora. Se piden siempre en `es`, también a quien usa la interfaz en inglés:
- * pedir `en` sin tener una versión publicada dejaría a esa persona sin poder registrarse. Cuando haya traducciones publicadas,
- * este es el único punto que cambia.
- */
-export const LEGAL_LOCALE = 'es';
-
-/** Se puede enviar solo con los documentos cargados y las DOS casillas obligatorias marcadas. */
-export function canSubmitLegal(docs: readonly SignupDocument[] | null, choice: LegalChoice): boolean {
-  if (!docs) return false;
-  const has = (t: SignupDocument['type']) => docs.some((d) => d.type === t);
-  return has('TERMS') && has('PRIVACY') && choice.terms && choice.privacy;
-}
-
-/**
- * El fragmento del cuerpo del alta: los ids de las versiones que se mostraron.
- * Devuelve `{}` si la persona no completó lo obligatorio: ese envío no debería ocurrir, y la API lo rechazaría igual.
- */
-export function legalPayload(
-  docs: readonly SignupDocument[] | null,
-  choice: LegalChoice,
-): { termsVersionId?: string; privacyVersionId?: string } {
-  if (!canSubmitLegal(docs, choice) || !docs) return {};
-  const id = (t: SignupDocument['type']) => docs.find((d) => d.type === t)!.versionId;
-  return {
-    termsVersionId: id('TERMS'),
-    privacyVersionId: id('PRIVACY'),
-  };
-}
+export {
+  EMPTY_CHOICE,
+  LEGAL_LOCALE,
+  canSubmitLegal,
+  legalPayload,
+  type LegalChoice,
+  type SignupDocument,
+} from '@kobrax/shared';
 
 /**
  * Las páginas públicas de los documentos: ruta en español → slug de la API → qué es. Lista cerrada: cualquier otra ruta es 404.
@@ -93,3 +47,78 @@ export interface LegalDocument {
 
 /** Una versión del historial (sin el texto). */
 export type LegalVersionSummary = Omit<LegalDocument, 'content'>;
+
+/** Un documento que la persona debe aceptar o reconocer de nuevo (cambió algo material, o nunca lo aceptó). */
+export interface PendingDocument {
+  type: 'TERMS' | 'PRIVACY';
+  versionId: string;
+  version: string;
+  title: string;
+  isMaterial: boolean;
+}
+
+export interface AcceptanceRow {
+  id: string;
+  type: string;
+  version: string;
+  title: string;
+  locale: string;
+  action: 'ACCEPTED' | 'ACKNOWLEDGED';
+  source: string;
+  acceptedAt: string;
+  contentSha256: string;
+}
+
+export interface ConsentState {
+  purpose: 'MARKETING' | 'ANALYTICS' | 'COOKIES_NON_ESSENTIAL';
+  status: 'GRANTED' | 'WITHDRAWN';
+  /** `false` = nunca decidió (equivale a «no consintió»). */
+  decided: boolean;
+  recordedAt: string | null;
+}
+
+/** Lo de Mi perfil › Privacidad: `GET /legal/me`. */
+export interface LegalOverview {
+  pending: PendingDocument[];
+  acceptances: AcceptanceRow[];
+  consents: ConsentState[];
+  history: { id: string; purpose: string; status: string; source: string; recordedAt: string }[];
+}
+
+/** Slug de la página permanente de un tipo de documento (`/terminos`, `/privacidad`…). */
+export const PAGE_OF_TYPE: Record<string, keyof typeof LEGAL_PAGES> = {
+  TERMS: 'terminos',
+  PRIVACY: 'privacidad',
+  COOKIES: 'cookies',
+  DPA: 'dpa',
+  ACCEPTABLE_USE: 'uso-aceptable',
+  AI_POLICY: 'ia',
+};
+
+/** Una solicitud de derechos tal como la devuelve `/privacy/requests/*` (sin ids internos de personas ni de cuentas). */
+export interface PrivacyRequestView {
+  id: string;
+  subjectKind: 'APP_USER' | 'DEBTOR_VIA_ORG';
+  type: 'ACCESS' | 'RECTIFICATION' | 'ERASURE' | 'RESTRICTION' | 'OBJECTION' | 'PORTABILITY' | 'WITHDRAW_CONSENT' | 'OTHER';
+  status: 'RECEIVED' | 'IN_REVIEW' | 'NEEDS_INFO' | 'APPROVED' | 'REJECTED' | 'COMPLETED';
+  subjectLabel: string | null;
+  description: string;
+  rejectionReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+  closedAt: string | null;
+  events: { status: string; note: string | null; actorKind: 'REQUESTER' | 'ORG' | 'PLATFORM'; createdAt: string }[];
+  /** Estados a los que puede pasar (vacío = final). Lo decide el servidor. */
+  allowedNext: PrivacyRequestView['status'][];
+}
+
+export const PRIVACY_REQUEST_TYPES: PrivacyRequestView['type'][] = [
+  'ACCESS',
+  'RECTIFICATION',
+  'ERASURE',
+  'RESTRICTION',
+  'OBJECTION',
+  'PORTABILITY',
+  'WITHDRAW_CONSENT',
+  'OTHER',
+];
