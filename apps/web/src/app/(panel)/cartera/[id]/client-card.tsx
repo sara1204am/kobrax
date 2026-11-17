@@ -194,7 +194,7 @@ export function ClientCard({
             )}
             <a
               href={`/api/clients/${client.id}/pdf`}
-              className="text-[13px] font-medium text-k-purple hover:underline"
+              className="text-k-sm font-medium text-k-purple hover:underline"
             >
               {t('downloadPdf')}
             </a>
@@ -217,7 +217,7 @@ export function ClientCard({
       {shown.otherCredits && (
         <p
           role="note"
-          className="mb-4 rounded-lg bg-k-highlight px-4 py-3 text-[13px] text-k-periwinkle"
+          className="mb-4 rounded-lg bg-k-highlight px-4 py-3 text-k-sm text-k-periwinkle"
         >
           {t('otherCredits.notice', {
             count: shown.otherCredits.count,
@@ -248,7 +248,7 @@ export function ClientCard({
            * lee «Persona 1234 asterisco asterisco» de corrido. Los separadores son de CSS.
            */}
           <Section title={t('sections.identity')} action={editarAction('identity')}>
-            <dl className="flex flex-wrap items-center gap-x-6 gap-y-1.5 text-[13px]">
+            <dl className="flex flex-wrap items-center gap-x-6 gap-y-1.5 text-k-sm">
               <Dato label={t('fields.document')} value={shown.nationalId || '—'} />
               {shown.taxId && <Dato label={t('fields.taxId')} value={shown.taxId} />}
               {shown.riskSegment && <Dato label={t('fields.risk')} value={shown.riskSegment} />}
@@ -295,7 +295,7 @@ export function ClientCard({
                 can('credit:create') && (
                   <Link
                     href={`/cartera/${client.id}/prestamo`}
-                    className="inline-flex min-h-[32px] items-center rounded-lg bg-k-highlight px-3 text-[13px] font-medium text-k-periwinkle hover:bg-k-light-bg"
+                    className="inline-flex min-h-[32px] items-center rounded-lg bg-k-highlight px-3 text-k-sm font-medium text-k-periwinkle hover:bg-k-light-bg"
                   >
                     + {t('newLoan')}
                   </Link>
@@ -431,7 +431,7 @@ function IncomeSummary({
   occupations: CatalogOption[];
 }) {
   const t = useTranslations('portfolio');
-  if (!profile) return <p className="text-[13px] text-k-muted">{t('income.empty')}</p>;
+  if (!profile) return <p className="text-k-sm text-k-muted">{t('income.empty')}</p>;
 
   const fuente = profile.incomeSourceCode
     ? (sources.find((s) => s.code === profile.incomeSourceCode)?.label ??
@@ -449,7 +449,7 @@ function IncomeSummary({
       : undefined;
 
   return (
-    <dl className="flex flex-wrap items-center gap-x-6 gap-y-1.5 text-[13px]">
+    <dl className="flex flex-wrap items-center gap-x-6 gap-y-1.5 text-k-sm">
       {fuente && <Dato label={t('income.source')} value={fuente} />}
       {rubro && <Dato label={t('income.occupation')} value={rubro} />}
       {ciclo && <Dato label={t('income.cycle')} value={ciclo} />}

@@ -114,29 +114,29 @@ export function NotesSection({
         ) : undefined
       }
     >
-      <p className="mb-3 text-[13px] text-k-text-2">{t('hint')}</p>
+      <p className="mb-3 text-k-sm text-k-text-2">{t('hint')}</p>
 
       {initial === null ? (
-        <p className="text-[13px] text-k-muted">{t('unavailable')}</p>
+        <p className="text-k-sm text-k-muted">{t('unavailable')}</p>
       ) : (
         <>
           {notes.length > 0 && (
             <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-k-border bg-k-bg px-3.5 py-3">
-              <span aria-hidden className="text-[20px]">
+              <span aria-hidden className="text-k-2xl">
                 📌
               </span>
               <div className="min-w-0 flex-1">
-                <div className="text-[14px] font-semibold text-k-text">{board ? t('showing') : t('launcherTitle')}</div>
-                <div className="text-[12px] text-k-text-2">{t('launcherSub')}</div>
+                <div className="text-k-base font-semibold text-k-text">{board ? t('showing') : t('launcherTitle')}</div>
+                <div className="text-k-xs text-k-text-2">{t('launcherSub')}</div>
               </div>
-              <Button type="button" variant="ghost" onClick={() => setBoard((b) => !b)} className="h-9 text-[13px] sm:w-auto sm:px-3">
+              <Button type="button" variant="ghost" onClick={() => setBoard((b) => !b)} className="h-9 text-k-sm sm:w-auto sm:px-3">
                 {board ? t('hide') : t('show')}
               </Button>
             </div>
           )}
 
           {sorted.length === 0 ? (
-            <p className="text-[13px] text-k-muted">{t('empty')}</p>
+            <p className="text-k-sm text-k-muted">{t('empty')}</p>
           ) : (
             <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
               {sorted.map((n) => {
@@ -149,10 +149,10 @@ export function NotesSection({
                     className="relative flex min-h-[132px] flex-col gap-2.5 rounded-[10px] border border-black/5 p-3.5 shadow-sm"
                     style={{ background: C.bg, color: C.ink }}
                   >
-                    <span className={`absolute right-3 top-3 rounded-full px-2 py-0.5 text-[11px] font-semibold ${BADGE[n.kind]}`}>
+                    <span className={`absolute right-3 top-3 rounded-full px-2 py-0.5 text-k-2xs font-semibold ${BADGE[n.kind]}`}>
                       {t(`kinds.${n.kind}`)}
                     </span>
-                    <p className="flex-1 whitespace-pre-wrap break-words pr-20 text-[14px] leading-normal">{n.body}</p>
+                    <p className="flex-1 whitespace-pre-wrap break-words pr-20 text-k-base leading-normal">{n.body}</p>
                     <div className="flex items-center justify-between gap-2">
                       <span className="min-w-0 truncate text-[11.5px] opacity-70">
                         {nameOf(n)} · {dateTime(n.createdAt, locale)}
@@ -243,7 +243,7 @@ function IconButton({ label, onClick, children }: { label: string; onClick: () =
       aria-label={label}
       title={label}
       onClick={onClick}
-      className="grid h-7 w-7 place-items-center rounded-md bg-black/5 text-[13px] hover:bg-black/15"
+      className="grid h-7 w-7 place-items-center rounded-md bg-black/5 text-k-sm hover:bg-black/15"
     >
       {children}
     </button>

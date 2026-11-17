@@ -109,7 +109,7 @@ export function SaveBarProvider({ children }: { children: ReactNode }) {
           aria-label={t('label')}
           className="sticky bottom-4 z-10 mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-k-border bg-white px-5 py-3 shadow-k-card"
         >
-          <p className="text-[14px] text-k-text">{canSave ? t('unsaved') : t('invalid')}</p>
+          <p className="text-k-base text-k-text">{canSave ? t('unsaved') : t('invalid')}</p>
           <div className="flex gap-2">
             <span className="w-28">
               <Button type="button" variant="ghost" className="!h-10" disabled={saving} onClick={discardAll}>

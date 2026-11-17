@@ -63,8 +63,8 @@ export function ActivityCard({
       <ToneTile tone={tone}>{icon}</ToneTile>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-          <span className="text-[13px] font-semibold text-k-navy">{title}</span>
-          <span className="text-[12px] text-k-text-2">{when}</span>
+          <span className="text-k-sm font-semibold text-k-navy">{title}</span>
+          <span className="text-k-xs text-k-text-2">{when}</span>
         </div>
         {children}
       </div>

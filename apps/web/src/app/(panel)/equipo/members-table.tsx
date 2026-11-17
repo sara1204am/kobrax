@@ -13,7 +13,7 @@ import { date, time } from '@/lib/format';
 import { daysAgo, isKnownRole, memberActions } from '@/lib/team';
 import { officeLabelOf, officeOptions, type OfficeRow } from '@/lib/offices';
 import { useMemberDialogs } from './member-dialogs';
-import { Avatar, IconAction } from './team-ui';
+import { Avatar, IconAction } from './team-ui';
 import { Select } from '@/components/ui';
 
 const TONE = { active: 'success', pending: 'warning', inactive: 'danger' } as const;
@@ -85,12 +85,12 @@ export function MembersTable({
                 {memberName(m)}
               </Link>
               {m.userId === meId && (
-                <span className="rounded-md bg-k-highlight px-1.5 py-0.5 text-[11px] font-medium text-k-purple">
+                <span className="rounded-md bg-k-highlight px-1.5 py-0.5 text-k-2xs font-medium text-k-purple">
                   {t('you')}
                 </span>
               )}
             </span>
-            <span className="block truncate text-[13px] text-k-text-2">{m.email}</span>
+            <span className="block truncate text-k-sm text-k-text-2">{m.email}</span>
           </span>
         </span>
       ),
@@ -117,7 +117,7 @@ export function MembersTable({
             header: t('columns.office'),
             render: (m: Member) => {
               const label = officeLabelOf(offices, m.branchId);
-              return label ? <span className="text-[13px] text-k-text">{label}</span> : <span className="text-k-muted">—</span>;
+              return label ? <span className="text-k-sm text-k-text">{label}</span> : <span className="text-k-muted">—</span>;
             },
           },
         ]
@@ -138,7 +138,7 @@ export function MembersTable({
     {
       key: 'lastAccess',
       header: t('columns.lastAccess'),
-      render: (m) => <span className="text-[13px] text-k-text-2">{lastAccess(m)}</span>,
+      render: (m) => <span className="text-k-sm text-k-text-2">{lastAccess(m)}</span>,
     },
     {
       key: 'actions',
@@ -267,7 +267,7 @@ function RoleCell({
 
   if (!editable) {
     return (
-      <span className="inline-flex h-10 min-w-[8.5rem] items-center rounded-lg bg-k-bg px-3 text-[14px] text-k-muted">
+      <span className="inline-flex h-10 min-w-[8.5rem] items-center rounded-lg bg-k-bg px-3 text-k-base text-k-muted">
         {label(member.roleName)}
       </span>
     );
@@ -279,7 +279,7 @@ function RoleCell({
       disabled={busy}
       onChange={(e) => onPick(e.target.value)}
       aria-label={label(member.roleName)}
-      className="!h-10 !w-auto !min-w-[8.5rem] !rounded-lg !border !border-k-border !px-2.5 !text-[14px]"
+      className="!h-10 !w-auto !min-w-[8.5rem] !rounded-lg !border !border-k-border !px-2.5 !text-k-base"
     >
       {roles.map((r) => (
         <option key={r.id} value={r.id}>

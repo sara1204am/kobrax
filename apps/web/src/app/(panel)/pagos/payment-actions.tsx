@@ -67,7 +67,7 @@ export function PaymentActions({ credit }: { credit?: PaymentCredit }) {
       {PAYMENT_REQUESTS_ENABLED && credit && (
         <Link
           href={`/pagos/solicitudes/nueva?creditId=${credit.id}`}
-          className="flex h-12 items-center rounded-xl bg-k-navy px-5 text-[15px] font-semibold text-white hover:bg-k-slate"
+          className="flex h-12 items-center rounded-xl bg-k-navy px-5 text-k-md font-semibold text-white hover:bg-k-slate"
         >
           {t('request.cta')}
         </Link>
@@ -252,7 +252,7 @@ export function PaymentModal({
           {/* El aviso va ANTES de confirmar: es el único momento en que el error se puede evitar.
               El ledger no tiene `update` ni `delete`, y no es un olvido de la API. */}
           <p className="text-k-warning-text">{t('register.immutable')}</p>
-          {active.external && <p className="mt-2 text-[14px] text-k-text-2">{t('register.externalHint')}</p>}
+          {active.external && <p className="mt-2 text-k-base text-k-text-2">{t('register.externalHint')}</p>}
           <div className="mt-4 space-y-4">
             <Field label={t('register.credit')}>
               <Input value={active.code ?? active.id} readOnly disabled />
@@ -263,7 +263,7 @@ export function PaymentModal({
                 variant="link"
                 fullWidth={false}
                 onClick={() => setPicked(null)}
-                className="-mt-2 !justify-start !text-[13px] !font-medium !text-k-periwinkle"
+                className="-mt-2 !justify-start !text-k-sm !font-medium !text-k-periwinkle"
               >
                 {t('register.changeCredit')}
               </Button>
@@ -280,8 +280,8 @@ export function PaymentModal({
                     disabled={busy}
                     className="rounded-xl border border-k-border bg-k-bg px-3 py-2 text-left hover:bg-k-highlight"
                   >
-                    <dt className="text-[11px] font-medium uppercase tracking-wide text-k-text-2">{t('register.installmentDue')}</dt>
-                    <dd className="text-[15px] font-semibold text-k-navy">{money(active.suggestedAmount, currency)}</dd>
+                    <dt className="text-k-2xs font-medium uppercase tracking-wide text-k-text-2">{t('register.installmentDue')}</dt>
+                    <dd className="text-k-md font-semibold text-k-navy">{money(active.suggestedAmount, currency)}</dd>
                   </button>
                 )}
                 {active.balance !== undefined && (
@@ -291,8 +291,8 @@ export function PaymentModal({
                     disabled={busy}
                     className="rounded-xl border border-k-border bg-k-bg px-3 py-2 text-left hover:bg-k-highlight"
                   >
-                    <dt className="text-[11px] font-medium uppercase tracking-wide text-k-text-2">{t('register.payoff')}</dt>
-                    <dd className="text-[15px] font-semibold text-k-navy">{money(active.balance, currency)}</dd>
+                    <dt className="text-k-2xs font-medium uppercase tracking-wide text-k-text-2">{t('register.payoff')}</dt>
+                    <dd className="text-k-md font-semibold text-k-navy">{money(active.balance, currency)}</dd>
                   </button>
                 )}
               </dl>
@@ -313,7 +313,7 @@ export function PaymentModal({
             </Field>
             {/* La foto del recibo: en el celular el selector abre la cámara; en el escritorio, el explorador de archivos. */}
             <div>
-              <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-k-text-2">{t('register.receiptPhoto')}</span>
+              <span className="mb-1.5 block text-k-2xs font-medium uppercase tracking-wide text-k-text-2">{t('register.receiptPhoto')}</span>
               <input
                 ref={fileInput}
                 type="file"
@@ -335,12 +335,12 @@ export function PaymentModal({
                   fullWidth={false}
                   disabled={busy || uploading}
                   onClick={() => fileInput.current?.click()}
-                  className="!h-10 !border-dashed !px-4 !text-[13px] !font-medium !text-k-text-2"
+                  className="!h-10 !border-dashed !px-4 !text-k-sm !font-medium !text-k-text-2"
                 >
                   {uploading ? t('register.uploading') : receipt ? t('register.receiptReplace') : t('register.receiptAdd')}
                 </Button>
                 {receipt && (
-                  <span className="flex items-center gap-2 text-[13px] text-k-text-2">
+                  <span className="flex items-center gap-2 text-k-sm text-k-text-2">
                     <span className="max-w-[180px] truncate">{receipt.name}</span>
                     <Button type="button" variant="link" fullWidth={false} onClick={dropReceipt} disabled={busy} className="!inline-flex !font-normal !text-k-danger">
                       {t('register.receiptRemove')}
@@ -348,22 +348,22 @@ export function PaymentModal({
                   </span>
                 )}
               </div>
-              <p className="mt-1 text-[12px] text-k-muted">{t('register.receiptHint')}</p>
+              <p className="mt-1 text-k-xs text-k-muted">{t('register.receiptHint')}</p>
             </div>
             {over && active.balance !== undefined && (
-              <p role="alert" className="-mt-2 text-[13px] text-k-danger">
+              <p role="alert" className="-mt-2 text-k-sm text-k-danger">
                 {t('register.exceeds', { balance: money(active.balance, currency) })}
               </p>
             )}
             {!over && active.suggestedAmount !== undefined && Number(amount) === active.suggestedAmount && (
-              <p className="-mt-2 text-[12px] text-k-muted">{t('register.suggested')}</p>
+              <p className="-mt-2 text-k-xs text-k-muted">{t('register.suggested')}</p>
             )}
 
             <Button
               type="button"
               variant="link"
               fullWidth={false}
-              className="!justify-start !text-[14px] !text-k-slate"
+              className="!justify-start !text-k-base !text-k-slate"
               onClick={() => setMore((m) => !m)}
               aria-expanded={more}
             >
@@ -400,7 +400,7 @@ export function PaymentModal({
           <button type="submit" hidden aria-hidden tabIndex={-1} />
         </form>
       ) : loadingPick ? (
-        <p className="text-[13px] text-k-text-2">{t('register.searching')}</p>
+        <p className="text-k-sm text-k-text-2">{t('register.searching')}</p>
       ) : (
         // Sin crédito de una ficha: se elige acá, persona y después préstamo (como «Nueva tarea»).
         <CreditPicker onPick={(c) => void pick(c)} />

@@ -48,8 +48,8 @@ export function CollectionFields({
 
   return (
     <fieldset className="mt-4 rounded-lg border border-k-border bg-white p-4" disabled={disabled}>
-      <legend className="px-1 text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{t('collection.title')}</legend>
-      <p className="mb-3 text-[12px] text-k-muted">{t('collection.hint')}</p>
+      <legend className="px-1 text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">{t('collection.title')}</legend>
+      <p className="mb-3 text-k-xs text-k-muted">{t('collection.hint')}</p>
 
       <div className="grid gap-4 sm:grid-cols-2">
         {options.length > 0 && (
@@ -95,7 +95,7 @@ export function CollectionFields({
         </Field>
 
         <div className="sm:col-span-2">
-          <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{t('collection.days')}</span>
+          <span className="mb-1 block text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">{t('collection.days')}</span>
           <div className="flex flex-wrap gap-2" role="group" aria-label={t('collection.days')}>
             {WEEK_DAYS.map((d) => {
               const on = value.days.includes(d);
@@ -105,7 +105,7 @@ export function CollectionFields({
                   type="button"
                   aria-pressed={on}
                   onClick={() => toggleDay(d)}
-                  className={`h-9 min-w-9 rounded-lg border px-2 text-[13px] font-medium transition ${on ? 'border-k-purple bg-k-highlight text-k-navy' : 'border-k-border bg-white text-k-text-2'}`}
+                  className={`h-9 min-w-9 rounded-lg border px-2 text-k-sm font-medium transition ${on ? 'border-k-purple bg-k-highlight text-k-navy' : 'border-k-border bg-white text-k-text-2'}`}
                 >
                   {t(`collection.dayShort.${d}`)}
                 </button>
@@ -122,7 +122,7 @@ export function CollectionFields({
       </div>
 
       {error === 'WINDOW_INVALID' && (
-        <p role="alert" className="mt-3 text-[12px] text-k-danger">
+        <p role="alert" className="mt-3 text-k-xs text-k-danger">
           {t('collection.errors.window')}
         </p>
       )}

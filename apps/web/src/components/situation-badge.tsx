@@ -43,14 +43,14 @@ export function SituationBadge({
           {t(situation)}
         </Badge>
         {writtenOff && (
-          <span className="inline-flex items-center gap-1.5 rounded-lg bg-k-navy px-2 py-1 text-[12px] font-medium text-white">
+          <span className="inline-flex items-center gap-1.5 rounded-lg bg-k-navy px-2 py-1 text-k-xs font-medium text-white">
             <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-white" />
             {t('writtenOff')}
           </span>
         )}
       </span>
       {detail && (
-        <span className="inline-flex items-center gap-1.5 text-[12px] text-k-text-2" title={category?.name}>
+        <span className="inline-flex items-center gap-1.5 text-k-xs text-k-text-2" title={category?.name}>
           {category?.color && (
             <span aria-hidden data-testid="category-dot" className="h-2 w-2 rounded-full" style={{ backgroundColor: category.color }} />
           )}

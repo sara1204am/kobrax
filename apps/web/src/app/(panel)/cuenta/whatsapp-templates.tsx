@@ -257,14 +257,14 @@ export function WhatsappTemplates({
         ) : undefined
       }
     >
-      <p className="text-[13px] leading-relaxed text-k-text-2">{t('intro')}</p>
+      <p className="text-k-sm leading-relaxed text-k-text-2">{t('intro')}</p>
 
       {items.length === 0 ? (
         <div className="mt-4 space-y-4">
           <EmptyState title={t('empty')} text={editable ? t('emptyHint') : undefined} />
           {editable && (
             <div className="space-y-2">
-              <p className="text-[13px] text-k-text-2">{t('examples')}</p>
+              <p className="text-k-sm text-k-text-2">{t('examples')}</p>
               {EJEMPLOS.map((e) => (
                 <button
                   key={e.key}
@@ -272,8 +272,8 @@ export function WhatsappTemplates({
                   onClick={() => open({ label: e.label, body: e.body, category: e.category, extra: {} })}
                   className="block w-full rounded-xl border border-k-border bg-white px-4 py-3 text-left hover:bg-k-bg"
                 >
-                  <span className="block text-[14px] font-medium text-k-text">{e.label}</span>
-                  <span className="mt-0.5 block text-[13px] text-k-text-2">{e.body}</span>
+                  <span className="block text-k-base font-medium text-k-text">{e.label}</span>
+                  <span className="mt-0.5 block text-k-sm text-k-text-2">{e.body}</span>
                 </button>
               ))}
             </div>
@@ -301,7 +301,7 @@ export function WhatsappTemplates({
             </div>
 
             {visible.length === 0 ? (
-              <p className="py-6 text-center text-[13px] text-k-muted">{t('noResults')}</p>
+              <p className="py-6 text-center text-k-sm text-k-muted">{t('noResults')}</p>
             ) : (
               <ul className="space-y-2">
                 {visible.map((item) => {
@@ -321,10 +321,10 @@ export function WhatsappTemplates({
                         className="min-w-0 flex-1 rounded-xl px-4 py-3 text-left outline-none focus-visible:shadow-k-focus"
                       >
                         <span className="flex flex-wrap items-center gap-2">
-                          <span className="text-[14px] font-medium text-k-text">{item.label}</span>
+                          <span className="text-k-base font-medium text-k-text">{item.label}</span>
                           {cat && <Badge>{t(`category.${cat}`)}</Badge>}
                         </span>
-                        <span className="mt-0.5 line-clamp-2 block text-[13px] text-k-text-2">
+                        <span className="mt-0.5 line-clamp-2 block text-k-sm text-k-text-2">
                           {item.metadata?.body ?? ''}
                         </span>
                       </button>
@@ -358,8 +358,8 @@ export function WhatsappTemplates({
           <aside aria-label={t('previewTitle')} className="min-w-0 rounded-2xl border border-k-border bg-k-bg p-4 lg:sticky lg:top-4 lg:self-start">
             {selected ? (
               <>
-                <h3 className="text-[15px] font-semibold text-k-navy">{selected.label}</h3>
-                <p className="mb-3 mt-0.5 text-[12px] text-k-muted">{t('previewHint')}</p>
+                <h3 className="text-k-md font-semibold text-k-navy">{selected.label}</h3>
+                <p className="mb-3 mt-0.5 text-k-xs text-k-muted">{t('previewHint')}</p>
                 <MessagePreview body={selected.metadata?.body ?? ''} sample={sample} />
                 {canSend && (
                   <div className="mt-3">
@@ -368,7 +368,7 @@ export function WhatsappTemplates({
                 )}
               </>
             ) : (
-              <p className="py-10 text-center text-[13px] text-k-muted">{t('pickOne')}</p>
+              <p className="py-10 text-center text-k-sm text-k-muted">{t('pickOne')}</p>
             )}
           </aside>
         </div>
@@ -450,13 +450,13 @@ export function WhatsappTemplates({
               </Field>
               <div className="-mt-2 flex items-center justify-between gap-3">
                 <DictationButton onText={(text) => insertText(text, true)} onError={(m) => setError(m)} />
-                <span className="text-[12px] text-k-muted">
+                <span className="text-k-xs text-k-muted">
                   {editing.body.length}/{MAX_BODY}
                 </span>
               </div>
 
               <div>
-                <p className="mb-2 text-[14px] font-medium text-k-text">
+                <p className="mb-2 text-k-base font-medium text-k-text">
                   {editing.category ? t('suggestionsFor', { category: t(`category.${editing.category}`) }) : t('suggestions')}
                 </p>
                 {editing.category ? (
@@ -473,8 +473,8 @@ export function WhatsappTemplates({
                         <div className="rounded-xl border border-k-border bg-white px-3 py-2">
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
-                              <p className="text-[13px] font-medium text-k-text">{sug.label}</p>
-                              <p className="mt-0.5 line-clamp-3 text-[12px] text-k-text-2">{sug.body}</p>
+                              <p className="text-k-sm font-medium text-k-text">{sug.label}</p>
+                              <p className="mt-0.5 line-clamp-3 text-k-xs text-k-text-2">{sug.body}</p>
                             </div>
                             <TextButton
                               type="button"
@@ -490,12 +490,12 @@ export function WhatsappTemplates({
                     );
                   })()
                 ) : (
-                  <p className="text-[12px] text-k-muted">{t('suggestionsPick')}</p>
+                  <p className="text-k-xs text-k-muted">{t('suggestionsPick')}</p>
                 )}
               </div>
 
               <div>
-                <p className="mb-2 text-[14px] font-medium text-k-text">{t('insertVariable')}</p>
+                <p className="mb-2 text-k-base font-medium text-k-text">{t('insertVariable')}</p>
                 <div className="grid grid-cols-2 gap-2">
                   {TEMPLATE_VARIABLES.map((v) => (
                     <button
@@ -506,26 +506,26 @@ export function WhatsappTemplates({
                       onClick={() => insert(v)}
                       className="flex min-h-11 flex-col items-start rounded-xl border border-k-border bg-white px-3 py-2 text-left hover:bg-k-bg focus-visible:shadow-k-focus focus-visible:outline-none"
                     >
-                      <span className="text-[13px] text-k-text">{t(`variable.${v}`)}</span>
-                      <span className="text-[12px] font-medium text-k-purple">{`{{${v}}}`}</span>
+                      <span className="text-k-sm text-k-text">{t(`variable.${v}`)}</span>
+                      <span className="text-k-xs font-medium text-k-purple">{`{{${v}}}`}</span>
                     </button>
                   ))}
                 </div>
-                <p className="mt-2 text-[12px] text-k-muted">{t('insertHint')}</p>
+                <p className="mt-2 text-k-xs text-k-muted">{t('insertHint')}</p>
               </div>
             </div>
 
             <div className="min-w-0 space-y-4 rounded-2xl border border-k-border bg-k-bg p-4">
               <div>
-                <h3 className="text-[15px] font-semibold text-k-navy">{t('previewTitle')}</h3>
-                <p className="mt-0.5 text-[12px] text-k-muted">{t('previewHint')}</p>
+                <h3 className="text-k-md font-semibold text-k-navy">{t('previewTitle')}</h3>
+                <p className="mt-0.5 text-k-xs text-k-muted">{t('previewHint')}</p>
               </div>
               <MessagePreview body={editing.body} sample={sample} />
 
               <div className="space-y-3 border-t border-k-border pt-3">
                 <div>
-                  <h4 className="text-[14px] font-medium text-k-text">{t('sampleTitle')}</h4>
-                  <p className="text-[12px] text-k-muted">{t('sampleHint')}</p>
+                  <h4 className="text-k-base font-medium text-k-text">{t('sampleTitle')}</h4>
+                  <p className="text-k-xs text-k-muted">{t('sampleHint')}</p>
                 </div>
                 {TEMPLATE_VARIABLES.map((v) => (
                   <Field key={v} label={t(`sample.${v}`)}>
@@ -584,7 +584,7 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
       type="button"
       aria-pressed={active}
       onClick={onClick}
-      className={`h-8 rounded-full border px-3 text-[13px] font-medium transition-colors ${
+      className={`h-8 rounded-full border px-3 text-k-sm font-medium transition-colors ${
         active ? 'border-k-navy bg-k-navy text-white' : 'border-k-border bg-white text-k-text-2 hover:bg-k-bg'
       }`}
     >
@@ -609,13 +609,13 @@ function MessagePreview({ body, sample }: { body: string; sample: Sample }) {
   return (
     <div className="space-y-2">
       <div className="rounded-xl bg-k-light-bg p-3" aria-label={t('previewBubble')}>
-        <p className="mb-1 text-center text-[11px] font-medium uppercase tracking-wide text-k-text-2">{t('exampleTag')}</p>
-        <div className="ml-auto max-w-[92%] whitespace-pre-line break-words rounded-xl rounded-tr-sm bg-k-success-bg px-3 py-2 text-[14px] text-k-text">
+        <p className="mb-1 text-center text-k-2xs font-medium uppercase tracking-wide text-k-text-2">{t('exampleTag')}</p>
+        <div className="ml-auto max-w-[92%] whitespace-pre-line break-words rounded-xl rounded-tr-sm bg-k-success-bg px-3 py-2 text-k-base text-k-text">
           {text.trim() ? text : <span className="text-k-muted">{t('previewEmpty')}</span>}
         </div>
       </div>
       {(unknown.length > 0 || missing.length > 0) && (
-        <div role="status" className="rounded-md border-l-[3px] border-k-warning bg-k-warning-bg px-3 py-2 text-[12px] text-k-warning-text">
+        <div role="status" className="rounded-md border-l-[3px] border-k-warning bg-k-warning-bg px-3 py-2 text-k-xs text-k-warning-text">
           {unknown.length > 0 && <p>{t('unknownVars', { names: unknown.map((k) => `{{${k}}}`).join(', ') })}</p>}
           {missing.length > 0 && <p>{t('missingSample', { names: missing.map((k) => `{{${k}}}`).join(', ') })}</p>}
         </div>

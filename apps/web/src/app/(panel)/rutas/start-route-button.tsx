@@ -34,12 +34,12 @@ export function StartRouteButton({ routeId }: { routeId: string }) {
         type="button"
         onClick={() => void start()}
         disabled={busy}
-        className="h-8 rounded-lg bg-k-navy px-3.5 text-[13px] font-medium text-white hover:bg-k-slate disabled:opacity-60"
+        className="h-8 rounded-lg bg-k-navy px-3.5 text-k-sm font-medium text-white hover:bg-k-slate disabled:opacity-60"
       >
         {t('todayBoard.start')}
       </button>
       {error && (
-        <span role="alert" className="max-w-[220px] text-right text-[12px] text-k-danger">
+        <span role="alert" className="max-w-[220px] text-right text-k-xs text-k-danger">
           {error}
         </span>
       )}

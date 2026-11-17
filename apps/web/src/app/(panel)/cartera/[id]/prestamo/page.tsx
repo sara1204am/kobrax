@@ -43,7 +43,7 @@ export default async function PrestamoPage({ params }: { params: { id: string } 
   return (
     <>
       {preview && (
-        <p role="note" className="mb-4 rounded-lg bg-k-highlight px-4 py-3 text-[13px] text-k-periwinkle">
+        <p role="note" className="mb-4 rounded-lg bg-k-highlight px-4 py-3 text-k-sm text-k-periwinkle">
           {t('previewNotice', { count: preview.otherCredits?.count ?? 0, names: preview.otherCredits?.responsibles.map((p) => p.name).join(', ') || '—' })}
         </p>
       )}

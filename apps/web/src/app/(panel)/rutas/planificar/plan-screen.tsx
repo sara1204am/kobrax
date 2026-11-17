@@ -333,7 +333,7 @@ export function PlanScreen({
     <div className="space-y-5">
       <ErrorBanner message={error} />
       {done && (
-        <p role="status" className="rounded-xl border border-k-success bg-k-success-bg px-4 py-3 text-[14px] text-k-text">
+        <p role="status" className="rounded-xl border border-k-success bg-k-success-bg px-4 py-3 text-k-base text-k-text">
           {done}
         </p>
       )}
@@ -341,7 +341,7 @@ export function PlanScreen({
       {/* Llegó con día y cobrador elegidos: se dice para quién es y se ofrece cambiarlo, sin repetir el paso 1. */}
       {!suRuta && withContext.current && !reopened.current && step !== 'date' && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-k-border bg-white px-4 py-3">
-          <p className="text-[14px] font-medium text-k-navy">
+          <p className="text-k-base font-medium text-k-navy">
             {t('context.planningFor', { name: actual ? memberName(actual) : '', date: dayDate(day, locale) })}
           </p>
           <Button
@@ -363,13 +363,13 @@ export function PlanScreen({
           {STEPS.map((s, i) => (
             <li key={s} aria-current={s === step ? 'step' : undefined} className="flex items-center gap-2">
               <span
-                className={`grid h-7 w-7 place-items-center rounded-full text-[13px] font-semibold ${
+                className={`grid h-7 w-7 place-items-center rounded-full text-k-sm font-semibold ${
                   s === step ? 'bg-k-navy text-white' : i < stepIndex ? 'bg-k-success-bg text-k-success' : 'bg-k-bg text-k-text-2'
                 }`}
               >
                 {i < stepIndex ? '✓' : i + 1}
               </span>
-              <span className={`text-[14px] ${s === step ? 'font-semibold text-k-navy' : 'text-k-text-2'}`}>{t(`steps.${s}`)}</span>
+              <span className={`text-k-base ${s === step ? 'font-semibold text-k-navy' : 'text-k-text-2'}`}>{t(`steps.${s}`)}</span>
               {i < STEPS.length - 1 && <span aria-hidden className="mx-1 h-px w-6 bg-k-border" />}
             </li>
           ))}
@@ -383,13 +383,13 @@ export function PlanScreen({
             {renderDateAndCollectors()}
           </Card>
           <Card>
-            <h2 className="text-[16px] font-semibold text-k-navy">{t('alreadyPlanned', { name: actual ? memberName(actual) : '', n: suRuta.totalCases })}</h2>
-            <p className="mt-1 text-[14px] text-k-text-2">{t('alreadyPlannedHint')}</p>
+            <h2 className="text-k-lg font-semibold text-k-navy">{t('alreadyPlanned', { name: actual ? memberName(actual) : '', n: suRuta.totalCases })}</h2>
+            <p className="mt-1 text-k-base text-k-text-2">{t('alreadyPlannedHint')}</p>
 
             <div className="mt-4 flex flex-wrap items-center gap-3">
               {/* 🔴 El camino a esa ruta, acá mismo: hacerle buscar el día y la persona de nuevo es
                   mandarlo a rehacer a mano lo que la pantalla ya sabe. */}
-              <a href={`/rutas/${suRuta.id}`} className="inline-flex h-12 items-center rounded-xl bg-k-navy px-5 text-[15px] font-semibold text-white hover:bg-k-slate">
+              <a href={`/rutas/${suRuta.id}`} className="inline-flex h-12 items-center rounded-xl bg-k-navy px-5 text-k-md font-semibold text-white hover:bg-k-slate">
                 {t('goToRoute')}
               </a>
               {siguiente && (
@@ -408,15 +408,15 @@ export function PlanScreen({
             <>
               <Card>{renderDateAndCollectors()}</Card>
               <Card>
-                <h2 className="text-[16px] font-semibold text-k-navy">{t('visits.title', { n: visits.length })}</h2>
+                <h2 className="text-k-lg font-semibold text-k-navy">{t('visits.title', { n: visits.length })}</h2>
                 {visits.length === 0 ? (
-                  <p className="mt-2 text-[14px] text-k-text-2">{t('visits.none')}</p>
+                  <p className="mt-2 text-k-base text-k-text-2">{t('visits.none')}</p>
                 ) : (
                   <>
                     <div className="mt-3 overflow-x-auto">
-                      <table className="w-full min-w-[520px] text-left text-[14px]">
+                      <table className="w-full min-w-[520px] text-left text-k-base">
                         <thead>
-                          <tr className="border-b border-k-border text-[12px] font-medium text-k-text-2">
+                          <tr className="border-b border-k-border text-k-xs font-medium text-k-text-2">
                             {(['time', 'client', 'credit', 'priority'] as const).map((c) => (
                               <th key={c} scope="col" className="px-3 py-2 font-medium">
                                 {t(`visits.cols.${c}`)}
@@ -438,7 +438,7 @@ export function PlanScreen({
                         </tbody>
                       </table>
                     </div>
-                    <p className="mt-3 flex items-center gap-2 rounded-lg bg-k-info-bg px-3 py-2 text-[13px] text-k-slate">
+                    <p className="mt-3 flex items-center gap-2 rounded-lg bg-k-info-bg px-3 py-2 text-k-sm text-k-slate">
                       <span aria-hidden>ⓘ</span>
                       {t('visits.auto')}
                     </p>
@@ -468,7 +468,7 @@ export function PlanScreen({
                     type="button"
                     onClick={() => setPanelOpen((v) => !v)}
                     aria-expanded={panelOpen}
-                    className={`flex h-11 shrink-0 items-center gap-1.5 rounded-xl border px-4 text-[14px] font-medium ${
+                    className={`flex h-11 shrink-0 items-center gap-1.5 rounded-xl border px-4 text-k-base font-medium ${
                       filtered ? 'border-k-periwinkle bg-k-highlight text-k-periwinkle' : 'border-k-border bg-white text-k-text-2 hover:bg-k-bg'
                     }`}
                   >
@@ -483,13 +483,13 @@ export function PlanScreen({
                 <Card>
                   <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <h2 className="text-[16px] font-semibold text-k-navy">{t('assigning', { name: actual ? memberName(actual) : '' })}</h2>
+                      <h2 className="text-k-lg font-semibold text-k-navy">{t('assigning', { name: actual ? memberName(actual) : '' })}</h2>
                       {/* Cuántos hay de verdad, y cuántos se pueden mirar: la lista tiene techo y se dice. */}
-                      <p className="mt-0.5 text-[13px] text-k-text-2">
+                      <p className="mt-0.5 text-k-sm text-k-text-2">
                         {total > AVAILABLE_LIMIT ? t('foundCapped', { n: total, shown: available.length }) : t('found', { n: total })}
                       </p>
                     </div>
-                    <p className="text-[14px] font-medium tabular-nums text-k-text">{t('picked', { n: picked.length, min: minStops })}</p>
+                    <p className="text-k-base font-medium tabular-nums text-k-text">{t('picked', { n: picked.length, min: minStops })}</p>
                   </div>
 
                   <AvailableList
@@ -509,9 +509,9 @@ export function PlanScreen({
               {/* A cuál de las ubicaciones de cada elegido se va. Lo que no tiene punto se marca y se resuelve acá. */}
               <aside aria-label={t('chosen.title', { n: picked.length })} className="w-full shrink-0 lg:w-80">
                 <div className="rounded-2xl border border-k-border bg-white p-4 shadow-k-card lg:sticky lg:top-4">
-                  <h2 className="text-[15px] font-semibold text-k-navy">{t('chosen.title', { n: picked.length })}</h2>
+                  <h2 className="text-k-md font-semibold text-k-navy">{t('chosen.title', { n: picked.length })}</h2>
                   {picked.length === 0 ? (
-                    <p className="mt-2 text-[13px] text-k-text-2">{t('chosen.empty')}</p>
+                    <p className="mt-2 text-k-sm text-k-text-2">{t('chosen.empty')}</p>
                   ) : (
                     <ul className="mt-3 max-h-[420px] space-y-2 overflow-y-auto">
                       {picked.map((id) => {
@@ -520,9 +520,9 @@ export function PlanScreen({
                         const ok = p.latitude != null && p.longitude != null;
                         return (
                           <li key={id} className={`rounded-xl border px-3 py-2.5 ${ok ? 'border-k-border' : 'border-k-warning bg-k-warning-bg'}`}>
-                            <p className="truncate text-[14px] font-medium text-k-text">{c?.clientName ?? '—'}</p>
-                            <p className={`mt-0.5 text-[12px] ${ok ? 'text-k-text-2' : 'text-k-warning-text'}`}>{ok ? p.label || t('chosen.noLabel') : t('chosen.noPoint')}</p>
-                            <button type="button" onClick={() => setDialogFor(id)} className="mt-1.5 text-[12px] font-medium text-k-periwinkle hover:underline">
+                            <p className="truncate text-k-base font-medium text-k-text">{c?.clientName ?? '—'}</p>
+                            <p className={`mt-0.5 text-k-xs ${ok ? 'text-k-text-2' : 'text-k-warning-text'}`}>{ok ? p.label || t('chosen.noLabel') : t('chosen.noPoint')}</p>
+                            <button type="button" onClick={() => setDialogFor(id)} className="mt-1.5 text-k-xs font-medium text-k-periwinkle hover:underline">
                               {ok ? t('chosen.change') : t('chosen.add')}
                             </button>
                           </li>
@@ -550,7 +550,7 @@ export function PlanScreen({
                 height={420}
                 counter={area ? t('mapInArea', { n: puntos.length, km: area.radiusKm }) : t('mapPoints', { n: puntos.length, total: picked.length })}
               />
-              <p className="rounded-xl border border-k-border bg-k-bg px-4 py-2.5 text-[13px] text-k-text-2">{t('orderHint')}</p>
+              <p className="rounded-xl border border-k-border bg-k-bg px-4 py-2.5 text-k-sm text-k-text-2">{t('orderHint')}</p>
             </>
           )}
 
@@ -571,15 +571,15 @@ export function PlanScreen({
                       if (target === 'date') reopened.current = true;
                       setStep(target);
                     }}
-                    className="h-11 rounded-xl border border-k-border bg-white px-5 text-[14px] font-medium text-k-text-2 hover:bg-k-bg"
+                    className="h-11 rounded-xl border border-k-border bg-white px-5 text-k-base font-medium text-k-text-2 hover:bg-k-bg"
                   >
                     {step === 'preview' ? t('backToEdit') : t('back')}
                   </button>
                 )}
                 {/* Avisa, no bloquea: el mínimo es una expectativa del negocio, no una regla del sistema. */}
-                {corto && step !== 'date' && <span className="text-[13px] text-k-warning-text">{t('belowMin', { min: minStops })}</span>}
+                {corto && step !== 'date' && <span className="text-k-sm text-k-warning-text">{t('belowMin', { min: minStops })}</span>}
                 {missing.length > 0 && (step === 'clients' || step === 'order') && (
-                  <span role="alert" className="text-[13px] text-k-danger">
+                  <span role="alert" className="text-k-sm text-k-danger">
                     {t('missingPoints', { n: missing.length })}
                   </span>
                 )}
@@ -635,7 +635,7 @@ export function PlanScreen({
          */}
         <div className="flex flex-wrap items-end gap-4">
           <div className="w-full sm:w-52">
-            <label htmlFor="planDate" className="mb-2 flex h-5 items-center text-[14px] font-medium text-k-text">
+            <label htmlFor="planDate" className="mb-2 flex h-5 items-center text-k-base font-medium text-k-text">
               {t('date')}
             </label>
             <input
@@ -649,7 +649,7 @@ export function PlanScreen({
           </div>
 
           <div className="w-full sm:w-52">
-            <span className="mb-2 flex h-5 items-center gap-1.5 text-[14px] font-medium text-k-text">
+            <span className="mb-2 flex h-5 items-center gap-1.5 text-k-base font-medium text-k-text">
               <label htmlFor="minStops">{t('minStops')}</label>
               <InfoTip label={t('minStops')}>{t('minStopsHint')}</InfoTip>
             </span>
@@ -665,7 +665,7 @@ export function PlanScreen({
                 type="button"
                 onClick={() => go({ date: d })}
                 aria-pressed={d === day}
-                className={`h-9 rounded-lg border px-3 text-[13px] ${d === day ? 'border-k-navy bg-k-navy text-white' : 'border-k-border bg-white text-k-text-2 hover:bg-k-bg'}`}
+                className={`h-9 rounded-lg border px-3 text-k-sm ${d === day ? 'border-k-navy bg-k-navy text-white' : 'border-k-border bg-white text-k-text-2 hover:bg-k-bg'}`}
               >
                 {i === 0 ? t('dayChips.today') : i === 1 ? t('dayChips.tomorrow') : d.slice(8, 10) + '/' + d.slice(5, 7)}
               </button>
@@ -683,7 +683,7 @@ export function PlanScreen({
                   type="button"
                   onClick={() => go({ collectorId: c.userId })}
                   aria-current={yo ? 'true' : undefined}
-                  className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-[13px] ${
+                  className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-k-sm ${
                     yo ? 'border-k-navy bg-k-navy text-white' : 'border-k-border bg-white text-k-text hover:bg-k-bg'
                   }`}
                 >
@@ -703,4 +703,4 @@ export function PlanScreen({
 }
 
 const INPUT =
-  'h-11 rounded-xl border border-k-border bg-white px-3 text-[14px] text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus';
+  'h-11 rounded-xl border border-k-border bg-white px-3 text-k-base text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus';

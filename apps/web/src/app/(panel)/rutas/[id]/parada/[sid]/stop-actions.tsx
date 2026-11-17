@@ -34,8 +34,8 @@ export function StopRecordButton({
         onClick={() => setOpen(true)}
         className={
           variant === 'primary'
-            ? 'h-10 rounded-xl bg-k-navy px-4 text-[14px] font-semibold text-white hover:bg-k-slate'
-            : 'h-8 rounded-lg border border-k-border bg-white px-3 text-[13px] font-medium text-k-slate hover:bg-k-bg'
+            ? 'h-10 rounded-xl bg-k-navy px-4 text-k-base font-semibold text-white hover:bg-k-slate'
+            : 'h-8 rounded-lg border border-k-border bg-white px-3 text-k-sm font-medium text-k-slate hover:bg-k-bg'
         }
       >
         {correctsVisitId ? t('fix') : t('register')}

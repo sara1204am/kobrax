@@ -37,23 +37,23 @@ export async function AccountSummary({
 
   return (
     <section aria-label={t('sections.summary')}>
-      <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{t('sections.summary')}</h2>
+      <h2 className="mb-2 text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">{t('sections.summary')}</h2>
       <div className="rounded-2xl bg-k-navy p-5 text-white">
-        <p className="text-[13px] text-white/70">{t('summary.balance')}</p>
+        <p className="text-k-sm text-white/70">{t('summary.balance')}</p>
         <p className="mt-1 text-[32px] font-semibold leading-tight tabular-nums">
           {money(client.totalDebt ?? 0, currency)}
         </p>
 
         <div className="mt-4 grid grid-cols-2 gap-4 border-t border-white/15 pt-4">
           <div>
-            <p className="text-[11px] uppercase tracking-wide text-white/60">{t('summary.credits')}</p>
-            <p className="mt-0.5 text-[20px] font-semibold tabular-nums">{client.creditCount ?? 0}</p>
+            <p className="text-k-2xs uppercase tracking-wide text-white/60">{t('summary.credits')}</p>
+            <p className="mt-0.5 text-k-2xl font-semibold tabular-nums">{client.creditCount ?? 0}</p>
           </div>
           <div>
-            <p className="text-[11px] uppercase tracking-wide text-white/60">{t('summary.overdue')}</p>
+            <p className="text-k-2xs uppercase tracking-wide text-white/60">{t('summary.overdue')}</p>
             {/* En verde cuando es cero: es la única cifra de la ficha donde cero es una buena
                 noticia, y decirlo con color ahorra leer el número. */}
-            <p className={`mt-0.5 text-[20px] font-semibold tabular-nums ${vencidos === 0 ? 'text-k-success' : 'text-k-danger'}`}>
+            <p className={`mt-0.5 text-k-2xl font-semibold tabular-nums ${vencidos === 0 ? 'text-k-success' : 'text-k-danger'}`}>
               {vencidos}
             </p>
           </div>

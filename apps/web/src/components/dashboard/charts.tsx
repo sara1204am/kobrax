@@ -80,7 +80,7 @@ export function Donut({
           x={size / 2}
           y={size / 2 + 5}
           textAnchor="middle"
-          className="fill-k-navy text-[15px] font-semibold"
+          className="fill-k-navy text-k-md font-semibold"
         >
           {center}
         </text>
@@ -94,7 +94,7 @@ export function Legend({ slices }: { slices: Slice[] }) {
   return (
     <ul className="min-w-0 flex-1 space-y-1.5">
       {slices.map((s) => (
-        <li key={s.key} className="flex items-baseline gap-2 text-[12px]">
+        <li key={s.key} className="flex items-baseline gap-2 text-k-xs">
           <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: s.color }} aria-hidden />
           <span className="min-w-0 flex-1 truncate text-k-text-2">{s.label}</span>
           <span className="shrink-0 font-medium tabular-nums text-k-text">{s.display}</span>
@@ -118,13 +118,13 @@ export function Bars({ slices, height = 132 }: { slices: Slice[]; height?: numbe
     <div className="flex items-end gap-2" style={{ height }}>
       {slices.map((s) => (
         <div key={s.key} className="flex min-w-0 flex-1 flex-col items-center justify-end gap-1.5">
-          <span className="text-[10px] tabular-nums text-k-text-2">{s.value > 0 ? s.display : ''}</span>
+          <span className="text-k-3xs tabular-nums text-k-text-2">{s.value > 0 ? s.display : ''}</span>
           <div
             className="w-full rounded-t"
             style={{ backgroundColor: s.color, height: `${Math.max(2, (s.value / max) * (height - 34))}px` }}
             title={`${s.label}: ${s.display}`}
           />
-          <span className="w-full truncate text-center text-[10px] text-k-muted">{s.label}</span>
+          <span className="w-full truncate text-center text-k-3xs text-k-muted">{s.label}</span>
         </div>
       ))}
     </div>

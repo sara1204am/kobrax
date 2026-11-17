@@ -87,17 +87,17 @@ export function PreferencesForm({ account }: { account: AccountInfo }) {
     <form onSubmit={save} className="space-y-6">
       <ErrorBanner message={error} />
       <Section title={t('title')} inner="space-y-5 p-6">
-        <p className="text-[13px] leading-relaxed text-k-text-2">{t('intro')}</p>
+        <p className="text-k-sm leading-relaxed text-k-text-2">{t('intro')}</p>
 
         <fieldset disabled={!editable} className="space-y-2">
-          <legend className="text-[14px] font-medium text-k-text">{t('workDays')}</legend>
+          <legend className="text-k-base font-medium text-k-text">{t('workDays')}</legend>
           <div className="flex flex-wrap gap-2">
             {days.map((day) => {
               const on = prefs.workDays.includes(day);
               return (
                 <label
                   key={day}
-                  className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-[13px] capitalize ${
+                  className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-k-sm capitalize ${
                     on ? 'border-k-periwinkle bg-k-highlight text-k-navy' : 'border-k-border bg-white text-k-text-2'
                   }`}
                 >
@@ -131,7 +131,7 @@ export function PreferencesForm({ account }: { account: AccountInfo }) {
         </div>
 
         {problem && (
-          <p role="alert" className="rounded-xl bg-k-danger-bg px-4 py-3 text-[13px] text-k-danger">
+          <p role="alert" className="rounded-xl bg-k-danger-bg px-4 py-3 text-k-sm text-k-danger">
             {t(`problems.${problem}`)}
           </p>
         )}
@@ -159,7 +159,7 @@ export function PreferencesForm({ account }: { account: AccountInfo }) {
           </Field>
         </div>
 
-        <p className="text-[12px] text-k-muted">{t('scope')}</p>
+        <p className="text-k-xs text-k-muted">{t('scope')}</p>
       </Section>
 
       {editable && !managed && (

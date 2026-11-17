@@ -72,9 +72,9 @@ export async function PaymentSummary({
     <dl aria-label={t('title')} className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
       {cards.map((c) => (
         <div key={c.key} title={c.rule} className={`min-w-0 rounded-2xl border px-4 py-3 ${LOOK[c.key]!.box}`}>
-          <dd className={`truncate text-[22px] font-semibold leading-tight tabular-nums ${LOOK[c.key]!.value}`}>{c.value}</dd>
-          <dt className={`mt-0.5 text-[12px] font-medium ${LOOK[c.key]!.label}`}>{c.label}</dt>
-          <p className={`mt-0.5 truncate text-[12px] ${LOOK[c.key]!.hint}`}>{c.hint}</p>
+          <dd className={`truncate text-k-3xl font-semibold leading-tight tabular-nums ${LOOK[c.key]!.value}`}>{c.value}</dd>
+          <dt className={`mt-0.5 text-k-xs font-medium ${LOOK[c.key]!.label}`}>{c.label}</dt>
+          <p className={`mt-0.5 truncate text-k-xs ${LOOK[c.key]!.hint}`}>{c.hint}</p>
         </div>
       ))}
     </dl>

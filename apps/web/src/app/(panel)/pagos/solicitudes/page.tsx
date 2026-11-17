@@ -31,7 +31,7 @@ export default async function SolicitudesPage({ searchParams }: { searchParams: 
   return (
     <>
       <PageHeader title={t('requests.listTitle')} subtitle={t('requests.listSubtitle')} />
-      <Link href="/pagos" className="mb-4 block text-[14px] font-medium text-k-purple hover:underline">
+      <Link href="/pagos" className="mb-4 block text-k-base font-medium text-k-purple hover:underline">
         {t('allPayments')}
       </Link>
       <RequestsTable

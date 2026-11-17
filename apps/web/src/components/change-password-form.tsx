@@ -45,8 +45,8 @@ export function ChangePasswordForm() {
   if (done) {
     return (
       <div>
-        <p className="text-[15px] font-medium text-k-text">{t('changePassword.doneTitle')}</p>
-        <p className="mt-2 text-[13px] text-k-text-2">{t('changePassword.doneText')}</p>
+        <p className="text-k-md font-medium text-k-text">{t('changePassword.doneTitle')}</p>
+        <p className="mt-2 text-k-sm text-k-text-2">{t('changePassword.doneText')}</p>
       </div>
     );
   }
@@ -83,7 +83,7 @@ export function ChangePasswordForm() {
           required
         />
       </Field>
-      {mismatch && <p className="text-[12px] text-k-danger">{t('changePassword.mismatch')}</p>}
+      {mismatch && <p className="text-k-xs text-k-danger">{t('changePassword.mismatch')}</p>}
       <Button type="submit" loading={loading} disabled={!canSubmit}>
         {t('changePassword.submit')}
       </Button>

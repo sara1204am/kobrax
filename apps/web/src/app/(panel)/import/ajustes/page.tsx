@@ -37,7 +37,7 @@ export default async function ImportSettingsPage() {
 
   return (
     <>
-      <Link href="/import" className="mb-3 inline-block text-[13px] font-medium text-k-purple hover:underline">
+      <Link href="/import" className="mb-3 inline-block text-k-sm font-medium text-k-purple hover:underline">
         ← {t('setup.backToRun')}
       </Link>
       <PageHeader title={t('setup.title')} subtitle={t('setup.subtitle')} />
@@ -48,7 +48,7 @@ export default async function ImportSettingsPage() {
         el servidor igual rechaza el cambio (IMPORT_CONFIG_FORBIDDEN).
       */}
       {!body.data.viewer.canConfigure && (
-        <p className="mb-4 rounded-xl bg-k-warning-bg px-4 py-3 text-[13px] text-k-warning-text">{t('setup.readOnly')}</p>
+        <p className="mb-4 rounded-xl bg-k-warning-bg px-4 py-3 text-k-sm text-k-warning-text">{t('setup.readOnly')}</p>
       )}
       <fieldset disabled={!body.data.viewer.canConfigure} className="m-0 min-w-0 border-0 p-0">
         {/* F13: el alcance «oficina» es un nodo del árbol (incluye lo que cuelga de él) y se lee con su ruta completa. Con una sola oficina no se ofrece. */}

@@ -89,12 +89,12 @@ export function BillingForm({ account }: { account: AccountInfo }) {
     <form onSubmit={save} className="space-y-6">
       <ErrorBanner message={error} />
       {missing.length > 0 && (
-        <div role="alert" className="rounded-xl border border-k-warning bg-k-warning-bg px-4 py-3 text-[13px] text-k-warning-text">
+        <div role="alert" className="rounded-xl border border-k-warning bg-k-warning-bg px-4 py-3 text-k-sm text-k-warning-text">
           <span className="font-semibold">{t('missingTitle')}</span> {t('missingText', { fields: missing.map((k) => t(k)).join(', ') })}
         </div>
       )}
       <Section title={t('title')} inner="space-y-5 p-6">
-        <p className="text-[13px] leading-relaxed text-k-text-2">{t('intro')}</p>
+        <p className="text-k-sm leading-relaxed text-k-text-2">{t('intro')}</p>
         <Field label={t('legalName')} hint={t('legalNameHint')}>
           <Input value={form.legalName} maxLength={BILLING_MAX.legalName} disabled={!editable} onChange={(e) => setForm({ ...form, legalName: e.target.value })} />
         </Field>

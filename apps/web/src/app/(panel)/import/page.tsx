@@ -46,7 +46,7 @@ export default async function ImportPage({ searchParams }: { searchParams: Recor
         actions={
           <Link
             href="/import/ajustes"
-            className="min-h-[40px] rounded-xl border border-k-border px-4 py-2 text-[14px] font-medium text-k-text-2 hover:bg-k-bg"
+            className="min-h-[40px] rounded-xl border border-k-border px-4 py-2 text-k-base font-medium text-k-text-2 hover:bg-k-bg"
           >
             {t('settings.link')}
           </Link>
@@ -61,8 +61,8 @@ export default async function ImportPage({ searchParams }: { searchParams: Recor
         />
 
         <section className="space-y-2">
-          <h2 className="text-[16px] font-semibold text-k-navy">{t('history.title')}</h2>
-          <p className="text-[13px] text-k-text-2">{t('history.hint')}</p>
+          <h2 className="text-k-lg font-semibold text-k-navy">{t('history.title')}</h2>
+          <p className="text-k-sm text-k-text-2">{t('history.hint')}</p>
           {runs.status === 200 && runs.body.data ? (
             <ImportHistoryTable
               rows={runs.body.data}

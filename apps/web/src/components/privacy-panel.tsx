@@ -61,13 +61,13 @@ export function PrivacyPanel({ overview }: { overview: LegalOverview }) {
 
       <Section title={t('documents.title')} inner="p-4" description={t('documents.text')}>
         {state.acceptances.length === 0 ? (
-          <p className="text-[13px] text-k-text-2">{t('documents.empty')}</p>
+          <p className="text-k-sm text-k-text-2">{t('documents.empty')}</p>
         ) : (
           <ul className="divide-y divide-k-border">
             {state.acceptances.map((a) => {
               const page = PAGE_OF_TYPE[a.type];
               return (
-                <li key={a.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2.5 text-[13px]">
+                <li key={a.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2.5 text-k-sm">
                   <div className="min-w-0">
                     <p className="font-medium text-k-text">
                       {a.title} · {t('documents.version', { version: a.version })}
@@ -87,7 +87,7 @@ export function PrivacyPanel({ overview }: { overview: LegalOverview }) {
             })}
           </ul>
         )}
-        <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[13px]">
+        <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-k-sm">
           <span className="text-k-muted">{t('documents.current')}:</span>
           {(['terminos', 'privacidad', 'cookies'] as const).map((path) => (
             <a key={path} href={`/${path}`} target="_blank" rel="noopener noreferrer" className={LINK}>
@@ -99,7 +99,7 @@ export function PrivacyPanel({ overview }: { overview: LegalOverview }) {
 
       {state.history.length > 0 && (
         <Section title={t('history.title')} inner="p-4">
-          <ul className="space-y-1 text-[13px] text-k-text-2">
+          <ul className="space-y-1 text-k-sm text-k-text-2">
             {state.history.map((h) => (
               <li key={h.id}>
                 {t(h.status === 'GRANTED' ? 'history.granted' : 'history.withdrawn')} · {dateTime(h.recordedAt)} ·{' '}

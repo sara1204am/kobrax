@@ -20,7 +20,7 @@ export function PasswordChecklist({ password }: { password: string }) {
       {checkPassword(password).map((c) => (
         <li
           key={c.id}
-          className={`flex items-center gap-2 text-[12px] ${c.passed ? 'text-k-success' : 'text-k-muted'}`}
+          className={`flex items-center gap-2 text-k-xs ${c.passed ? 'text-k-success' : 'text-k-muted'}`}
         >
           <span aria-hidden>{c.passed ? '✓' : '○'}</span>
           {t(c.id, { min: PASSWORD_POLICY.minLength })}

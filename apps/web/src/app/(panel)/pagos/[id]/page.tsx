@@ -86,8 +86,8 @@ export default async function PagoPage({ params }: { params: { id: string } }) {
       <header className="flex flex-wrap items-start justify-between gap-4 border-b border-k-border px-6 py-5">
         <div className="min-w-0">
           <h1 className="text-[28px] font-semibold leading-tight text-k-navy">{title}</h1>
-          {who && <p className="mt-1 text-[16px] text-k-text-2">{who}</p>}
-          <p className="mt-0.5 text-[14px] text-k-text-2">
+          {who && <p className="mt-1 text-k-lg text-k-text-2">{who}</p>}
+          <p className="mt-0.5 text-k-base text-k-text-2">
             {t('detail.registeredLine', { date: dateTime(payment.paymentDate, locale), name: registeredBy })}
           </p>
         </div>
@@ -97,20 +97,20 @@ export default async function PagoPage({ params }: { params: { id: string } }) {
       <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
         {/* El monto y lo que lo identifica: lo primero que se busca en un pago. */}
         <section className="flex flex-col rounded-2xl bg-k-navy p-6 text-white">
-          <p className="text-[13px] text-k-light-bg">{t('detail.amount')}</p>
+          <p className="text-k-sm text-k-light-bg">{t('detail.amount')}</p>
           <p className="mt-1 text-[40px] font-semibold leading-tight tabular-nums">{money(payment.amount, currency)}</p>
 
           <div className="mt-5 border-t border-white/20 pt-4">
-            <p className="text-[13px] text-k-light-bg">{t('detail.method')}</p>
-            <p className="mt-1 flex items-center gap-2.5 text-[18px] font-medium">
+            <p className="text-k-sm text-k-light-bg">{t('detail.method')}</p>
+            <p className="mt-1 flex items-center gap-2.5 text-k-xl font-medium">
               <MethodIcon method={payment.method} />
               {t(`method.${payment.method}`)}
             </p>
           </div>
 
           <div className="mt-4 border-t border-white/20 pt-4">
-            <p className="text-[13px] text-k-light-bg">{t('detail.receiptRef')}</p>
-            <p className="mt-1 break-all text-[18px] font-medium">{payment.receiptReference ?? '—'}</p>
+            <p className="text-k-sm text-k-light-bg">{t('detail.receiptRef')}</p>
+            <p className="mt-1 break-all text-k-xl font-medium">{payment.receiptReference ?? '—'}</p>
           </div>
         </section>
 
@@ -136,7 +136,7 @@ export default async function PagoPage({ params }: { params: { id: string } }) {
         </dl>
       </div>
 
-      <nav aria-label={t('detail.links')} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-6 pb-4 pt-2 text-[14px] font-medium">
+      <nav aria-label={t('detail.links')} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-6 pb-4 pt-2 text-k-base font-medium">
         {credit?.clientId && (
           <>
             <Link href={`/cartera/${credit.clientId}/credito/${payment.creditId}`} className="text-k-periwinkle hover:underline">
@@ -162,7 +162,7 @@ export default async function PagoPage({ params }: { params: { id: string } }) {
       </nav>
 
       <div className="px-4 pb-4">
-        <p role="note" className="flex items-center gap-3 rounded-xl bg-k-info-bg px-4 py-3 text-[14px] text-k-text-2">
+        <p role="note" className="flex items-center gap-3 rounded-xl bg-k-info-bg px-4 py-3 text-k-base text-k-text-2">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden className="shrink-0 text-k-periwinkle">
             <circle cx="12" cy="12" r="9" />
             <path d="M12 11v5M12 8h.01" />
@@ -178,8 +178,8 @@ export default async function PagoPage({ params }: { params: { id: string } }) {
 function Cell({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="min-w-0 bg-white px-5 py-4">
-      <dt className="text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{label}</dt>
-      <dd className="mt-1.5 break-words text-[16px] font-medium text-k-navy">{children}</dd>
+      <dt className="text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">{label}</dt>
+      <dd className="mt-1.5 break-words text-k-lg font-medium text-k-navy">{children}</dd>
     </div>
   );
 }

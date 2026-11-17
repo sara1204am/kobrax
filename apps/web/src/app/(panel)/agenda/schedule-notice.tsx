@@ -27,7 +27,7 @@ export function ScheduleNotice({ date, time }: { date: string; time?: string }) 
   if (notes.length === 0) return null;
 
   return (
-    <p role="status" className="rounded-xl border border-k-warning bg-k-warning-bg px-3 py-2 text-[12px] text-k-warning-text">
+    <p role="status" className="rounded-xl border border-k-warning bg-k-warning-bg px-3 py-2 text-k-xs text-k-warning-text">
       {notes.join(' ')}
     </p>
   );

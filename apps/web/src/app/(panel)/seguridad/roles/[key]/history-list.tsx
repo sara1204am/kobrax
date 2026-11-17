@@ -5,7 +5,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import type { RoleHistoryPage } from '@kobrax/shared';
 import { EmptyState } from '@/components/panel-ui';
 import { dateTime } from '@/lib/format';
-import { permissionKey } from '@/lib/roles';
+import { permissionKey } from '@/lib/roles';
 import { Button } from '@/components/ui';
 
 /** El historial de un rol (vista E): quién, cuándo, qué se añadió o quitó y por qué. Pagina por cursor. */
@@ -35,7 +35,7 @@ export function HistoryList({ roleKey, initial, timezone }: { roleKey: string; i
     <div className="space-y-3">
       <ul className="space-y-2">
         {page.items.map((e) => (
-          <li key={e.id} className="rounded-lg border border-k-border bg-white p-3 text-[13px]">
+          <li key={e.id} className="rounded-lg border border-k-border bg-white p-3 text-k-sm">
             <p className="text-k-text">
               <span className="font-medium">{dateTime(e.at, locale, timezone ?? undefined)}</span>
               {' · '}
@@ -59,12 +59,12 @@ export function HistoryList({ roleKey, initial, timezone }: { roleKey: string; i
         ))}
       </ul>
       {failed && (
-        <p role="alert" className="text-[13px] text-k-danger">
+        <p role="alert" className="text-k-sm text-k-danger">
           {t('loadMore')} ✗
         </p>
       )}
       {page.nextCursor && (
-        <Button type="button" onClick={() => void more()} disabled={busy} variant="ghost" fullWidth={false} className="!h-10 !px-4 !text-[14px] !font-medium">
+        <Button type="button" onClick={() => void more()} disabled={busy} variant="ghost" fullWidth={false} className="!h-10 !px-4 !text-k-base !font-medium">
           {t('loadMore')}
         </Button>
       )}

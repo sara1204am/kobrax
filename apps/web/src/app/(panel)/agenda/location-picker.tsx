@@ -229,7 +229,7 @@ export function LocationPicker({
 
       {/* Qué es y de quién: una opción larga se corta en el desplegable, y esto es lo que decide a dónde se va. */}
       {elegida && (
-        <p className="text-[13px] text-k-text-2">
+        <p className="text-k-sm text-k-text-2">
           <span className="font-medium text-k-text">{t('create.locationDetail', { type: tipo(elegida), owner: quien(elegida) })}</span>
           {elegida.address ? ` — ${elegida.address}` : ''}
         </p>
@@ -252,7 +252,7 @@ export function LocationPicker({
        */}
       {elegida && !conPunto && !creando && (
         <div className="space-y-3 rounded-xl border border-k-warning bg-k-warning-bg p-4">
-          <p className="text-[13px] text-k-warning-text">{t('create.noPoint')}</p>
+          <p className="text-k-sm text-k-warning-text">{t('create.noPoint')}</p>
           <ErrorBanner message={error} />
           <MapPicker
             latitude={punto?.latitude}
@@ -327,7 +327,7 @@ export function LocationPicker({
             center={cerca}
             hint={t('create.mapPickHint')}
           />
-          <p className="text-[12px] text-k-text-2">
+          <p className="text-k-xs text-k-text-2">
             {coord(form.latitude) != null && coord(form.longitude) != null
               ? t('create.pinAt', { lat: form.latitude, lng: form.longitude })
               : t('create.pinHint')}

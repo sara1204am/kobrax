@@ -51,7 +51,7 @@ export default async function BitacoraPage({
         actions={
           <Link
             href={`/cartera/${params.id}`}
-            className="flex h-9 items-center rounded-lg border border-k-border bg-white px-3 text-[13px] font-medium text-k-text-2 hover:bg-k-bg"
+            className="flex h-9 items-center rounded-lg border border-k-border bg-white px-3 text-k-sm font-medium text-k-text-2 hover:bg-k-bg"
           >
             {t('backToClient')}
           </Link>
@@ -64,7 +64,7 @@ export default async function BitacoraPage({
           así que el `DataTable` acá sería traer una tabla entera para dibujar dos botones. */}
       {meta.pages > 1 && (
         <nav className="mt-4 flex items-center justify-between gap-3" aria-label={t('sections.timeline')}>
-          <p className="text-[13px] text-k-text-2">{t('page', { page: meta.page, pages: meta.pages })}</p>
+          <p className="text-k-sm text-k-text-2">{t('page', { page: meta.page, pages: meta.pages })}</p>
           <span className="flex gap-2">
             <PageLink id={params.id} page={meta.page - 1} disabled={meta.page <= 1} label={t('previous')} />
             <PageLink id={params.id} page={meta.page + 1} disabled={meta.page >= meta.pages} label={t('next')} />
@@ -76,7 +76,7 @@ export default async function BitacoraPage({
 }
 
 function PageLink({ id, page, disabled, label }: { id: string; page: number; disabled: boolean; label: string }) {
-  const clase = 'min-h-[36px] rounded-lg border border-k-border px-3 text-[13px] font-medium';
+  const clase = 'min-h-[36px] rounded-lg border border-k-border px-3 text-k-sm font-medium';
   // Deshabilitado es un `<span>`, no un `<a>` apagado: un link que no lleva a ningún lado igual se
   // puede tocar con el teclado y confunde a quien navega sin ver.
   if (disabled) return <span className={`${clase} flex items-center text-k-muted opacity-40`}>{label}</span>;

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { PhotoViewer } from '@/components/photo-viewer';
 import { RADIUS_KM } from '@/lib/plan';
-import { BADGE_CLASS, PointsMap, type MapPoint, type PinTone, type PointBadge } from './points-map';
+import { BADGE_CLASS, PointsMap, type MapPoint, type PinTone, type PointBadge } from './points-map';
 import { Button, Select } from '@/components/ui';
 
 export interface PlanArea {
@@ -147,7 +147,7 @@ export function MapPanel({
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-[13px] text-k-text-2">{counter}</p>
+        <p className="text-k-sm text-k-text-2">{counter}</p>
 
         <div className="flex flex-wrap items-center gap-2">
           {/*
@@ -163,7 +163,7 @@ export function MapPanel({
                 if (primero) onArea({ latitude: primero.latitude, longitude: primero.longitude, radiusKm: 1 });
               }}
               aria-pressed={area != null}
-              className={`h-8 rounded-lg border px-3 text-[13px] font-medium ${
+              className={`h-8 rounded-lg border px-3 text-k-sm font-medium ${
                 area
                   ? 'border-k-periwinkle bg-k-highlight text-k-periwinkle'
                   : 'border-k-border bg-white text-k-text-2 hover:bg-k-bg'
@@ -174,12 +174,12 @@ export function MapPanel({
           )}
 
           {area && !noArea && (
-            <label className="flex items-center gap-1.5 text-[13px] text-k-text-2">
+            <label className="flex items-center gap-1.5 text-k-sm text-k-text-2">
               {t('areaRadius')}
               <Select
                 value={area.radiusKm}
                 onChange={(e) => onArea({ ...area, radiusKm: Number(e.target.value) })}
-                className="!h-8 !w-auto !rounded-lg !border !border-k-border !px-2 !text-[13px]"
+                className="!h-8 !w-auto !rounded-lg !border !border-k-border !px-2 !text-k-sm"
               >
                 {RADIUS_KM.map((km) => (
                   <option key={km} value={km}>
@@ -197,7 +197,7 @@ export function MapPanel({
               type="button"
               onClick={() => setShowOrder((v) => !v)}
               aria-pressed={showOrder}
-              className={`h-8 rounded-lg border px-3 text-[13px] font-medium ${
+              className={`h-8 rounded-lg border px-3 text-k-sm font-medium ${
                 showOrder ? 'border-k-navy bg-k-navy text-white' : 'border-k-border bg-white text-k-text-2 hover:bg-k-bg'
               }`}
             >
@@ -230,7 +230,7 @@ export function MapPanel({
           <div className={`flex w-full shrink-0 flex-col gap-3 ${listWide ? 'lg:w-[26rem]' : 'lg:w-80'}`}>
             {listOpen && (
               <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-k-border bg-white lg:h-[var(--map-h)]">
-                <p className="border-b border-k-border bg-k-bg px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-k-text-2">
+                <p className="border-b border-k-border bg-k-bg px-4 py-2 text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">
                   {listTitle ?? t('routeOrder', { n: order.length })}
                 </p>
                 <ol className="max-h-72 min-h-0 flex-1 divide-y divide-k-border overflow-y-auto lg:max-h-none">
@@ -253,18 +253,18 @@ export function MapPanel({
                       }}
                       onMouseEnter={() => setHover(o.id)}
                       onMouseLeave={() => setHover(null)}
-                      className={`px-3 py-3 text-[13px] ${hover === o.id ? 'bg-k-highlight' : ''} ${
+                      className={`px-3 py-3 text-k-sm ${hover === o.id ? 'bg-k-highlight' : ''} ${
                         onReorder && !o.locked ? 'cursor-grab active:cursor-grabbing' : ''
                       }`}
                     >
                       <div className="flex items-start gap-2">
                         {onReorder && !o.locked && (
-                          <span aria-hidden className="mt-1 shrink-0 select-none text-[14px] leading-none text-k-muted">
+                          <span aria-hidden className="mt-1 shrink-0 select-none text-k-base leading-none text-k-muted">
                             ⠿
                           </span>
                         )}
                         <span
-                          className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[12px] font-semibold text-white ${
+                          className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-k-xs font-semibold text-white ${
                             (o.tone && NUMBER_CLASS[o.tone]) ?? 'bg-k-navy'
                           }`}
                         >
@@ -282,7 +282,7 @@ export function MapPanel({
                             {/* eslint-disable-next-line @next/next/no-img-element -- la sirve el BFF con la sesión */}
                             <img src={o.photos[0]} alt="" loading="lazy" className="h-full w-full object-cover" />
                             {o.photos.length > 1 && (
-                              <span className="absolute bottom-0 right-0 rounded-tl bg-k-navy/80 px-1 text-[10px] font-semibold leading-4 text-white">
+                              <span className="absolute bottom-0 right-0 rounded-tl bg-k-navy/80 px-1 text-k-3xs font-semibold leading-4 text-white">
                                 {o.photos.length}
                               </span>
                             )}
@@ -290,18 +290,18 @@ export function MapPanel({
                         )}
                         <span className="min-w-0 flex-1">
                           {o.href ? (
-                            <Link href={o.href} className="block truncate text-[14px] font-semibold text-k-text hover:underline">
+                            <Link href={o.href} className="block truncate text-k-base font-semibold text-k-text hover:underline">
                               {o.name}
                             </Link>
                           ) : (
-                            <span className="block truncate text-[14px] font-semibold text-k-text">{o.name}</span>
+                            <span className="block truncate text-k-base font-semibold text-k-text">{o.name}</span>
                           )}
-                          {o.hint && <span className="block truncate text-[12px] text-k-text-2">{o.hint}</span>}
+                          {o.hint && <span className="block truncate text-k-xs text-k-text-2">{o.hint}</span>}
                           {((o.badges && o.badges.length > 0) || o.chips) && (
                             <span className="mt-1.5 flex flex-wrap items-center gap-1">
                               {o.chips}
                               {o.badges?.map((b, bi) => (
-                                <span key={`${bi}-${b.label}`} className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${BADGE_CLASS[b.tone]}`}>
+                                <span key={`${bi}-${b.label}`} className={`rounded-full px-2 py-0.5 text-k-2xs font-medium ${BADGE_CLASS[b.tone]}`}>
                                   {b.label}
                                 </span>
                               ))}
@@ -310,12 +310,12 @@ export function MapPanel({
                         </span>
                         {/* La cabecera de la fila: la hora y, editando, mover y quitar. Siguen donde estaban. */}
                         <span className="flex shrink-0 flex-col items-end gap-1.5">
-                          {o.meta && <span className="pt-0.5 text-[12px] tabular-nums text-k-text-2">{o.meta}</span>}
+                          {o.meta && <span className="pt-0.5 text-k-xs tabular-nums text-k-text-2">{o.meta}</span>}
                           {/* La parada gestionada no ofrece botones: es una explicación, no un control
                               apagado — un ✕ en gris invita a insistir. */}
                           {onMove &&
                             (o.locked ? (
-                              <span className="text-[11px] text-k-muted">{t('lockedStop')}</span>
+                              <span className="text-k-2xs text-k-muted">{t('lockedStop')}</span>
                             ) : (
                               <span className="flex items-center gap-1">
                                 {onChangeAddress && (
@@ -354,7 +354,7 @@ export function MapPanel({
                                 // En pantallas angostas el mapa queda fuera de la vista: se lo trae.
                                 mapBox.current?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
                               }}
-                              className="h-8 rounded-lg border border-k-border bg-white px-3 text-[13px] font-medium text-k-slate hover:bg-k-bg"
+                              className="h-8 rounded-lg border border-k-border bg-white px-3 text-k-sm font-medium text-k-slate hover:bg-k-bg"
                             >
                               {t('goToMap')}
                             </button>
@@ -390,7 +390,7 @@ export function MapPanel({
               onPointClick={onPointClick}
             />
           ) : (
-            <p className="rounded-2xl border border-k-border bg-white px-4 py-3 text-[13px] text-k-text-2">
+            <p className="rounded-2xl border border-k-border bg-white px-4 py-3 text-k-sm text-k-text-2">
               {t('mapNoPoints')}
             </p>
           )}
@@ -432,7 +432,7 @@ function RowMenu({ items, label }: { items: { label: string; href?: string; onCl
     };
   }, [open]);
 
-  const item = 'block w-full px-3 py-2 text-left text-[13px] text-k-text hover:bg-k-bg';
+  const item = 'block w-full px-3 py-2 text-left text-k-sm text-k-text hover:bg-k-bg';
   return (
     <div ref={box} className="relative ml-auto">
       <button
@@ -444,7 +444,7 @@ function RowMenu({ items, label }: { items: { label: string; href?: string; onCl
         aria-expanded={open}
         className="flex h-8 w-9 items-center justify-center rounded-lg border border-k-border bg-white text-k-text-2 hover:bg-k-bg"
       >
-        <span aria-hidden className="text-[16px] leading-none">
+        <span aria-hidden className="text-k-lg leading-none">
           ⋯
         </span>
       </button>
@@ -495,7 +495,7 @@ function OrderButton({
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      className="flex h-6 w-6 items-center justify-center rounded-lg border border-k-border text-[12px] text-k-text-2 hover:bg-k-bg disabled:opacity-30"
+      className="flex h-6 w-6 items-center justify-center rounded-lg border border-k-border text-k-xs text-k-text-2 hover:bg-k-bg disabled:opacity-30"
     >
       <span aria-hidden>{children}</span>
     </button>

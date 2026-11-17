@@ -184,7 +184,7 @@ export function CreditCard({
         />
 
         <ErrorBanner message={error} />
-        {credit.locked && <p className="text-[13px] text-k-warning-text">{t('lockedHint')}</p>}
+        {credit.locked && <p className="text-k-sm text-k-warning-text">{t('lockedHint')}</p>}
 
         {editing ? (
           <CreditEditor

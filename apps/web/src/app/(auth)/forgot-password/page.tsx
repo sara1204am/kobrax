@@ -31,7 +31,7 @@ export default function ForgotPasswordPage() {
   if (sent) {
     return (
       <AuthShell title={t('sentTitle')} subtitle={t('sentSubtitle')}>
-        <Link href="/login" className="text-[13px] font-medium text-k-purple">
+        <Link href="/login" className="text-k-sm font-medium text-k-purple">
           ← {tc('backToLogin')}
         </Link>
       </AuthShell>
@@ -55,7 +55,7 @@ export default function ForgotPasswordPage() {
         <Button type="submit" loading={loading} disabled={!email}>
           {t('submit')}
         </Button>
-        <Link href="/login" className="block text-center text-[13px] font-medium text-k-purple">
+        <Link href="/login" className="block text-center text-k-sm font-medium text-k-purple">
           {tc('backToLogin')}
         </Link>
       </form>

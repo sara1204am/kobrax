@@ -88,7 +88,7 @@ export default function LoginPage() {
               aria-invalid={!!errors.password}
             />
           </Field>
-          <Link href="/forgot-password" className="inline-block text-[13px] font-medium text-k-purple hover:underline">
+          <Link href="/forgot-password" className="inline-block text-k-sm font-medium text-k-purple hover:underline">
             {t('forgot')}
           </Link>
         </div>
@@ -103,7 +103,7 @@ export default function LoginPage() {
         (tarea 9, bloqueada por las credenciales de Google Cloud). Regla de la fase: no se dibuja
         lo que no anda.
       */}
-      <div className="mt-6 space-y-2 border-t border-k-border pt-5 text-center text-[13px] text-k-text-2">
+      <div className="mt-6 space-y-2 border-t border-k-border pt-5 text-center text-k-sm text-k-text-2">
         <p>
           {t('noAccount')}{' '}
           <Link href="/registro" className="font-medium text-k-purple hover:underline">

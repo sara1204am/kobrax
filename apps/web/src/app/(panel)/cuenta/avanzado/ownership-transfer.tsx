@@ -54,12 +54,12 @@ export function OwnershipTransfer({ members, selfId, isOwner }: { members: Membe
 
   return (
     <Section title={t('title')} inner="space-y-4 p-6">
-      <p className="text-[13px] leading-relaxed text-k-text-2">{t('intro')}</p>
+      <p className="text-k-sm leading-relaxed text-k-text-2">{t('intro')}</p>
 
       {!isOwner ? (
-        <p className="rounded-xl bg-k-light-bg px-4 py-3 text-[13px] text-k-text-2">{t('notOwner')}</p>
+        <p className="rounded-xl bg-k-light-bg px-4 py-3 text-k-sm text-k-text-2">{t('notOwner')}</p>
       ) : candidates.length === 0 ? (
-        <p className="rounded-xl bg-k-light-bg px-4 py-3 text-[13px] text-k-text-2">{t('noCandidates')}</p>
+        <p className="rounded-xl bg-k-light-bg px-4 py-3 text-k-sm text-k-text-2">{t('noCandidates')}</p>
       ) : (
         <form
           onSubmit={(e) => {

@@ -47,7 +47,7 @@ export function MemberOffice({ userId, branchId, offices }: { userId: string; br
       {can('office:write') && (
         <div className="space-y-2">
           <ErrorBanner message={error} />
-          <label className="block text-[12px] font-medium text-k-text-2" htmlFor={`office-of-${userId}`}>
+          <label className="block text-k-xs font-medium text-k-text-2" htmlFor={`office-of-${userId}`}>
             {t('changeOffice')}
           </label>
           <div className="flex flex-wrap items-center gap-2">
@@ -76,7 +76,7 @@ export function MemberOffice({ userId, branchId, offices }: { userId: string; br
               </TextButton>
             )}
           </div>
-          <p className="text-[12px] text-k-muted">{t('officeOne')}</p>
+          <p className="text-k-xs text-k-muted">{t('officeOne')}</p>
         </div>
       )}
     </div>

@@ -88,17 +88,17 @@ export async function KpiStrip({
         const good = d ? d.up !== c.badUp : true;
         return (
           <div key={c.key} title={c.hint} className="flex min-w-0 flex-col justify-center gap-1 rounded-2xl border border-k-border bg-white px-3 py-3 shadow-k-card xl:px-5 xl:py-4">
-            <p className="truncate text-[13px] text-k-text-2">{c.label}</p>
+            <p className="truncate text-k-sm text-k-text-2">{c.label}</p>
             <div className="flex items-end justify-between gap-2">
               <div className="min-w-0">
-                <p className="truncate text-[20px] font-semibold leading-tight xl:text-[26px] text-k-navy">{c.value}</p>
-                {c.note && <p className="truncate text-[12px] text-k-text-2">{c.note}</p>}
+                <p className="truncate text-k-2xl font-semibold leading-tight xl:text-k-4xl text-k-navy">{c.value}</p>
+                {c.note && <p className="truncate text-k-xs text-k-text-2">{c.note}</p>}
                 {d ? (
-                  <p className={`mt-0.5 text-[12px] font-medium tabular-nums ${d.pct === 0 ? 'text-k-muted' : good ? 'text-k-success' : 'text-k-danger'}`}>
+                  <p className={`mt-0.5 text-k-xs font-medium tabular-nums ${d.pct === 0 ? 'text-k-muted' : good ? 'text-k-success' : 'text-k-danger'}`}>
                     {d.pct === 0 ? '—' : d.up ? '↑' : '↓'} {Math.abs(d.pct).toLocaleString('es-BO')}%
                   </p>
                 ) : (
-                  <p className="mt-0.5 text-[12px] text-k-muted" title={t('noHistory')}>{t('noCompare')}</p>
+                  <p className="mt-0.5 text-k-xs text-k-muted" title={t('noHistory')}>{t('noCompare')}</p>
                 )}
               </div>
               {c.series && <Spark values={c.series} color={TONE[c.tone]} id={`spark-${c.key}`} />}

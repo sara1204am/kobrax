@@ -40,7 +40,7 @@ export function ArrearsHistory({ episodes, currency }: { episodes: MoraEpisode[]
 
   return (
     <Section title={t('title')} anchor="HISTORY" collapsible={{ count: episodes?.length }}>
-      <p className="mb-3 text-[13px] text-k-text-2">{t('subtitle')}</p>
+      <p className="mb-3 text-k-sm text-k-text-2">{t('subtitle')}</p>
 
       {episodes === null ? (
         <EmptyState title={t('unavailable')} />
@@ -55,14 +55,14 @@ export function ArrearsHistory({ episodes, currency }: { episodes: MoraEpisode[]
             >
               {/* Número y fechas */}
               <div className="flex items-center gap-3.5 lg:w-[270px] lg:shrink-0">
-                <span aria-hidden className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-k-info-bg text-[14px] font-semibold text-k-slate">
+                <span aria-hidden className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-k-info-bg text-k-base font-semibold text-k-slate">
                   #{e.number}
                 </span>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[14px] font-semibold text-k-navy">{t('number', { n: e.number })}</span>
+                    <span className="text-k-base font-semibold text-k-navy">{t('number', { n: e.number })}</span>
                     {e.current ? (
-                      <span className="rounded-md bg-k-info-bg px-2 py-0.5 text-[11px] font-medium text-k-slate">{t('current')}</span>
+                      <span className="rounded-md bg-k-info-bg px-2 py-0.5 text-k-2xs font-medium text-k-slate">{t('current')}</span>
                     ) : (
                       e.endReason && (
                         <span title={e.endReason === 'SOURCE_ABSENT' ? t('endHint.SOURCE_ABSENT') : undefined}>
@@ -101,7 +101,7 @@ export function ArrearsHistory({ episodes, currency }: { episodes: MoraEpisode[]
                   <path d="M6 2.5h8l5 5V20a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 20V4A1.5 1.5 0 0 1 6 2.5zM14 2.5V8h5M8.5 13h7M8.5 16.5h7" />
                 </svg>
                 <div className="min-w-0">
-                  <div className="text-[11px] text-k-periwinkle">{t('source')}</div>
+                  <div className="text-k-2xs text-k-periwinkle">{t('source')}</div>
                   <div className="text-[12.5px] font-medium text-k-navy">{tSource(e.source)}</div>
                 </div>
               </div>
@@ -116,8 +116,8 @@ export function ArrearsHistory({ episodes, currency }: { episodes: MoraEpisode[]
 function Item({ label, value }: { label: string; value: string }) {
   return (
     <div className="px-4 first:pl-0 lg:px-5 lg:first:pl-5">
-      <dt className="text-[11px] text-k-periwinkle">{label}</dt>
-      <dd className="mt-0.5 text-[13px] font-medium text-k-navy">{value}</dd>
+      <dt className="text-k-2xs text-k-periwinkle">{label}</dt>
+      <dd className="mt-0.5 text-k-sm font-medium text-k-navy">{value}</dd>
     </div>
   );
 }

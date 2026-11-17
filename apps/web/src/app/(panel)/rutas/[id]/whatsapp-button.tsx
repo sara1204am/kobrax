@@ -31,8 +31,8 @@ export function WhatsAppButton({
     variant === 'icon'
       ? 'flex h-8 w-9 items-center justify-center rounded-lg border border-k-border bg-white text-k-success hover:bg-k-success-bg'
       : variant === 'compact'
-      ? 'h-8 rounded-lg border border-k-border bg-white px-3 text-[13px] font-medium text-k-success hover:bg-k-success-bg'
-      : 'h-10 rounded-xl border border-k-border bg-white px-4 text-[14px] font-medium text-k-success hover:bg-k-success-bg';
+      ? 'h-8 rounded-lg border border-k-border bg-white px-3 text-k-sm font-medium text-k-success hover:bg-k-success-bg'
+      : 'h-10 rounded-xl border border-k-border bg-white px-4 text-k-base font-medium text-k-success hover:bg-k-success-bg';
 
   return (
     <>

@@ -82,7 +82,7 @@ export function PriorityCell({
       >
         {etiqueta}
         {pinned ? (
-          <span aria-hidden title={t('priorityPinned')} className="text-[11px]">
+          <span aria-hidden title={t('priorityPinned')} className="text-k-2xs">
             📌
           </span>
         ) : (
@@ -126,7 +126,7 @@ export function PriorityCell({
                 }`}
               >
                 <Badge tone={PRIORITY_TONE[p]}>{t(`priority.${p}`)}</Badge>
-                <span className="text-[13px] text-k-text-2">{t(`priorityHint.${p}`)}</span>
+                <span className="text-k-sm text-k-text-2">{t(`priorityHint.${p}`)}</span>
               </button>
             </li>
           ))}

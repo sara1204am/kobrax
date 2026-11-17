@@ -53,12 +53,12 @@ export function PaymentsSection({
       }
     >
       {payments === null ? (
-        <p className="text-[13px] text-k-muted">{t('unavailable')}</p>
+        <p className="text-k-sm text-k-muted">{t('unavailable')}</p>
       ) : payments.length === 0 ? (
-        <p className="text-[13px] text-k-muted">{t('empty')}</p>
+        <p className="text-k-sm text-k-muted">{t('empty')}</p>
       ) : (
         <>
-          <p className="mb-3 text-[13px] text-k-text-2">
+          <p className="mb-3 text-k-sm text-k-text-2">
             {t('count', { n: payments.length })}
             {' · '}
             <span className="font-semibold text-k-navy">{t('collected', { amount: money(collected, currency) })}</span>
@@ -74,7 +74,7 @@ export function PaymentsSection({
                     {look.icon}
                   </ToneTile>
                   <div className="min-w-0 flex-1">
-                    <span className="text-[15px] font-semibold text-k-navy">{money(p.amount, currency)}</span>
+                    <span className="text-k-md font-semibold text-k-navy">{money(p.amount, currency)}</span>
                     <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-k-text-2">
                       <span>{tMethod(p.method)}</span>
                       {p.channel === 'EXTERNAL_CONFIRMED' && <Badge tone="neutral">{tChannel('EXTERNAL_CONFIRMED')}</Badge>}
@@ -82,10 +82,10 @@ export function PaymentsSection({
                       {p.receiptReference && <span>{t('receiptRef', { ref: p.receiptReference })}</span>}
                       {p.registeredBy && <span>{t('by', { name: byId.get(p.registeredBy) ?? t('unknownUser') })}</span>}
                     </p>
-                    {p.notes && <p className="mt-0.5 text-[13px] text-k-text">{p.notes}</p>}
+                    {p.notes && <p className="mt-0.5 text-k-sm text-k-text">{p.notes}</p>}
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1.5">
-                    <span className={`rounded-md px-2.5 py-1 text-[12px] font-medium ${pill}`}>{tMethod(p.method)}</span>
+                    <span className={`rounded-md px-2.5 py-1 text-k-xs font-medium ${pill}`}>{tMethod(p.method)}</span>
                     <span className="text-[12.5px] text-k-text-2">{date(p.paymentDate, locale)}</span>
                   </div>
                 </li>
@@ -94,7 +94,7 @@ export function PaymentsSection({
           </ul>
         </>
       )}
-      {external && <p className="mt-3 text-[12px] text-k-muted">{t('externalNote')}</p>}
+      {external && <p className="mt-3 text-k-xs text-k-muted">{t('externalNote')}</p>}
     </Section>
   );
 }

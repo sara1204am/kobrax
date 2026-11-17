@@ -152,7 +152,7 @@ export function ArrearsActions({
               <Input type="date" min={hoyIso()} value={date} onChange={(e) => setDate(e.target.value)} disabled={busy} />
             </Field>
           )}
-          <p className="text-[13px] text-k-text-2">{t(`arrears.modeHint.${mode}`)}</p>
+          <p className="text-k-sm text-k-text-2">{t(`arrears.modeHint.${mode}`)}</p>
         </div>
       </Modal>
     </>

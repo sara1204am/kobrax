@@ -49,7 +49,7 @@ export function MemberHeaderActions({
             value=""
             disabled={busy}
             onChange={(e) => e.target.value && void changeRole(member, e.target.value)}
-            className="!h-11 !w-auto !border !border-k-border !px-3 !text-[14px] !font-medium"
+            className="!h-11 !w-auto !border !border-k-border !px-3 !text-k-base !font-medium"
           >
             <option value="">{t('detail.changeRole')}</option>
             {roles

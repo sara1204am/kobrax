@@ -180,7 +180,7 @@ export function OfficeFormDialog({
               disabled={x.disabled}
               title={x.disabled ? t('form.teamAfterSave') : undefined}
               onClick={() => setTab(x.key)}
-              className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-[14px] font-medium disabled:cursor-not-allowed disabled:opacity-40 ${
+              className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-k-base font-medium disabled:cursor-not-allowed disabled:opacity-40 ${
                 tab === x.key ? 'border-k-periwinkle text-k-periwinkle' : 'border-transparent text-k-text-2 hover:text-k-navy'
               }`}
             >
@@ -222,7 +222,7 @@ export function OfficeFormDialog({
               </Field>
             )}
             {branching && (
-              <p role="note" className="rounded-xl bg-k-warning-bg px-3 py-2 text-[13px] text-k-warning-text">
+              <p role="note" className="rounded-xl bg-k-warning-bg px-3 py-2 text-k-sm text-k-warning-text">
                 {t('form.branchingWarning')}
               </p>
             )}

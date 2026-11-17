@@ -100,7 +100,7 @@ export function TodayTable({
               />
             </span>
             {/* El número va igual: el color no es el dato. */}
-            <span className="text-[12px] tabular-nums text-k-text-2">{percent}%</span>
+            <span className="text-k-xs tabular-nums text-k-text-2">{percent}%</span>
           </span>
         );
       },
@@ -144,7 +144,7 @@ export function TodayTable({
           ) : (
             <Link
               href={`/rutas/${route.id}`}
-              className="inline-flex h-8 items-center rounded-lg border border-k-border bg-white px-3.5 text-[13px] font-medium text-k-slate hover:bg-k-bg"
+              className="inline-flex h-8 items-center rounded-lg border border-k-border bg-white px-3.5 text-k-sm font-medium text-k-slate hover:bg-k-bg"
             >
               {t('todayBoard.view')}
             </Link>
@@ -153,7 +153,7 @@ export function TodayTable({
         return canPlan ? (
           <Link
             href={`/rutas/planificar?date=${day}&collectorId=${collectorId}`}
-            className="inline-flex h-8 items-center rounded-lg border border-k-periwinkle bg-k-highlight px-3.5 text-[13px] font-medium text-k-periwinkle hover:bg-k-light-bg"
+            className="inline-flex h-8 items-center rounded-lg border border-k-periwinkle bg-k-highlight px-3.5 text-k-sm font-medium text-k-periwinkle hover:bg-k-light-bg"
           >
             {t('todayBoard.plan')}
           </Link>

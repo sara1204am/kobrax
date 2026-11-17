@@ -64,8 +64,8 @@ export function LinkReview({ client, creditIds }: { client: ClientDetail; credit
 
   return (
     <section className="mb-4 rounded-2xl border-l-[3px] border-k-warning bg-k-warning-bg px-5 py-4">
-      <h2 className="text-[15px] font-semibold text-k-warning-text">{t('title')}</h2>
-      <p className="mt-1 text-[13px] leading-relaxed text-k-warning-text">
+      <h2 className="text-k-md font-semibold text-k-warning-text">{t('title')}</h2>
+      <p className="mt-1 text-k-sm leading-relaxed text-k-warning-text">
         {suggestions.length > 0 ? t('textSuggestions') : t('textSameFile')}
       </p>
       <ErrorBanner message={error} />
@@ -73,8 +73,8 @@ export function LinkReview({ client, creditIds }: { client: ClientDetail; credit
         <ul className="mt-3 space-y-2">
           {suggestions.map((s) => (
             <li key={s.id} className="flex flex-col gap-2 rounded-xl bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <a href={`/cartera/${s.id}`} className="text-[14px] font-medium text-k-navy hover:underline" target="_blank" rel="noreferrer">
-                {s.displayName} <span className="text-[12px] font-normal text-k-text-2">· {t('credits', { n: s.creditCount })}</span>
+              <a href={`/cartera/${s.id}`} className="text-k-base font-medium text-k-navy hover:underline" target="_blank" rel="noreferrer">
+                {s.displayName} <span className="text-k-xs font-normal text-k-text-2">· {t('credits', { n: s.creditCount })}</span>
               </a>
               {canDecide && (
                 <span className="sm:w-auto">

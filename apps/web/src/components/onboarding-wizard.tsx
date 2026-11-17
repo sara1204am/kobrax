@@ -225,11 +225,11 @@ export function OnboardingWizard({
     >
       <header className="flex items-center justify-between gap-3 border-b border-k-border bg-white px-5 py-3">
         <div>
-          <p className="text-[12px] font-semibold uppercase tracking-wide text-k-muted">
+          <p className="text-k-xs font-semibold uppercase tracking-wide text-k-muted">
             {t('title')}
           </p>
           {step !== 'done' && (
-            <p className="text-[13px] text-k-text-2" aria-live="polite">
+            <p className="text-k-sm text-k-text-2" aria-live="polite">
               {t('progress', { n: index + 1, total: counted })}
             </p>
           )}
@@ -239,7 +239,7 @@ export function OnboardingWizard({
             type="button"
             onClick={() => void later()}
             disabled={saving}
-            className="min-h-[44px] rounded-lg px-3 text-[13px] font-medium text-k-text-2 hover:bg-k-bg disabled:opacity-50"
+            className="min-h-[44px] rounded-lg px-3 text-k-sm font-medium text-k-text-2 hover:bg-k-bg disabled:opacity-50"
           >
             {onClose ? t('close') : t('later')}
           </button>
@@ -259,11 +259,11 @@ export function OnboardingWizard({
             id="onboarding-title"
             ref={titleRef}
             tabIndex={-1}
-            className="mb-1 text-[22px] font-semibold text-k-navy outline-none"
+            className="mb-1 text-k-3xl font-semibold text-k-navy outline-none"
           >
             {t(`${step}.title`)}
           </h1>
-          <p className="text-[14px] text-k-text-2">
+          <p className="text-k-base text-k-text-2">
             {step === 'tools'
               ? t('tools.intro', { plan: planName })
               : t(`${step}.intro`, { plan: planName })}
@@ -277,7 +277,7 @@ export function OnboardingWizard({
               <Button
                 type="button"
                 variant="ghost"
-                className="!h-10 !w-auto px-4 !text-[13px]"
+                className="!h-10 !w-auto px-4 !text-k-sm"
                 onClick={() => router.refresh()}
               >
                 {t('errors.reload')}
@@ -297,7 +297,7 @@ export function OnboardingWizard({
                 {hasOffices && moduleRow('organization', t('tools.items.organization.hint'))}
               </Section>
             )}
-            <p className="text-[13px] text-k-text-2">{t('tools.always')}</p>
+            <p className="text-k-sm text-k-text-2">{t('tools.always')}</p>
           </>
         )}
 
@@ -309,7 +309,7 @@ export function OnboardingWizard({
             <Section title={t('clients.optional')} inner="px-5 py-1">
               {CLIENT_OPTIONAL.map(clientRow)}
             </Section>
-            <p className="text-[13px] text-k-text-2">{t('clients.note')}</p>
+            <p className="text-k-sm text-k-text-2">{t('clients.note')}</p>
           </>
         )}
 
@@ -352,7 +352,7 @@ export function OnboardingWizard({
               action={
                 <Button
                   variant="ghost"
-                  className="!h-9 !w-auto px-3 !text-[13px]"
+                  className="!h-9 !w-auto px-3 !text-k-sm"
                   onClick={() => go('tools')}
                 >
                   {t('summary.change')}
@@ -363,14 +363,14 @@ export function OnboardingWizard({
                 {WORKSPACE_MODULES.filter((m) => shownKeys.includes(m.key)).map((m) => (
                   <li
                     key={m.key}
-                    className="rounded-full bg-k-light-bg px-3 py-1 text-[13px] text-k-navy"
+                    className="rounded-full bg-k-light-bg px-3 py-1 text-k-sm text-k-navy"
                   >
                     {nav(m.key as WorkspaceNavKey)}
                   </li>
                 ))}
               </ul>
               {diff.modules.length > 0 && (
-                <p className="mt-3 text-[13px] text-k-text-2">
+                <p className="mt-3 text-k-sm text-k-text-2">
                   {t('summary.hiddenModules', {
                     list: diff.modules.map((m) => nav(m as WorkspaceNavKey)).join(', '),
                   })}
@@ -384,14 +384,14 @@ export function OnboardingWizard({
               action={
                 <Button
                   variant="ghost"
-                  className="!h-9 !w-auto px-3 !text-[13px]"
+                  className="!h-9 !w-auto px-3 !text-k-sm"
                   onClick={() => go('clients')}
                 >
                   {t('summary.change')}
                 </Button>
               }
             >
-              <p className="text-[14px] text-k-text">
+              <p className="text-k-base text-k-text">
                 {shownClientKeys.length > 0
                   ? t('summary.clientsShown', {
                       list: shownClientKeys.map((k) => tc(`${clientKey(k)}.label`)).join(', '),
@@ -399,7 +399,7 @@ export function OnboardingWizard({
                   : t('summary.clientsNone')}
               </p>
               {hiddenClientKeys.length > 0 && (
-                <p className="mt-1 text-[13px] text-k-text-2">
+                <p className="mt-1 text-k-sm text-k-text-2">
                   {t('summary.clientsHidden', {
                     list: hiddenClientKeys.map((k) => tc(`${clientKey(k)}.label`)).join(', '),
                   })}
@@ -413,26 +413,26 @@ export function OnboardingWizard({
               action={
                 <Button
                   variant="ghost"
-                  className="!h-9 !w-auto px-3 !text-[13px]"
+                  className="!h-9 !w-auto px-3 !text-k-sm"
                   onClick={() => go('credits')}
                 >
                   {t('summary.change')}
                 </Button>
               }
             >
-              <p className="text-[14px] text-k-text">
+              <p className="text-k-base text-k-text">
                 {definition
                   ? t('summary.creditsFixed', { name: t(`credits.definitions.${definition}.name`) })
                   : t('summary.creditsChoose')}
               </p>
-              <p className="mt-1 text-[13px] text-k-text-2">
+              <p className="mt-1 text-k-sm text-k-text-2">
                 {isOptionShown(draft, 'credit.advanced')
                   ? t('summary.advancedOn')
                   : t('summary.advancedOff')}
               </p>
             </Section>
 
-            <p className="rounded-xl border border-k-success bg-k-success-bg px-4 py-3 text-[13px] text-k-text">
+            <p className="rounded-xl border border-k-success bg-k-success-bg px-4 py-3 text-k-sm text-k-text">
               {t('summary.guarantee')}
             </p>
           </>
@@ -440,8 +440,8 @@ export function OnboardingWizard({
 
         {step === 'done' && (
           <div className="space-y-3">
-            <p className="text-[14px] text-k-text">{t('done.menu', { n: shownKeys.length })}</p>
-            <p className="text-[13px] text-k-text-2">{t('done.change')}</p>
+            <p className="text-k-base text-k-text">{t('done.menu', { n: shownKeys.length })}</p>
+            <p className="text-k-sm text-k-text-2">{t('done.change')}</p>
           </div>
         )}
       </main>
@@ -489,7 +489,7 @@ export function OnboardingWizard({
                     type="button"
                     onClick={() => void applyRecommended()}
                     disabled={saving}
-                    className="min-h-[44px] text-[13px] font-medium text-k-periwinkle underline disabled:opacity-50"
+                    className="min-h-[44px] text-k-sm font-medium text-k-periwinkle underline disabled:opacity-50"
                   >
                     {t('useRecommended')}
                   </button>

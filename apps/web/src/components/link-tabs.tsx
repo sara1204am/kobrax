@@ -44,7 +44,7 @@ export function LinkTabs({
             onClick={(e) => {
               if (!active && onNavigate && !onNavigate(tab)) e.preventDefault();
             }}
-            className={`-mb-px whitespace-nowrap border-b-2 px-4 py-2.5 text-[14px] font-medium ${
+            className={`-mb-px whitespace-nowrap border-b-2 px-4 py-2.5 text-k-base font-medium ${
               active
                 ? 'border-k-periwinkle font-semibold text-k-periwinkle'
                 : 'border-transparent text-k-text-2 hover:text-k-navy'

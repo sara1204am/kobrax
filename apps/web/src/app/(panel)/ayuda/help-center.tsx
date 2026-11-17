@@ -49,35 +49,35 @@ export function HelpCenter({ items }: { items: HelpItem[] }) {
           onChange={(e) => setQ(e.target.value)}
           aria-label={t('search')}
           placeholder={t('search')}
-          className="min-h-[44px] w-full max-w-sm rounded-xl border border-k-border bg-white px-3 text-[14px]"
+          className="min-h-[44px] w-full max-w-sm rounded-xl border border-k-border bg-white px-3 text-k-base"
         />
         <button
           type="button"
           onClick={() => startTour()}
-          className="min-h-[44px] rounded-xl bg-k-navy px-4 text-[14px] font-medium text-white hover:bg-k-navy/90"
+          className="min-h-[44px] rounded-xl bg-k-navy px-4 text-k-base font-medium text-white hover:bg-k-navy/90"
         >
           {t('tour')}
         </button>
       </div>
 
       {shown.length === 0 ? (
-        <p className="text-[14px] text-k-text-2">{t('empty')}</p>
+        <p className="text-k-base text-k-text-2">{t('empty')}</p>
       ) : (
         <ul className="grid gap-3 md:grid-cols-2">
           {shown.map((i) => (
             <li key={i.id} className="rounded-xl border border-k-border bg-white p-4">
-              <h2 className="text-[16px] font-semibold text-k-navy">{i.name}</h2>
-              <p className="mt-1 text-[14px] font-medium text-k-text">{i.what}</p>
-              <p className="text-[13px] text-k-text-2">{i.does}</p>
-              <p className="mt-1 text-[13px] text-k-text-2">{i.startWith}</p>
+              <h2 className="text-k-lg font-semibold text-k-navy">{i.name}</h2>
+              <p className="mt-1 text-k-base font-medium text-k-text">{i.what}</p>
+              <p className="text-k-sm text-k-text-2">{i.does}</p>
+              <p className="mt-1 text-k-sm text-k-text-2">{i.startWith}</p>
               {i.actions.length > 0 && (
                 <>
-                  <h3 className="mt-3 text-[12px] font-semibold uppercase tracking-wide text-k-muted">
+                  <h3 className="mt-3 text-k-xs font-semibold uppercase tracking-wide text-k-muted">
                     {t('actions')}
                   </h3>
                   <ul className="mt-1 space-y-1">
                     {i.actions.map((a) => (
-                      <li key={a.id} className="text-[13px] text-k-text">
+                      <li key={a.id} className="text-k-sm text-k-text">
                         <span className="font-medium">{a.title}.</span>{' '}
                         <span className="text-k-text-2">{a.what}</span>
                       </li>
@@ -87,7 +87,7 @@ export function HelpCenter({ items }: { items: HelpItem[] }) {
               )}
               <Link
                 href={i.href}
-                className="mt-3 inline-block text-[13px] font-medium text-k-periwinkle hover:underline"
+                className="mt-3 inline-block text-k-sm font-medium text-k-periwinkle hover:underline"
               >
                 {t('open', { name: i.name })}
               </Link>

@@ -20,7 +20,7 @@ import { STOP_STATUS_TONE } from '@/lib/routes';
 import { PlanLocationDialog } from '../planificar/plan-location-dialog';
 import { planFilterDefs, PLAN_FILTER_KEYS } from '../planificar/plan-filters';
 import { RecordVisitDialog } from './record-visit-dialog';
-import { WhatsAppButton } from './whatsapp-button';
+import { WhatsAppButton } from './whatsapp-button';
 import { Button } from '@/components/ui';
 
 /**
@@ -358,7 +358,7 @@ export function RouteEditor({
                 <WhatsAppButton clientId={s.clientId} clientName={s.clientName} variant="icon" />
                 <Link
                   href={`/rutas/${routeId}/parada/${s.id}`}
-                  className="inline-flex h-8 items-center rounded-lg border border-k-border bg-white px-3 text-[13px] font-medium text-k-slate hover:bg-k-bg"
+                  className="inline-flex h-8 items-center rounded-lg border border-k-border bg-white px-3 text-k-sm font-medium text-k-slate hover:bg-k-bg"
                 >
                   {tStops('viewDetail')}
                 </Link>
@@ -368,7 +368,7 @@ export function RouteEditor({
               <button
                 type="button"
                 onClick={() => setRecording(s)}
-                className="h-8 rounded-lg bg-k-navy px-3 text-[13px] font-semibold text-white hover:bg-k-slate"
+                className="h-8 rounded-lg bg-k-navy px-3 text-k-sm font-semibold text-white hover:bg-k-slate"
               >
                 {tStops('register')}
               </button>
@@ -387,17 +387,17 @@ export function RouteEditor({
   const lateral =
     showSuggest && suggestions.length > 0 ? (
       <section className="rounded-2xl border border-k-warning bg-k-warning-bg/40 p-4">
-        <h3 className="text-[14px] font-semibold text-k-navy">{tSuggest('title', { n: suggestions.length })}</h3>
-        <p className="mt-0.5 text-[12px] text-k-text-2">{tSuggest('hint', { km: SUGGEST_KM })}</p>
+        <h3 className="text-k-base font-semibold text-k-navy">{tSuggest('title', { n: suggestions.length })}</h3>
+        <p className="mt-0.5 text-k-xs text-k-text-2">{tSuggest('hint', { km: SUGGEST_KM })}</p>
         <ul className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
           {suggestions.map((s) => (
             <li key={s.credit.id} className={`rounded-xl border border-k-border bg-white px-3 py-2 ${busy === s.credit.id ? 'opacity-50' : ''}`}>
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="truncate text-[13px] font-medium text-k-text">{s.credit.clientName ?? '—'}</p>
-                  <p className="truncate text-[12px] text-k-text-2">{detailOf(s.credit)}</p>
+                  <p className="truncate text-k-sm font-medium text-k-text">{s.credit.clientName ?? '—'}</p>
+                  <p className="truncate text-k-xs text-k-text-2">{detailOf(s.credit)}</p>
                 </div>
-                <span className="shrink-0 rounded-full bg-k-warning-bg px-2 py-0.5 text-[11px] font-medium text-k-warning-text">
+                <span className="shrink-0 rounded-full bg-k-warning-bg px-2 py-0.5 text-k-2xs font-medium text-k-warning-text">
                   {tSuggest('away', { d: distanceLabel(s.km, locale) })}
                 </span>
               </div>
@@ -405,7 +405,7 @@ export function RouteEditor({
                 <button
                   type="button"
                   onClick={() => requestAdd(s.credit.id)}
-                  className="mt-1.5 text-[12px] font-medium text-k-periwinkle hover:underline"
+                  className="mt-1.5 text-k-xs font-medium text-k-periwinkle hover:underline"
                 >
                   {direct ? tSuggest('add') : tSuggest('ask')}
                 </button>
@@ -422,7 +422,7 @@ export function RouteEditor({
         type="button"
         onClick={() => setShowSuggest((v) => !v)}
         aria-pressed={showSuggest}
-        className={`h-8 rounded-lg border px-3 text-[13px] font-medium ${
+        className={`h-8 rounded-lg border px-3 text-k-sm font-medium ${
           showSuggest ? 'border-k-warning bg-k-warning-bg text-k-warning-text' : 'border-k-border bg-white text-k-text-2 hover:bg-k-bg'
         }`}
       >
@@ -433,12 +433,12 @@ export function RouteEditor({
   return (
     <div className="space-y-4">
       {error && (
-        <p role="alert" className="rounded-xl border border-k-danger bg-k-danger-bg px-4 py-3 text-[13px] text-k-text">
+        <p role="alert" className="rounded-xl border border-k-danger bg-k-danger-bg px-4 py-3 text-k-sm text-k-text">
           {error}
         </p>
       )}
       {notice && (
-        <p role="status" className="rounded-xl border border-k-success bg-k-success-bg px-4 py-3 text-[13px] text-k-text">
+        <p role="status" className="rounded-xl border border-k-success bg-k-success-bg px-4 py-3 text-k-sm text-k-text">
           {notice}
         </p>
       )}
@@ -476,7 +476,7 @@ export function RouteEditor({
               <button
                 type="button"
                 onClick={salir}
-                className="h-8 rounded-lg border border-k-navy bg-k-navy px-3 text-[13px] font-medium text-white hover:bg-k-slate"
+                className="h-8 rounded-lg border border-k-navy bg-k-navy px-3 text-k-sm font-medium text-white hover:bg-k-slate"
               >
                 {t('edit.done')}
               </button>
@@ -505,11 +505,11 @@ export function RouteEditor({
       {/* Las sugerencias, **debajo** del mapa y a lo ancho: en la columna del recorrido dejaban un hueco bajo el mapa. */}
       {lateral}
 
-      {!editing && line.length === 0 && <p className="text-[13px] text-k-text-2">{t('detail.noPreview')}</p>}
+      {!editing && line.length === 0 && <p className="text-k-sm text-k-text-2">{t('detail.noPreview')}</p>}
 
       {editing && canEditMode && (
         <>
-          <p className="rounded-xl border border-k-border bg-k-bg px-4 py-2.5 text-[13px] text-k-text-2">
+          <p className="rounded-xl border border-k-border bg-k-bg px-4 py-2.5 text-k-sm text-k-text-2">
             {direct ? t('edit.hint') : t('edit.requestHint')}
           </p>
 
@@ -531,7 +531,7 @@ export function RouteEditor({
                   type="button"
                   onClick={() => setPanelOpen((v) => !v)}
                   aria-expanded={panelOpen}
-                  className={`flex h-11 shrink-0 items-center gap-1.5 rounded-xl border px-4 text-[14px] font-medium ${
+                  className={`flex h-11 shrink-0 items-center gap-1.5 rounded-xl border px-4 text-k-base font-medium ${
                     filtered
                       ? 'border-k-periwinkle bg-k-highlight text-k-periwinkle'
                       : 'border-k-border bg-white text-k-text-2 hover:bg-k-bg'
@@ -547,9 +547,9 @@ export function RouteEditor({
 
               <section className="rounded-2xl border border-k-border bg-white p-5">
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                  <h2 className="text-[16px] font-semibold text-k-navy">{direct ? t('edit.addTitle') : t('edit.askAddTitle')}</h2>
+                  <h2 className="text-k-lg font-semibold text-k-navy">{direct ? t('edit.addTitle') : t('edit.askAddTitle')}</h2>
                   {/* Cuántos hay de verdad y cuántos se pueden mirar: la lista tiene techo y se dice. */}
-                  <p className="text-[13px] text-k-text-2">
+                  <p className="text-k-sm text-k-text-2">
                     {total > AVAILABLE_LIMIT
                       ? tPlan('foundCapped', { n: total, shown: available.length })
                       : tPlan('found', { n: total })}

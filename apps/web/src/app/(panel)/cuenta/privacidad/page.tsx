@@ -18,7 +18,7 @@ export default async function CuentaPrivacidadPage() {
   ]);
   if (res.status !== 200 || !res.body.data) {
     return (
-      <p role="alert" className="rounded-xl border border-k-border bg-white px-5 py-4 text-[14px] text-k-danger">
+      <p role="alert" className="rounded-xl border border-k-border bg-white px-5 py-4 text-k-base text-k-danger">
         {t('loadError')}
       </p>
     );

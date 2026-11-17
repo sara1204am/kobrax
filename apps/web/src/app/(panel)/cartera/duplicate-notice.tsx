@@ -24,7 +24,7 @@ export function DocumentTaken({ match }: { match: ClientDuplicateMatch }) {
   const t = useTranslations('portfolio.duplicate');
   const { can } = usePermissions();
   return (
-    <div role="alert" className="mt-1.5 text-[13px] text-k-danger">
+    <div role="alert" className="mt-1.5 text-k-sm text-k-danger">
       {match.hidden ? (
         // F14 · F2b (D-6, revisada): el cliente ya existe y lo llevan otras personas; con quien tiene `credit:create` se le ofrece
         // crear SU crédito sobre él (recién entonces lo ve).
@@ -64,7 +64,7 @@ export function NamesTaken({
 }) {
   const t = useTranslations('portfolio.duplicate');
   return (
-    <div role="status" className="mb-3 rounded-md border-l-[3px] border-k-warning bg-k-warning-bg px-3 py-2 text-[13px] text-k-warning-text">
+    <div role="status" className="mb-3 rounded-md border-l-[3px] border-k-warning bg-k-warning-bg px-3 py-2 text-k-sm text-k-warning-text">
       <p className="font-medium">{t('namesTitle', { n: matches.length })}</p>
       <p className="mt-0.5">{t('namesText')}</p>
       <ul className="mt-2 space-y-1">

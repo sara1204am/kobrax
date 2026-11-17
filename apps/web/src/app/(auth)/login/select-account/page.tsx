@@ -52,15 +52,15 @@ export default function SelectAccountPage() {
             className="flex w-full items-center justify-between rounded-[10px] border border-k-border bg-white px-4 py-3 text-left transition-all hover:border-k-periwinkle hover:bg-k-bg disabled:opacity-50"
           >
             <span>
-              <span className="block text-[15px] font-medium text-k-text">{a.name}</span>
-              <span className="block text-[12px] text-k-text-2">{a.role}</span>
+              <span className="block text-k-md font-medium text-k-text">{a.name}</span>
+              <span className="block text-k-xs text-k-text-2">{a.role}</span>
             </span>
             <span aria-hidden className="text-k-muted">
               {busy === a.id ? '···' : '›'}
             </span>
           </button>
         ))}
-        {accounts.length === 0 && <p className="text-[13px] text-k-text-2">{t('loading')}</p>}
+        {accounts.length === 0 && <p className="text-k-sm text-k-text-2">{t('loading')}</p>}
       </div>
     </AuthShell>
   );

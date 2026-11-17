@@ -51,12 +51,12 @@ export function AuthShell({
           </div>
 
           <div className={`w-full ${ancho} rounded-2xl border border-k-border bg-white p-7 shadow-k-card sm:p-9`}>
-            {eyebrow && <p className="text-[15px] font-medium text-k-purple">{eyebrow}</p>}
+            {eyebrow && <p className="text-k-md font-medium text-k-purple">{eyebrow}</p>}
             <h1 className="mt-0.5 text-[30px] font-semibold leading-tight tracking-tight text-k-navy">
               {title}
             </h1>
             <span aria-hidden className="mt-3 block h-[3px] w-10 rounded-full bg-k-purple" />
-            {subtitle && <p className="mt-3 text-[14px] leading-relaxed text-k-text-2">{subtitle}</p>}
+            {subtitle && <p className="mt-3 text-k-base leading-relaxed text-k-text-2">{subtitle}</p>}
             <div className="mt-6">{children}</div>
           </div>
         </section>
@@ -90,7 +90,7 @@ function BrandPanel() {
         <div className="flex items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element -- 40px fijos, no necesita el optimizador */}
           <img src="/logo.png" alt="" width={40} height={40} className="h-10 w-10 object-contain" />
-          <span className="text-[22px] font-semibold tracking-[0.18em] text-white">KOBRAX</span>
+          <span className="text-k-3xl font-semibold tracking-[0.18em] text-white">KOBRAX</span>
         </div>
 
         {/*
@@ -101,8 +101,8 @@ function BrandPanel() {
         <span className="hidden items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-3 py-2 lg:inline-flex">
           <IconShield className="h-5 w-5 shrink-0 text-k-soft-periw" />
           <span className="leading-tight">
-            <span className="block text-[13px] font-medium text-white">{t('chipTitle')}</span>
-            <span className="block text-[11px] text-white/70">{t('chipText')}</span>
+            <span className="block text-k-sm font-medium text-white">{t('chipTitle')}</span>
+            <span className="block text-k-2xs text-white/70">{t('chipText')}</span>
           </span>
         </span>
       </div>
@@ -122,7 +122,7 @@ function BrandPanel() {
             accent: (chunks) => <span className="text-k-soft-periw">{chunks}</span>,
           })}
         </h2>
-        <p className="mt-5 max-w-[380px] text-[15px] leading-relaxed text-white/70">
+        <p className="mt-5 max-w-[380px] text-k-md leading-relaxed text-white/70">
           {t('tagline')}
         </p>
 
@@ -160,8 +160,8 @@ function Feature({ icon, title, text }: { icon: ReactNode; title: string; text: 
         {icon}
       </span>
       <span className="leading-snug">
-        <span className="block text-[15px] font-medium text-white">{title}</span>
-        <span className="mt-0.5 block max-w-[280px] text-[13px] text-white/70">{text}</span>
+        <span className="block text-k-md font-medium text-white">{title}</span>
+        <span className="mt-0.5 block max-w-[280px] text-k-sm text-white/70">{text}</span>
       </span>
     </li>
   );
@@ -194,8 +194,8 @@ function TrustItem({ icon, title, text }: { icon: ReactNode; title: string; text
         {icon}
       </span>
       <span className="leading-tight">
-        <span className="block text-[13px] font-medium text-k-text">{title}</span>
-        <span className="block text-[12px] text-k-muted">{text}</span>
+        <span className="block text-k-sm font-medium text-k-text">{title}</span>
+        <span className="block text-k-xs text-k-muted">{text}</span>
       </span>
     </li>
   );

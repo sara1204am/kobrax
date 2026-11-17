@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useTranslations } from 'next-intl';
 import { TextButton } from '@/components/ui';
 
 /** Cuántas fotos admite una ubicación (el tope que valida la API). */
@@ -56,8 +56,8 @@ export function LocationPhotos({
 
   return (
     <div>
-      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{t('title')}</p>
-      <p className="mb-2 text-[12px] text-k-text-2">{t('hint')}</p>
+      <p className="mb-1 text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">{t('title')}</p>
+      <p className="mb-2 text-k-xs text-k-text-2">{t('hint')}</p>
       <ul className="flex flex-wrap gap-3">
         {value.map((url, i) => (
           <li key={url} className="w-[104px]">
@@ -65,10 +65,10 @@ export function LocationPhotos({
               {/* eslint-disable-next-line @next/next/no-img-element -- la sirve el BFF con la sesión: no pasa por el optimizador de next/image */}
               <img src={url} alt={t('alt', { n: i + 1 })} loading="lazy" className="h-full w-full object-cover" />
               {i === 0 && (
-                <span className="absolute left-1 top-1 rounded bg-k-purple px-1.5 py-0.5 text-[10px] font-semibold text-white">{t('main')}</span>
+                <span className="absolute left-1 top-1 rounded bg-k-purple px-1.5 py-0.5 text-k-3xs font-semibold text-white">{t('main')}</span>
               )}
             </div>
-            <div className="mt-1 flex items-center justify-between gap-1 text-[12px]">
+            <div className="mt-1 flex items-center justify-between gap-1 text-k-xs">
               {i === 0 ? (
                 <span className="text-k-muted">&nbsp;</span>
               ) : (
@@ -95,7 +95,7 @@ export function LocationPhotos({
         ))}
       </ul>
       {error && (
-        <p role="alert" className="mt-2 text-[13px] text-k-danger">
+        <p role="alert" className="mt-2 text-k-sm text-k-danger">
           {error}
         </p>
       )}

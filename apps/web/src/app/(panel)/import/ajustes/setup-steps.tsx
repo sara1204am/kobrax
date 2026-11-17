@@ -48,7 +48,7 @@ export function Step({
       <header className="flex flex-wrap items-start gap-3 border-b border-k-border px-5 py-4">
         <span
           aria-hidden
-          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold ${
+          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-k-sm font-semibold ${
             blocked ? 'bg-k-bg text-k-muted' : 'bg-k-light-bg text-k-navy'
           }`}
         >
@@ -56,14 +56,14 @@ export function Step({
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-2">
-            <h2 className="text-[16px] font-semibold text-k-navy">{title}</h2>
+            <h2 className="text-k-lg font-semibold text-k-navy">{title}</h2>
             {badge}
           </span>
-          {hint && <span className="mt-0.5 block text-[13px] text-k-text-2">{hint}</span>}
+          {hint && <span className="mt-0.5 block text-k-sm text-k-text-2">{hint}</span>}
         </span>
       </header>
       {blocked ? (
-        <p className="px-5 py-6 text-[13px] text-k-muted">{blocked}</p>
+        <p className="px-5 py-6 text-k-sm text-k-muted">{blocked}</p>
       ) : (
         <div className="px-5 py-5">{children}</div>
       )}
@@ -120,8 +120,8 @@ export function OptionCards<T extends string>({
                 {active && <span className="h-2 w-2 rounded-full bg-k-purple" />}
               </span>
               <span className="min-w-0">
-                <span className="block text-[14px] font-medium text-k-text">{option.title}</span>
-                <span className="mt-1 block text-[12px] leading-snug text-k-text-2">{option.hint}</span>
+                <span className="block text-k-base font-medium text-k-text">{option.title}</span>
+                <span className="mt-1 block text-k-xs leading-snug text-k-text-2">{option.hint}</span>
               </span>
             </span>
           </button>
@@ -155,8 +155,8 @@ export function Switch({
         className="mt-0.5 h-5 w-5 shrink-0 accent-k-purple"
       />
       <span className="min-w-0">
-        <span className="block text-[14px] font-medium text-k-text">{label}</span>
-        <span className="mt-1 block text-[13px] text-k-text-2">{hint}</span>
+        <span className="block text-k-base font-medium text-k-text">{label}</span>
+        <span className="mt-1 block text-k-sm text-k-text-2">{hint}</span>
       </span>
     </label>
   );
@@ -205,11 +205,11 @@ export function SampleStep({
     <>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-[13px] font-medium text-k-text">{t('columns.sample')}</p>
-          <p className="mt-1 truncate text-[14px] text-k-text-2">
+          <p className="text-k-sm font-medium text-k-text">{t('columns.sample')}</p>
+          <p className="mt-1 truncate text-k-base text-k-text-2">
             {reading ? t('columns.reading') : (fileName ?? t('columns.noSampleText'))}
           </p>
-          <p className="mt-2 text-[12px] text-k-muted">
+          <p className="mt-2 text-k-xs text-k-muted">
             {columnCount !== null
               ? t('columns.seeDetected', { n: columnCount })
               : t(`profiles.${config.profile.kind}.format`)}
@@ -236,8 +236,8 @@ export function SampleStep({
       </div>
 
       <div className="mt-6 border-t border-k-border pt-5">
-        <p className="text-[14px] font-medium text-k-text">{t('setup.shapeQuestion')}</p>
-        <p className="mt-1 text-[13px] text-k-text-2">{t('setup.shapeHint')}</p>
+        <p className="text-k-base font-medium text-k-text">{t('setup.shapeQuestion')}</p>
+        <p className="mt-1 text-k-sm text-k-text-2">{t('setup.shapeHint')}</p>
         <div className="mt-4">
           <OptionCards
             label={t('setup.shapeQuestion')}
@@ -351,7 +351,7 @@ export function ScopeStep({
           </Field>
           {/* Elegir el tipo sin elegir a quién no se guarda. Antes eso era silencio y parecía
               guardado; ahora lo dice, que es la diferencia entre esperar y estar roto. */}
-          <p className={`mt-2 text-[13px] ${pending ? 'text-k-warning-text' : 'text-k-text-2'}`}>
+          <p className={`mt-2 text-k-sm ${pending ? 'text-k-warning-text' : 'text-k-text-2'}`}>
             {pending
               ? t('setup.scopePending')
               : (scopeRefName(config.scope, screen.members, screen.branches, t) ?? t('settings.scopeHint'))}
@@ -361,7 +361,7 @@ export function ScopeStep({
 
       {/* Empresa + una sola persona activa = la cartera se autoasigna y no hay reparto. */}
       {kind === 'account' && sole && (
-        <p className="mt-4 text-[13px] text-k-text-2">{t('settings.scopeSole', { name: sole.name })}</p>
+        <p className="mt-4 text-k-sm text-k-text-2">{t('settings.scopeSole', { name: sole.name })}</p>
       )}
     </>
   );
@@ -381,7 +381,7 @@ export function RulesStep({
 
   return (
     <>
-      <p className="text-[14px] font-medium text-k-text">{t('settings.absent')}</p>
+      <p className="text-k-base font-medium text-k-text">{t('settings.absent')}</p>
       <div className="mt-4">
         <OptionCards
           label={t('settings.absent')}
@@ -438,12 +438,12 @@ export function SourceCard({
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-[14px] font-medium text-k-text">{t('settings.source')}</p>
+            <p className="text-k-base font-medium text-k-text">{t('settings.source')}</p>
             <Badge tone={byFile ? 'success' : 'neutral'} dot>
               {t(byFile ? 'settings.sourceFile' : 'settings.sourceManual')}
             </Badge>
           </div>
-          <p className="mt-1 text-[13px] text-k-text-2">
+          <p className="mt-1 text-k-sm text-k-text-2">
             {byFile ? t('setup.sourceFileHint') : t('settings.sourceManualHint')}
           </p>
         </div>

@@ -87,7 +87,7 @@ export function BulkActions({
         <button
           type="button"
           onClick={() => setAbierto('assign')}
-          className="h-8 rounded-lg bg-white px-3 text-[13px] font-medium text-k-periwinkle hover:bg-k-light-bg"
+          className="h-8 rounded-lg bg-white px-3 text-k-sm font-medium text-k-periwinkle hover:bg-k-light-bg"
         >
           {t('bulk.assign')}
         </button>
@@ -96,7 +96,7 @@ export function BulkActions({
         <button
           type="button"
           onClick={() => setAbierto('priority')}
-          className="h-8 rounded-lg bg-white px-3 text-[13px] font-medium text-k-periwinkle hover:bg-k-light-bg"
+          className="h-8 rounded-lg bg-white px-3 text-k-sm font-medium text-k-periwinkle hover:bg-k-light-bg"
         >
           {t('bulk.priority')}
         </button>
@@ -104,7 +104,7 @@ export function BulkActions({
       <button
         type="button"
         onClick={() => setAbierto('clear')}
-        className="h-8 rounded-lg bg-white px-3 text-[13px] font-medium text-k-success hover:bg-k-light-bg"
+        className="h-8 rounded-lg bg-white px-3 text-k-sm font-medium text-k-success hover:bg-k-light-bg"
       >
         {t('bulk.clear')}
       </button>

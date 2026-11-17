@@ -211,7 +211,7 @@ export function LoanForm({
         {schedule && schedule.length > 0 && (
           <div className="lg:col-span-3">
             <Section title={tc('plan.title')}>
-              <p className="mb-3 text-[12px] text-k-muted">{tc('plan.hint')}</p>
+              <p className="mb-3 text-k-xs text-k-muted">{tc('plan.hint')}</p>
               {/* D13: el atajo para un crédito que ya venía corriendo. No cambia el número de cuotas. */}
               {schedule.length > 1 && (
                 <div className="mb-4 max-w-md">

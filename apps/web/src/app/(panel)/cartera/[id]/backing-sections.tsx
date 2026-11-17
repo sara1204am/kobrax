@@ -8,7 +8,7 @@ import { Icon } from '@/components/panel-shell';
 import { Section } from '@/components/panel-ui';
 import { Modal } from '@/components/modal';
 import { money } from '@/lib/format';
-import { ContactDetail, Dato, EyeButton, LocationDetail } from './client-contacts';
+import { ContactDetail, Dato, EyeButton, LocationDetail } from './client-contacts';
 import { TextButton } from '@/components/ui';
 
 /**
@@ -41,7 +41,7 @@ function AddButton({ onClick, label }: { onClick: () => void; label: string }) {
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg bg-k-highlight px-3 text-[13px] font-medium text-k-periwinkle hover:bg-k-light-bg"
+      className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg bg-k-highlight px-3 text-k-sm font-medium text-k-periwinkle hover:bg-k-light-bg"
     >
       + {label}
     </button>
@@ -55,7 +55,7 @@ function Vacio({ icon, text, action }: { icon: 'team' | 'security'; text: string
       <span className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-k-bg text-k-muted">
         <Icon name={icon} className="h-5 w-5" />
       </span>
-      <p className="text-[13px] text-k-text-2">{text}</p>
+      <p className="text-k-sm text-k-text-2">{text}</p>
       {action && <div className="mt-3">{action}</div>}
     </div>
   );
@@ -109,24 +109,24 @@ export function GuarantorsSection({
           {rows.map((r) => (
             <li key={r.id} className="px-4 py-3">
               <div className="flex items-start justify-between gap-2">
-                <p className="text-[14px] font-medium text-k-text">{r.relatedName}</p>
+                <p className="text-k-base font-medium text-k-text">{r.relatedName}</p>
                 <EyeButton onClick={() => setViendo(r.id)} />
               </div>
-              <p className="text-[12px] text-k-muted">
+              <p className="text-k-xs text-k-muted">
                 {t(`relationType.${r.relationshipType}`)}
                 {!r.isContactable && ` · ${t('notContactable')}`}
               </p>
               {/* Sus teléfonos y direcciones, enmascarados como todo lo demás. Es lo que se busca
                   cuando el deudor no aparece: a quién más llamar. */}
               {(r.contacts?.length || r.locations?.length) && (
-                <p className="mt-1 text-[12px] text-k-text-2">
+                <p className="mt-1 text-k-xs text-k-text-2">
                   {[...(r.contacts ?? []).map((c) => c.value ?? '—'), ...(r.locations ?? []).map((l) => l.address ?? '—')].join(' · ')}
                 </p>
               )}
               {/* Cuántos préstamos respalda. El número y no los códigos: acá se mira a la persona;
                   qué préstamo, en la ficha del préstamo. */}
               {r.creditIds && r.creditIds.length > 0 && (
-                <p className="mt-1 text-[12px] text-k-text-2">{t('guaranteesCount', { count: r.creditIds.length })}</p>
+                <p className="mt-1 text-k-xs text-k-text-2">{t('guaranteesCount', { count: r.creditIds.length })}</p>
               )}
             </li>
           ))}
@@ -186,8 +186,8 @@ function GuarantorDetail({ relation: r }: { relation: ClientRelationDetail }) {
 function Bloque({ title, empty, children }: { title: string; empty: string; children: React.ReactNode[] }) {
   return (
     <section className="border-t border-k-border pt-4">
-      <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{title}</h3>
-      {children.length === 0 ? <p className="text-[13px] text-k-muted">{empty}</p> : <ul className="space-y-3">{children}</ul>}
+      <h3 className="mb-3 text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">{title}</h3>
+      {children.length === 0 ? <p className="text-k-sm text-k-muted">{empty}</p> : <ul className="space-y-3">{children}</ul>}
     </section>
   );
 }
@@ -231,8 +231,8 @@ export function CollateralsSection({
         <ul className="divide-y divide-k-border">
           {rows.map((g) => (
             <li key={g.id} className="px-4 py-3">
-              <p className="text-[14px] font-medium text-k-text">{g.description}</p>
-              <p className="text-[12px] text-k-muted">
+              <p className="text-k-base font-medium text-k-text">{g.description}</p>
+              <p className="text-k-xs text-k-muted">
                 {[
                   g.type ? (types.find((c) => c.code === g.type)?.label || g.type) : null,
                   g.estimatedValue != null ? money(g.estimatedValue, g.currency ?? currency) : null,
@@ -241,7 +241,7 @@ export function CollateralsSection({
                   .join(' · ')}
               </p>
               {g.creditIds && g.creditIds.length > 0 && (
-                <p className="mt-1 text-[12px] text-k-text-2">{t('backsCount', { count: g.creditIds.length })}</p>
+                <p className="mt-1 text-k-xs text-k-text-2">{t('backsCount', { count: g.creditIds.length })}</p>
               )}
             </li>
           ))}

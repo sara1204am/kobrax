@@ -179,7 +179,7 @@ export async function WidgetRenderer({
           actions={actions}
           editable={editable}
           aside={
-            <Link href="/agenda" className="text-[13px] font-medium text-k-periwinkle hover:underline">
+            <Link href="/agenda" className="text-k-sm font-medium text-k-periwinkle hover:underline">
               {t('agendaToday.view')} →
             </Link>
           }

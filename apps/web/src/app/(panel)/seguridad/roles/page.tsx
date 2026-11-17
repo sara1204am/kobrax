@@ -23,7 +23,7 @@ export default async function RolesPage() {
     <>
       <PageHeader title={t('title')} subtitle={t('subtitle')} />
       <RolesTable roles={res.body.data} timezone={me.body.data?.account?.timezone ?? null} userId={me.body.data?.userId} />
-      <p className="mt-3 text-[12px] text-k-muted">{t('legend')}</p>
+      <p className="mt-3 text-k-xs text-k-muted">{t('legend')}</p>
     </>
   );
 }

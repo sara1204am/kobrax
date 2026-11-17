@@ -205,12 +205,12 @@ function NewClientModal({
           </>
         }
       >
-        <p className="mb-3 text-[13px] text-k-text-2">{t('newSubtitle')}</p>
+        <p className="mb-3 text-k-sm text-k-text-2">{t('newSubtitle')}</p>
         <ErrorBanner message={error} />
         {/* El mínimo que exige el servidor: quién es (nombre y apellido, o razón social) y un
             teléfono. Se dice, en vez de dejar el botón apagado sin explicar por qué. */}
-        {!valid && <p className="mb-3 mt-2 text-[13px] text-k-muted">{t('form.minimum')}</p>}
-        {checking && <p className="mb-3 mt-2 text-[13px] text-k-muted">{t('duplicate.checking')}</p>}
+        {!valid && <p className="mb-3 mt-2 text-k-sm text-k-muted">{t('form.minimum')}</p>}
+        {checking && <p className="mb-3 mt-2 text-k-sm text-k-muted">{t('duplicate.checking')}</p>}
 
         {/* El carnet tomado no va acá: va bajo su campo. Si además hay homónimos, se ve el carnet
             primero, que es lo que bloquea. */}

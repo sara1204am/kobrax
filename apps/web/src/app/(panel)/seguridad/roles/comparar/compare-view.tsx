@@ -26,9 +26,9 @@ export function CompareView({ roles, a, b, compare }: { roles: { key: string }[]
 
   const rows = compare ? compare.rows.filter((r) => !onlyDiff || r.a !== r.b) : [];
   const select = (value: string | undefined, onChange: (v: string) => void, label: string) => (
-    <label className="flex items-center gap-2 text-[14px] text-k-text">
+    <label className="flex items-center gap-2 text-k-base text-k-text">
       <span className="sr-only">{label}</span>
-      <Select value={value ?? ''} onChange={(e) => onChange(e.target.value)} aria-label={label} className="!h-10 !w-auto !border !border-k-border !px-3 !text-[14px]">
+      <Select value={value ?? ''} onChange={(e) => onChange(e.target.value)} aria-label={label} className="!h-10 !w-auto !border !border-k-border !px-3 !text-k-base">
         <option value="" disabled>
           —
         </option>
@@ -45,10 +45,10 @@ export function CompareView({ roles, a, b, compare }: { roles: { key: string }[]
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         {select(a, (v) => go(v, b), 'A')}
-        <span className="text-[14px] text-k-text-2">{t('compareView.with')}</span>
+        <span className="text-k-base text-k-text-2">{t('compareView.with')}</span>
         {select(b, (v) => go(a, v), 'B')}
         <Checkbox
-          className="ml-auto items-center !text-[13px] !text-k-text-2"
+          className="ml-auto items-center !text-k-sm !text-k-text-2"
           checked={onlyDiff}
           onChange={(e) => setOnlyDiff(e.target.checked)}
           label={t('compareView.onlyDiff')}
@@ -59,7 +59,7 @@ export function CompareView({ roles, a, b, compare }: { roles: { key: string }[]
         <EmptyState title={t('compareView.pick')} />
       ) : (
         <>
-          <div className="grid gap-2 rounded-lg border border-k-border bg-white p-3 text-[13px] sm:grid-cols-2">
+          <div className="grid gap-2 rounded-lg border border-k-border bg-white p-3 text-k-sm sm:grid-cols-2">
             <p>
               <span className="font-semibold text-k-navy">{roleName(compare.a.key ?? compare.a.name)}</span> · {t('compareView.scope')}: {compare.a.scopeKind ? t(`scope.${compare.a.scopeKind}`) : '—'}
             </p>
@@ -71,7 +71,7 @@ export function CompareView({ roles, a, b, compare }: { roles: { key: string }[]
             <EmptyState title={t('compareView.noDifferences')} />
           ) : (
             <div className="overflow-x-auto rounded-lg border border-k-border bg-white">
-              <table className="w-full text-left text-[13px]">
+              <table className="w-full text-left text-k-sm">
                 <thead className="bg-k-bg text-k-text-2">
                   <tr>
                     <th className="px-3 py-2 font-medium">{t('compareView.permission')}</th>
@@ -85,7 +85,7 @@ export function CompareView({ roles, a, b, compare }: { roles: { key: string }[]
                     <tr key={r.code} className="border-t border-k-border">
                       <td className="px-3 py-2">
                         <span className="font-medium text-k-text">{tp(`${permissionKey(r.code)}.name`)}</span>
-                        <span className="block font-mono text-[11px] text-k-muted">{r.code}</span>
+                        <span className="block font-mono text-k-2xs text-k-muted">{r.code}</span>
                       </td>
                       <td className="px-3 py-2 text-center">{r.a ? '✅' : '—'}</td>
                       <td className="px-3 py-2 text-center">{r.b ? '✅' : '—'}</td>

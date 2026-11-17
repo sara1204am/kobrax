@@ -33,16 +33,16 @@ export async function KpiWidget({
   return (
     <div className="text-center">
       <p className="text-[24px] font-semibold leading-tight text-k-navy">{format(kpi.value)}</p>
-      <p className="mt-0.5 text-[12px] font-medium text-k-text-2">{label}</p>
+      <p className="mt-0.5 text-k-xs font-medium text-k-text-2">{label}</p>
       {delta ? (
-        <p className={`mt-1 text-[12px] ${delta.up ? 'text-k-success' : 'text-k-danger'}`}>
+        <p className={`mt-1 text-k-xs ${delta.up ? 'text-k-success' : 'text-k-danger'}`}>
           {delta.up ? '↑' : '↓'} {Math.abs(delta.pct)}% <span className="text-k-muted">{t('vsPrevious')}</span>
         </p>
       ) : (
-        <p className="mt-1 text-[12px] text-k-muted">{t('noHistory')}</p>
+        <p className="mt-1 text-k-xs text-k-muted">{t('noHistory')}</p>
       )}
       {parts && parts.length > 1 && (
-        <p className="mt-1 text-[12px] text-k-text-2">
+        <p className="mt-1 text-k-xs text-k-text-2">
           {parts.map((p, i) => (
             <span key={p.label}>
               {i > 0 && ' · '}

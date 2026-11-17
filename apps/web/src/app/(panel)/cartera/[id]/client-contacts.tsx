@@ -7,7 +7,7 @@ import type { ClientContactDetail, ClientLocationDetail } from '@kobrax/shared';
 import { Icon } from '@/components/panel-shell';
 import { Section } from '@/components/panel-ui';
 import { Modal } from '@/components/modal';
-import { PhotoViewer } from '@/components/photo-viewer';
+import { PhotoViewer } from '@/components/photo-viewer';
 import { TextButton } from '@/components/ui';
 
 /**
@@ -59,7 +59,7 @@ export function ContactList({
         action={canWrite && <EditarLink onClick={onEdit} busy={busy} />}
       >
         {rows.length === 0 ? (
-          <p className="text-[13px] text-k-muted">{t('noContacts')}</p>
+          <p className="text-k-sm text-k-muted">{t('noContacts')}</p>
         ) : (
           <ul className="divide-y divide-k-border">
             {rows.map((c) => (
@@ -114,7 +114,7 @@ export function LocationList({
     <>
       <Section title={t('sections.locations')} action={canWrite && <EditarLink onClick={onEdit} busy={busy} />}>
         {rows.length === 0 ? (
-          <p className="text-[13px] text-k-muted">{t('noLocations')}</p>
+          <p className="text-k-sm text-k-muted">{t('noLocations')}</p>
         ) : (
           <ul className="divide-y divide-k-border">
             {rows.map((l) => (
@@ -184,7 +184,7 @@ export function LocationDetail({ location }: { location: ClientLocationDetail })
       {/* Las fotos primero: reconocer la casa es lo que se mira antes que el texto. La primera es la principal. */}
       {fotos.length > 0 && (
         <section>
-          <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{t('photos.title')}</h3>
+          <h3 className="mb-2 text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">{t('photos.title')}</h3>
           <ul className="flex flex-wrap gap-3">
             {fotos.map((url, i) => (
               <li key={url} className="relative">
@@ -198,7 +198,7 @@ export function LocationDetail({ location }: { location: ClientLocationDetail })
                   />
                 </button>
                 {i === 0 && (
-                  <span className="absolute left-1 top-1 rounded bg-k-purple px-1.5 py-0.5 text-[10px] font-semibold text-white">{t('photos.main')}</span>
+                  <span className="absolute left-1 top-1 rounded bg-k-purple px-1.5 py-0.5 text-k-3xs font-semibold text-white">{t('photos.main')}</span>
                 )}
               </li>
             ))}
@@ -236,8 +236,8 @@ export function LocationDetail({ location }: { location: ClientLocationDetail })
 export function Dato({ label, value, wide }: { label: string; value: string; wide?: boolean }) {
   return (
     <div className={wide ? 'sm:col-span-2' : undefined}>
-      <dt className="text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{label}</dt>
-      <dd className="mt-0.5 break-words text-[14px] text-k-text">{value}</dd>
+      <dt className="text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">{label}</dt>
+      <dd className="mt-0.5 break-words text-k-base text-k-text">{value}</dd>
     </div>
   );
 }
@@ -288,7 +288,7 @@ function RevealButton({ onClick, busy }: { onClick: () => void; busy: boolean })
       type="button"
       onClick={onClick}
       disabled={busy}
-      className="shrink-0 rounded-lg bg-k-highlight px-2.5 py-1 text-[12px] font-medium text-k-periwinkle hover:bg-k-light-bg disabled:opacity-50"
+      className="shrink-0 rounded-lg bg-k-highlight px-2.5 py-1 text-k-xs font-medium text-k-periwinkle hover:bg-k-light-bg disabled:opacity-50"
     >
       {busy ? t('revealing') : t('show')}
     </button>
@@ -315,14 +315,14 @@ function Fila({
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex flex-wrap items-center gap-x-2">
-          <span className="truncate text-[14px] font-medium text-k-text">{value}</span>
+          <span className="truncate text-k-base font-medium text-k-text">{value}</span>
           {badge && (
-            <span className="rounded bg-k-highlight px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-k-periwinkle">
+            <span className="rounded bg-k-highlight px-1.5 py-0.5 text-k-3xs font-semibold uppercase tracking-wide text-k-periwinkle">
               {badge}
             </span>
           )}
         </span>
-        <span className="block truncate text-[12px] text-k-muted">{hint}</span>
+        <span className="block truncate text-k-xs text-k-muted">{hint}</span>
       </span>
       {action}
     </li>

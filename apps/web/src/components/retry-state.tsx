@@ -26,7 +26,7 @@ export function RetryState({ title, text }: { title: string; text?: string }) {
         <button
           type="button"
           onClick={() => router.refresh()}
-          className="min-h-[40px] rounded-xl border border-k-border bg-white px-4 text-[14px] font-medium text-k-purple hover:bg-k-bg"
+          className="min-h-[40px] rounded-xl border border-k-border bg-white px-4 text-k-base font-medium text-k-purple hover:bg-k-bg"
         >
           {t('retry')}
         </button>

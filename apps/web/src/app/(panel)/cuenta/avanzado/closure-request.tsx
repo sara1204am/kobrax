@@ -57,10 +57,10 @@ export function ClosureRequest({
 
   return (
     <Section title={t('title')} inner="space-y-4 p-6">
-      <p className="text-[13px] leading-relaxed text-k-text-2">{t('intro')}</p>
+      <p className="text-k-sm leading-relaxed text-k-text-2">{t('intro')}</p>
 
       {pending ? (
-        <p role="status" className="rounded-xl bg-k-highlight px-4 py-3 text-[13px] text-k-navy">
+        <p role="status" className="rounded-xl bg-k-highlight px-4 py-3 text-k-sm text-k-navy">
           {t('pending', { date: dateTime(pending.createdAt, locale, timezone ?? undefined) })}
         </p>
       ) : (
@@ -108,7 +108,7 @@ export function ClosureRequest({
               maxLength={500}
               rows={3}
               onChange={(e) => setNote(e.target.value)}
-              className="!border !border-k-border !px-3 !py-2 !text-[14px]"
+              className="!border !border-k-border !px-3 !py-2 !text-k-base"
             />
           </Field>
         </div>

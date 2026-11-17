@@ -69,11 +69,11 @@ export function PlanRequest({ account, requests }: { account: AccountInfo; reque
 
   return (
     <Section title={solo ? t('soloTitle') : t('title')} inner="space-y-4 p-6">
-      <p className="text-[13px] leading-relaxed text-k-text-2">{solo ? t('soloText') : t('intro')}</p>
+      <p className="text-k-sm leading-relaxed text-k-text-2">{solo ? t('soloText') : t('intro')}</p>
 
       {solo && gain && now && gain.users !== null && gain.credits !== null && now.users !== null && now.credits !== null && (
         // Lo que se gana al pasar al primer escalón de equipo, con los números del catálogo (no escritos a mano).
-        <p className="rounded-xl bg-k-highlight px-4 py-3 text-[13px] leading-relaxed text-k-navy">
+        <p className="rounded-xl bg-k-highlight px-4 py-3 text-k-sm leading-relaxed text-k-navy">
           {t('soloGain', {
             plan: tp(`names.${firstTeam}`),
             fromUsers: now.users,
@@ -85,13 +85,13 @@ export function PlanRequest({ account, requests }: { account: AccountInfo; reque
       )}
 
       {pending && (
-        <p role="status" className="rounded-xl bg-k-highlight px-4 py-3 text-[13px] text-k-navy">
+        <p role="status" className="rounded-xl bg-k-highlight px-4 py-3 text-k-sm text-k-navy">
           {t('pending', { plan: name(pending.plan), date: when(pending.createdAt) })}
         </p>
       )}
 
       {last && (
-        <p className="rounded-xl bg-k-light-bg px-4 py-3 text-[13px] text-k-text-2">
+        <p className="rounded-xl bg-k-light-bg px-4 py-3 text-k-sm text-k-text-2">
           {last.status === 'HANDLED' ? t('handled', { plan: name(last.plan) }) : t('rejected', { plan: name(last.plan) })}
           {last.handledNote ? ` “${last.handledNote}”` : ''}
         </p>
@@ -141,7 +141,7 @@ export function PlanRequest({ account, requests }: { account: AccountInfo; reque
               (kind) =>
                 groups[kind].length > 0 && (
                   <div key={kind} role="radiogroup" aria-label={t(`groups.${kind}`)}>
-                    <h3 className="text-[12px] font-semibold uppercase tracking-wide text-k-text-2">
+                    <h3 className="text-k-xs font-semibold uppercase tracking-wide text-k-text-2">
                       {t(`groups.${kind}`)} <span className="font-normal normal-case text-k-muted">· {t(`groupHint.${kind}`)}</span>
                     </h3>
                     <div className="mt-2 grid gap-3 sm:grid-cols-2">
@@ -157,12 +157,12 @@ export function PlanRequest({ account, requests }: { account: AccountInfo; reque
                           >
                             <span className="flex items-center gap-2">
                               <input type="radio" name="plan" value={code} checked={selected} onChange={() => setPlan(code)} />
-                              <span className="text-[15px] font-semibold text-k-navy">{tp(`names.${code}`)}</span>
+                              <span className="text-k-md font-semibold text-k-navy">{tp(`names.${code}`)}</span>
                             </span>
-                            <span className="mt-1 block text-[13px] text-k-text-2">
+                            <span className="mt-1 block text-k-sm text-k-text-2">
                               {tp(`price.${code}`, { base: p.price.base, perSeat: p.price.perSeat })}
                             </span>
-                            <ul className="mt-3 space-y-1 text-[13px] text-k-text">
+                            <ul className="mt-3 space-y-1 text-k-sm text-k-text">
                               <li>{p.limits.users === null ? t('features.membersUnlimited') : t('features.members', { n: p.limits.users })}</li>
                               <li>{p.limits.credits === null ? t('features.creditsUnlimited') : t('features.credits', { n: p.limits.credits })}</li>
                               <li>{p.limits.clients === null ? t('features.clientsUnlimited') : t('features.clients', { n: p.limits.clients })}</li>
@@ -175,7 +175,7 @@ export function PlanRequest({ account, requests }: { account: AccountInfo; reque
                   </div>
                 ),
             )}
-            <p className="text-[12px] text-k-muted">{t('currentIs', { plan: tp(`names.${current}`) })}</p>
+            <p className="text-k-xs text-k-muted">{t('currentIs', { plan: tp(`names.${current}`) })}</p>
           </fieldset>
 
           <Field label={t('note')} hint={t('noteHint')}>
@@ -184,7 +184,7 @@ export function PlanRequest({ account, requests }: { account: AccountInfo; reque
               maxLength={500}
               rows={3}
               onChange={(e) => setNote(e.target.value)}
-              className="!border !border-k-border !px-3 !py-2 !text-[14px]"
+              className="!border !border-k-border !px-3 !py-2 !text-k-base"
             />
           </Field>
         </div>

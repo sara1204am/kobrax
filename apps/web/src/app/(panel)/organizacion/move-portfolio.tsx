@@ -70,12 +70,12 @@ export function MovePortfolioDialog({ from, rows, onClose }: { from: OfficeRow |
       {from && (
         <div className="space-y-4">
           <ErrorBanner message={error} />
-          <p className="text-[14px] text-k-text">{t('portfolio.text', { name: from.fullName || from.name, n: from.credits })}</p>
+          <p className="text-k-base text-k-text">{t('portfolio.text', { name: from.fullName || from.name, n: from.credits })}</p>
           <Field label={t('portfolio.to')}>
             <OfficeSelect options={options} emptyLabel={t('portfolio.pick')} value={to} onChange={(e) => setTo(e.target.value)} />
           </Field>
-          <p className="text-[12px] text-k-muted">{t('portfolio.paymentsNote')}</p>
-          {moved !== null && <p role="status" className="rounded-xl bg-k-success-bg px-3 py-2 text-[13px] text-k-success">{t('portfolio.moved', { n: moved })}</p>}
+          <p className="text-k-xs text-k-muted">{t('portfolio.paymentsNote')}</p>
+          {moved !== null && <p role="status" className="rounded-xl bg-k-success-bg px-3 py-2 text-k-sm text-k-success">{t('portfolio.moved', { n: moved })}</p>}
         </div>
       )}
     </Modal>

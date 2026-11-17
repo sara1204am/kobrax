@@ -89,10 +89,10 @@ export function ActivityContextFields({
 
   return (
     <fieldset className={`rounded-xl border border-k-border bg-k-bg p-3 ${compact ? 'space-y-3' : 'space-y-4'}`}>
-      <legend className="px-1 text-[12px] font-semibold uppercase tracking-wide text-k-text-2">{tf('context')}</legend>
-      <p className="text-[12px] text-k-muted">{tf('contextHint')}</p>
+      <legend className="px-1 text-k-xs font-semibold uppercase tracking-wide text-k-text-2">{tf('context')}</legend>
+      <p className="text-k-xs text-k-muted">{tf('contextHint')}</p>
       <Field label={tf('reason')}>{reasonSelect}</Field>
-      {suggestion && <p className="text-[12px] text-k-text-2">{suggestion}</p>}
+      {suggestion && <p className="text-k-xs text-k-text-2">{suggestion}</p>}
       {asksDate && <Field label={tf('expectedIncome')}>{dateInput}</Field>}
       <Field label={tf('payer')}>{payerSelect}</Field>
     </fieldset>

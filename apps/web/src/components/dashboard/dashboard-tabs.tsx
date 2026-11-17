@@ -76,7 +76,7 @@ export function DashboardTabs({ dashboards, currentId }: { dashboards: Dashboard
                   href={hrefFor(d.id)}
                   onClick={() => remember(d.id)}
                   aria-current={active ? 'page' : undefined}
-                  className={`-mb-px block max-w-[220px] truncate border-b-2 px-4 py-2.5 text-[14px] font-medium transition-colors ${
+                  className={`-mb-px block max-w-[220px] truncate border-b-2 px-4 py-2.5 text-k-base font-medium transition-colors ${
                     active
                       ? 'border-k-purple text-k-navy'
                       : 'border-transparent text-k-text-2 hover:border-k-border hover:text-k-text'
@@ -96,7 +96,7 @@ export function DashboardTabs({ dashboards, currentId }: { dashboards: Dashboard
           setError(null);
           setCreating(true);
         }}
-        className="h-10 shrink-0 text-[14px] sm:w-auto sm:px-4"
+        className="h-10 shrink-0 text-k-base sm:w-auto sm:px-4"
       >
         {t('tabs.new')}
       </Button>

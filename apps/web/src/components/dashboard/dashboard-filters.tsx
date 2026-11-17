@@ -163,7 +163,7 @@ export function DashboardFilters({
         <button
           type="button"
           onClick={() => router.push(pathname)}
-          className="h-10 rounded-xl px-3 text-[13px] font-medium text-k-purple hover:bg-k-bg"
+          className="h-10 rounded-xl px-3 text-k-sm font-medium text-k-purple hover:bg-k-bg"
         >
           {t('filters.clear')}
         </button>
@@ -213,7 +213,7 @@ function Multi({
 
   return (
     <div>
-      <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{label}</span>
+      <span className="mb-1 block text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">{label}</span>
       <Dropdown
         summaryClass={`${SELECT} flex min-w-[140px] cursor-pointer list-none items-center justify-between gap-2 [&::-webkit-details-marker]:hidden`}
         panelClass="absolute left-0 z-20 mt-1 max-h-72 w-[240px] overflow-y-auto rounded-xl border border-k-border bg-white py-1 shadow-k-card"
@@ -237,7 +237,7 @@ function Multi({
               onChange={() => toggle(o.value)}
               className="h-4 w-4 accent-k-purple"
             />
-            <span className="text-[13px] text-k-text">{o.label}</span>
+            <span className="text-k-sm text-k-text">{o.label}</span>
           </label>
         ))}
       </Dropdown>
@@ -246,13 +246,13 @@ function Multi({
 }
 
 const SELECT =
-  'h-10 rounded-xl border border-k-border bg-white px-2.5 text-[13px] text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus';
+  'h-10 rounded-xl border border-k-border bg-white px-2.5 text-k-sm text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus';
 const INPUT = SELECT;
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{label}</span>
+      <span className="mb-1 block text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">{label}</span>
       {children}
     </label>
   );

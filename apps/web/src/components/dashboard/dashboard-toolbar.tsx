@@ -121,7 +121,7 @@ export function DashboardToolbar({
               setName(current.name);
               setRenaming(true);
             }}
-            className="h-10 rounded-xl px-3 text-[13px] font-medium text-k-purple hover:bg-k-bg"
+            className="h-10 rounded-xl px-3 text-k-sm font-medium text-k-purple hover:bg-k-bg"
           >
             {t('rename')}
           </button>
@@ -189,16 +189,16 @@ export function DashboardToolbar({
                   className="h-full w-full rounded-xl border border-k-border px-3 py-2.5 text-left hover:bg-k-bg disabled:opacity-50"
                 >
                   <WidgetPreview type={item.type} strip={item.id === 'kpiStrip'} />
-                  <span className="mt-2 block text-[14px] font-semibold text-k-text">{t(`catalogItems.${item.id}.name`)}</span>
-                  <span className="mt-0.5 block text-[12px] leading-snug text-k-text-2">
+                  <span className="mt-2 block text-k-base font-semibold text-k-text">{t(`catalogItems.${item.id}.name`)}</span>
+                  <span className="mt-0.5 block text-k-xs leading-snug text-k-text-2">
                     {t(`catalogItems.${item.id}.description`)}
                   </span>
-                  {def && <span className="mt-1.5 block text-[11px] text-k-muted">{t(`catalog.${def.labelKey}`)}</span>}
+                  {def && <span className="mt-1.5 block text-k-2xs text-k-muted">{t(`catalog.${def.labelKey}`)}</span>}
                 </button>
               </li>
             );
           })}
-          {filtered.length === 0 && <li className="col-span-full py-6 text-center text-[13px] text-k-muted">{t('noWidgetMatch')}</li>}
+          {filtered.length === 0 && <li className="col-span-full py-6 text-center text-k-sm text-k-muted">{t('noWidgetMatch')}</li>}
         </ul>
       </Modal>
 

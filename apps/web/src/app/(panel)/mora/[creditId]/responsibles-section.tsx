@@ -116,17 +116,17 @@ export function ResponsiblesSection({
 
   return (
     <Section title={tr('title')}>
-      <p className="mb-3 text-[13px] text-k-text-2">{tr('hint')}</p>
+      <p className="mb-3 text-k-sm text-k-text-2">{tr('hint')}</p>
       <ul className="space-y-2">
         <li className="flex flex-wrap items-center gap-2">
           <Badge tone="neutral">{tr('PRINCIPAL')}</Badge>
-          <span className="text-[14px] font-medium text-k-text">{principal ? nameOf(principal.userId) : tr('none')}</span>
+          <span className="text-k-base font-medium text-k-text">{principal ? nameOf(principal.userId) : tr('none')}</span>
         </li>
         {covers.map((a) => (
           <li key={a.id ?? `${a.kind}-${a.userId}`} className="flex flex-wrap items-center gap-2">
             <Badge tone={a.kind === 'TEMPORAL' ? 'warning' : 'neutral'}>{tr(a.kind)}</Badge>
-            <span className="text-[14px] font-medium text-k-text">{nameOf(a.userId)}</span>
-            {a.expiresAt && <span className="text-[13px] text-k-text-2">{tr('expires', { date: dayDate(a.expiresAt.slice(0, 10), locale) })}</span>}
+            <span className="text-k-base font-medium text-k-text">{nameOf(a.userId)}</span>
+            {a.expiresAt && <span className="text-k-sm text-k-text-2">{tr('expires', { date: dayDate(a.expiresAt.slice(0, 10), locale) })}</span>}
             {canAssign && a.id && (
               <TextButton
                 type="button"

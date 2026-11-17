@@ -32,12 +32,12 @@ export function FiltersCard({
 }) {
   const t = useTranslations('panel.agenda');
   const dirty = !!(values.q || values.gestor || values.tipo || values.estado);
-  const cls = 'h-10 w-full text-[13px]';
+  const cls = 'h-10 w-full text-k-sm';
 
   return (
     <section aria-label={t('filters.title')} className="rounded-2xl border border-k-border bg-white p-4 shadow-k-card">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-[15px] font-semibold text-k-navy">{t('filters.title')}</h2>
+        <h2 className="text-k-md font-semibold text-k-navy">{t('filters.title')}</h2>
         {dirty && (
           <TextButton type="button" onClick={onClear} tone="periwinkle">
             {t('filters.clear')}
@@ -51,7 +51,7 @@ export function FiltersCard({
           onChange={(e) => onChange({ q: e.target.value })}
           placeholder={t('filters.search')}
           aria-label={t('filters.search')}
-          className="h-10 text-[13px]"
+          className="h-10 text-k-sm"
         />
         {supervises && members.length > 0 && (
           <Select
@@ -104,8 +104,8 @@ export function SummaryCard({ items }: { items: { status: AgendaItemStatus }[] }
   return (
     <section aria-label={t('summary.title')} className="rounded-2xl border border-k-border bg-white p-4 shadow-k-card">
       <div className="mb-3 flex items-baseline justify-between">
-        <h2 className="text-[15px] font-semibold text-k-navy">{t('summary.title')}</h2>
-        <span className="text-[12px] text-k-text-2">{t('summary.count', { n: s.total })}</span>
+        <h2 className="text-k-md font-semibold text-k-navy">{t('summary.title')}</h2>
+        <span className="text-k-xs text-k-text-2">{t('summary.count', { n: s.total })}</span>
       </div>
       <dl className="grid grid-cols-3 divide-x divide-k-border text-center">
         <Stat label={t('summary.pending')} value={s.pending} className="text-k-navy" />
@@ -119,8 +119,8 @@ export function SummaryCard({ items }: { items: { status: AgendaItemStatus }[] }
 function Stat({ label, value, className }: { label: string; value: number; className: string }) {
   return (
     <div className="px-1">
-      <dd className={`text-[22px] font-semibold tabular-nums ${className}`}>{value}</dd>
-      <dt className="text-[11px] leading-tight text-k-text-2">{label}</dt>
+      <dd className={`text-k-3xl font-semibold tabular-nums ${className}`}>{value}</dd>
+      <dt className="text-k-2xs leading-tight text-k-text-2">{label}</dt>
     </div>
   );
 }

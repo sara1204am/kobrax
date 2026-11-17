@@ -64,18 +64,18 @@ export function SingleOffice({
       <dl className="grid gap-x-10 gap-y-4 sm:grid-cols-2">
         {facts.map(([label, value]) => (
           <div key={label}>
-            <dt className="text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{label}</dt>
-            <dd className="mt-1 break-words text-[15px] text-k-text">{value || <span className="text-k-muted">—</span>}</dd>
+            <dt className="text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">{label}</dt>
+            <dd className="mt-1 break-words text-k-md text-k-text">{value || <span className="text-k-muted">—</span>}</dd>
           </div>
         ))}
         <div>
-          <dt className="text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{t('single.team')}</dt>
-          <dd className="mt-1 text-[15px] text-k-text">{t('preview.members', { n: office.members })}</dd>
+          <dt className="text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">{t('single.team')}</dt>
+          <dd className="mt-1 text-k-md text-k-text">{t('preview.members', { n: office.members })}</dd>
         </div>
       </dl>
 
       {mayAdd && (
-        <div role="note" className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-k-bg px-4 py-3 text-[13px] text-k-text-2">
+        <div role="note" className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-k-bg px-4 py-3 text-k-sm text-k-text-2">
           <span>{t('single.firstAgencyHint')}</span>
           <span className="sm:w-56">
             <Button type="button" onClick={() => setDialog('add')}>
@@ -88,7 +88,7 @@ export function SingleOffice({
         </div>
       )}
       {planBlocks && (
-        <p role="note" className="rounded-xl bg-k-warning-bg px-4 py-3 text-[13px] text-k-warning-text">
+        <p role="note" className="rounded-xl bg-k-warning-bg px-4 py-3 text-k-sm text-k-warning-text">
           {t('single.planBlocks', { limit: plan.limit ?? 0 })}{' '}
           <Link href="/cuenta/plan" className="font-semibold underline">
             {t('seePlan')}

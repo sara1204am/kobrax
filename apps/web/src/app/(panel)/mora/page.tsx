@@ -65,10 +65,10 @@ export default async function MoraPage({ searchParams }: { searchParams: MoraPar
     <>
       {/* Sin título: la pantalla ya se llama «Mora» en el menú, y repetirlo en 26 px empuja la tabla
           media pantalla hacia abajo. Queda la bajada, que sí dice algo que el menú no dice. */}
-      <p className="mb-4 text-[14px] text-k-text-2">{t('subtitle')}</p>
+      <p className="mb-4 text-k-base text-k-text-2">{t('subtitle')}</p>
 
       {!supervises && (
-        <p className="mb-4 rounded-xl border border-k-border bg-k-bg px-4 py-3 text-[13px] text-k-text-2">
+        <p className="mb-4 rounded-xl border border-k-border bg-k-bg px-4 py-3 text-k-sm text-k-text-2">
           {t('scopedToMine')}
         </p>
       )}

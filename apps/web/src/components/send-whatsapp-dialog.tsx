@@ -309,7 +309,7 @@ export function SendWhatsappDialog({
             </Field>
 
             {pending.length > 0 && (
-              <p role="status" className="rounded-md border-l-[3px] border-k-warning bg-k-warning-bg px-3 py-2 text-[12px] text-k-warning-text">
+              <p role="status" className="rounded-md border-l-[3px] border-k-warning bg-k-warning-bg px-3 py-2 text-k-xs text-k-warning-text">
                 {t('incomplete', { names: pending.map((k) => `{{${k}}}`).join(', ') })}
               </p>
             )}
@@ -324,7 +324,7 @@ export function SendWhatsappDialog({
             </div>
 
             {/* Abrir no confirma el envío: queda pendiente y el resultado se dice después. */}
-            <p className={`rounded-xl border px-3 py-2 text-[12px] ${pendingId ? 'border-k-periwinkle bg-k-highlight text-k-text' : 'border-k-border bg-k-bg text-k-text-2'}`}>
+            <p className={`rounded-xl border px-3 py-2 text-k-xs ${pendingId ? 'border-k-periwinkle bg-k-highlight text-k-text' : 'border-k-border bg-k-bg text-k-text-2'}`}>
               {pendingId ? (
                 <>
                   {t('pendingDone')}{' '}

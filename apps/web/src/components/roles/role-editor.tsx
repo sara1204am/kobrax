@@ -56,9 +56,9 @@ export function RoleEditor({ role, catalog, roleName, selfInRole }: { role: Role
 
   return (
     <div className="space-y-4 pb-24">
-      {selfInRole && <p className="rounded-lg border border-k-warning bg-k-warning-bg px-3 py-2 text-[13px] text-k-warning-text">{t('editor.selfNote')}</p>}
+      {selfInRole && <p className="rounded-lg border border-k-warning bg-k-warning-bg px-3 py-2 text-k-sm text-k-warning-text">{t('editor.selfNote')}</p>}
       {notice && (
-        <p role="status" className="rounded-lg border border-k-periwinkle bg-k-highlight px-3 py-2 text-[13px] text-k-text">
+        <p role="status" className="rounded-lg border border-k-periwinkle bg-k-highlight px-3 py-2 text-k-sm text-k-text">
           {notice}
         </p>
       )}
@@ -77,9 +77,9 @@ export function RoleEditor({ role, catalog, roleName, selfInRole }: { role: Role
           const on = g.items.filter((p) => granted.has(p.code)).length;
           return (
             <details key={g.module} open={i === 0 || g.items.some((p) => flagged.has(p.code))} className="rounded-xl border border-k-border bg-k-bg">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-[14px] font-semibold text-k-navy">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-k-base font-semibold text-k-navy">
                 <span>{t(`modules.${g.module}`)}</span>
-                <span className="text-[12px] font-normal text-k-text-2">{t('editor.moduleCount', { granted: on, total: g.items.length })}</span>
+                <span className="text-k-xs font-normal text-k-text-2">{t('editor.moduleCount', { granted: on, total: g.items.length })}</span>
               </summary>
               <div className="space-y-2 px-3 pb-3">
                 {g.items.map((p) => (
@@ -102,12 +102,12 @@ export function RoleEditor({ role, catalog, roleName, selfInRole }: { role: Role
 
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-k-border bg-white/95 px-4 py-3 backdrop-blur sm:pl-[var(--k-sidebar,0px)]">
         <div className="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-3">
-          <p className="text-[14px] text-k-text">
+          <p className="text-k-base text-k-text">
             {summary.count === 0 ? t('editor.noChanges') : t('editor.changes', { n: summary.count })}
             {summary.highRiskAdded.length > 0 && <span className="ml-2 font-medium text-k-danger">· {t('editor.highRisk', { n: summary.highRiskAdded.length })}</span>}
           </p>
           <div className="flex w-full gap-2 sm:w-auto">
-            <Link href={`/seguridad/roles/${encodeURIComponent(role.key ?? '')}`} className="flex h-12 items-center justify-center rounded-xl border border-k-border bg-white px-5 text-[15px] font-semibold text-k-text-2 hover:bg-k-bg">
+            <Link href={`/seguridad/roles/${encodeURIComponent(role.key ?? '')}`} className="flex h-12 items-center justify-center rounded-xl border border-k-border bg-white px-5 text-k-md font-semibold text-k-text-2 hover:bg-k-bg">
               {t('editor.cancel')}
             </Link>
             <Button type="button" className="sm:w-auto sm:px-6" disabled={summary.count === 0} onClick={() => setConfirming(true)}>

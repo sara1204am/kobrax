@@ -58,7 +58,7 @@ export function DayPanel({
     <section className="rounded-2xl border border-k-border bg-white p-3 shadow-k-card sm:p-4">
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <Step dir="prev" label={t('previousDay')} onClick={() => onPickDay(shiftDay(day, -1))} />
-        <h2 className="min-w-0 text-[18px] font-semibold text-k-navy">{longDay(day, locale)}</h2>
+        <h2 className="min-w-0 text-k-xl font-semibold text-k-navy">{longDay(day, locale)}</h2>
         <Step dir="next" label={t('nextDay')} onClick={() => onPickDay(shiftDay(day, 1))} />
         <Button
           type="button"
@@ -72,7 +72,7 @@ export function DayPanel({
           aria-label={t('sort.label')}
           value={sort}
           onChange={(e) => setSort(e.target.value as DaySort)}
-          className="ml-auto h-9 w-auto min-w-[170px] text-[13px]"
+          className="ml-auto h-9 w-auto min-w-[170px] text-k-sm"
         >
           <option value="hour">{t('sort.hour')}</option>
           <option value="type">{t('sort.type')}</option>
@@ -101,8 +101,8 @@ export function DayPanel({
           {groups.map((g) => (
             <section key={g.key} aria-label={g.label} className="rounded-xl border border-k-border">
               <header className="flex items-baseline gap-3 rounded-t-xl bg-k-bg px-4 py-2.5">
-                <h3 className="text-[14px] font-semibold tabular-nums text-k-navy">{g.label}</h3>
-                <span className="text-[12px] text-k-text-2">{t('groupCount', { n: g.items.length })}</span>
+                <h3 className="text-k-base font-semibold tabular-nums text-k-navy">{g.label}</h3>
+                <span className="text-k-xs text-k-text-2">{t('groupCount', { n: g.items.length })}</span>
               </header>
               <ul>
                 {g.items.map((item) => (

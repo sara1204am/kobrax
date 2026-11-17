@@ -58,8 +58,8 @@ export async function TodayBoard({
       <dl className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {stats.map((s) => (
           <div key={s.key} className="rounded-xl border border-k-border bg-white px-4 py-3.5 shadow-k-card">
-            <dd className={`text-[26px] font-semibold tabular-nums leading-tight ${s.strong ? 'text-k-navy' : 'text-k-text'}`}>{s.value}</dd>
-            <dt className="mt-0.5 text-[12px] text-k-text-2">{t(`todayBoard.stats.${s.key}`)}</dt>
+            <dd className={`text-k-4xl font-semibold tabular-nums leading-tight ${s.strong ? 'text-k-navy' : 'text-k-text'}`}>{s.value}</dd>
+            <dt className="mt-0.5 text-k-xs text-k-text-2">{t(`todayBoard.stats.${s.key}`)}</dt>
           </div>
         ))}
       </dl>

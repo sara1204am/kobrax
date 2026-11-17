@@ -87,12 +87,12 @@ export function NoteDialog({
             maxLength={MORA_NOTE_MAX_LENGTH}
             rows={5}
             placeholder={t('placeholder')}
-            className="!rounded-lg !border !border-k-border !px-3 !py-2 !text-[14px]"
+            className="!rounded-lg !border !border-k-border !px-3 !py-2 !text-k-base"
           />
-          <span className="mt-1 block text-right text-[12px] text-k-muted">{t('remaining', { n: MORA_NOTE_MAX_LENGTH - body.length })}</span>
+          <span className="mt-1 block text-right text-k-xs text-k-muted">{t('remaining', { n: MORA_NOTE_MAX_LENGTH - body.length })}</span>
         </label>
         <div>
-          <span className="mb-1.5 block text-[13px] font-semibold text-k-text-2">{t('colour')}</span>
+          <span className="mb-1.5 block text-k-sm font-semibold text-k-text-2">{t('colour')}</span>
           <div role="group" aria-label={t('colour')} className="flex gap-2.5">
             {MORA_NOTE_COLORS.map((c) => (
               <button
