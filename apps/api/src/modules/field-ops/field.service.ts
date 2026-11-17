@@ -428,6 +428,10 @@ export class FieldService {
     const isManager = this.authz.can(Permission.ROUTE_ASSIGN) || this.authz.can(Permission.ROUTE_WRITE);
     if (!isManager && !this.authz.can(Permission.ROUTE_EXECUTE)) throw visitForbidden();
     const hash = dto.fileHash.trim().toLowerCase();
+    // S-6: si el archivo es uno de los subidos a Kobrax, su nombre ES el SHA-256 que calculó el servidor al recibirlo; el hash
+    // declarado tiene que coincidir con ese, no con lo que diga el cliente.
+    const stored = /\/([0-9a-f]{64})\.[a-z]{3,4}(?:\?.*)?$/i.exec(dto.fileUrl)?.[1]?.toLowerCase();
+    if (stored && stored !== hash) throw evidenceHashInvalid();
 
     const { evidence, replay } = await this.tx(async (tx) => {
       const office = await this.officeFilter(tx);

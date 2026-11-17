@@ -660,3 +660,13 @@ describe('FieldService — alcance por oficina (S-1)', () => {
     await rejectsWithCode(service.addEvidence('v-ajena', { type: 'PHOTO', fileUrl: 'u', fileHash: 'a'.repeat(64) } as never), 'RESOURCE_NOT_FOUND');
   });
 });
+
+describe('FieldService.addEvidence — hash del servidor (S-6)', () => {
+  const H = 'c'.repeat(64);
+  it('si el archivo es uno subido a Kobrax, el hash declarado debe ser el del nombre (calculado por el servidor)', async () => {
+    const { service } = makeService({ permissions: ['route:read', 'route:execute'] });
+    await rejectsWithCode(service.addEvidence('v1', { type: 'PHOTO', fileUrl: `/api/uploads/${H}.jpg`, fileHash: 'd'.repeat(64) } as never), 'EVIDENCE_001');
+    const ok = await service.addEvidence('v1', { type: 'PHOTO', fileUrl: `/api/uploads/${H}.jpg`, fileHash: H } as never);
+    assert.equal(ok.fileHash, H);
+  });
+});
