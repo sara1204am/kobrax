@@ -101,6 +101,7 @@ model Account {
   branches                Branch[]
   branchTypes             BranchType[]
   branchAssignments       UserBranchAssignment[]
+  privacyRequests         PrivacyRequest[]
   userAccounts            UserAccount[]
   sessions                UserSession[]
   auditLogs               AuditLog[]
@@ -251,6 +252,7 @@ model User {
   sessions            UserSession[]
   auditLogs           AuditLog[]
   legalAcceptances    UserLegalAcceptance[]
+  privacyRequests     PrivacyRequest[]
   consentRecords      ConsentRecord[]
   mfaBackupCodes      MfaBackupCode[]
   passwordResetTokens PasswordResetToken[]
@@ -2385,4 +2387,81 @@ model ConsentRecord {
 
   @@index([userId, purpose, recordedAt])
   @@map("consent_records")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Privacidad — solicitudes de derechos de las personas (acceso, rectificación, supresión…) y su seguimiento
+// ─────────────────────────────────────────────────────────────────────────────
+// Dos orígenes distintos (no se mezclan): `APP_USER` = una persona usuaria de Kobrax sobre SUS datos (sin cuenta: `account_id` NULL,
+// la procesa Kobrax); `DEBTOR_VIA_ORG` = una persona cuyos datos de cobranza administra una organización: la registra el personal
+// de esa organización (que es la RESPONSABLE) y vive en su cuenta. El administrador de una cuenta no consiente ni decide por los
+// titulares: aquí solo registra y da seguimiento. Los eventos son evidencia: solo INSERT (trigger + REVOKE en rls/005c).
+
+enum PrivacyRequestType {
+  ACCESS
+  RECTIFICATION
+  ERASURE
+  RESTRICTION
+  OBJECTION
+  PORTABILITY
+  WITHDRAW_CONSENT
+  OTHER
+}
+
+enum PrivacyRequestStatus {
+  RECEIVED
+  IN_REVIEW
+  NEEDS_INFO
+  APPROVED
+  REJECTED
+  COMPLETED
+}
+
+enum PrivacySubjectKind {
+  APP_USER
+  DEBTOR_VIA_ORG
+}
+
+model PrivacyRequest {
+  id              String               @id @default(uuid())
+  subjectKind     PrivacySubjectKind   @map("subject_kind")
+  type            PrivacyRequestType
+  status          PrivacyRequestStatus @default(RECEIVED)
+  /// Quién la presentó: la propia persona (APP_USER) o el integrante de la organización que la registró (DEBTOR_VIA_ORG).
+  requesterUserId String               @map("requester_user_id")
+  /// NULL en APP_USER (es personal); la cuenta responsable en DEBTOR_VIA_ORG. La policy de RLS deja ver NULL + la cuenta activa.
+  accountId       String?              @map("account_id")
+  /// Identificación mínima del titular de cobranza (solo DEBTOR_VIA_ORG): texto libre que escribe quien la registra.
+  subjectLabel    String?              @map("subject_label")
+  description     String
+  rejectionReason String?              @map("rejection_reason")
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+  closedAt        DateTime?            @map("closed_at")
+
+  requester User                  @relation(fields: [requesterUserId], references: [id])
+  account   Account?              @relation(fields: [accountId], references: [id])
+  events    PrivacyRequestEvent[]
+
+  @@index([requesterUserId, createdAt])
+  @@index([accountId, status, createdAt])
+  @@index([subjectKind, status, createdAt])
+  @@map("privacy_requests")
+}
+
+/// Cada cambio de estado de una solicitud, para siempre (solo INSERT). `actorKind`: REQUESTER | ORG | PLATFORM.
+model PrivacyRequestEvent {
+  id          String               @id @default(uuid())
+  requestId   String               @map("request_id")
+  status      PrivacyRequestStatus
+  note        String?
+  actorKind   String               @map("actor_kind")
+  /// users.id o platform_users.id según `actorKind` (ref suave).
+  actorUserId String?              @map("actor_user_id")
+  createdAt   DateTime             @default(now()) @map("created_at")
+
+  request PrivacyRequest @relation(fields: [requestId], references: [id])
+
+  @@index([requestId, createdAt])
+  @@map("privacy_request_events")
 }

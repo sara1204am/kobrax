@@ -146,16 +146,30 @@ export class LegalService {
       evidence: Evidence;
       seen: readonly SeenDocument[];
       locale?: string;
+      /** Re-aceptación: si ya existe la constancia de esa versión y acción, no se duplica (la tabla tiene unicidad). */
+      skipExisting?: boolean;
+      /**
+       * Re-aceptación parcial: si cambió UN solo documento, se acepta solo ese. Sin esto se exigen los dos (alta de cuenta). Con `partial`
+       * hay que mandar al menos uno, y solo se registra lo que se mandó (nunca una constancia de un texto que la persona no vio).
+       */
+      partial?: boolean;
     },
   ): Promise<void> {
     const seenByType = new Map(input.seen.map((s) => [s.type, s.versionId]));
+    const wanted = input.partial ? SIGNUP_REQUIRED_DOCUMENTS.filter((d) => seenByType.has(d.type)) : SIGNUP_REQUIRED_DOCUMENTS;
     const missing = SIGNUP_REQUIRED_DOCUMENTS.filter((d) => !seenByType.has(d.type)).map((d) => d.type);
-    if (missing.length > 0) throw legalAcceptanceRequired(missing);
+    if (input.partial ? wanted.length === 0 : missing.length > 0) throw legalAcceptanceRequired(input.partial ? SIGNUP_REQUIRED_DOCUMENTS.map((d) => d.type) : missing);
 
     const evidence = cleanEvidence(input.evidence);
-    for (const { type, action } of SIGNUP_REQUIRED_DOCUMENTS) {
+    for (const { type, action } of wanted) {
       const current = await this.getCurrent(type, input.locale ?? DEFAULT_LOCALE, tx);
       if (seenByType.get(type) !== current.id) throw legalVersionStale(type);
+      if (input.skipExisting) {
+        const already = await tx.userLegalAcceptance.findUnique({
+          where: { userId_documentVersionId_action: { userId: input.userId, documentVersionId: current.id, action } },
+        });
+        if (already) continue;
+      }
       await tx.userLegalAcceptance.create({
         data: {
           userId: input.userId,

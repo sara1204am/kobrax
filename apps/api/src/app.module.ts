@@ -24,6 +24,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { AgendaModule } from './modules/agenda/agenda.module';
 import { CatalogsModule } from './modules/catalogs/catalogs.module';
 import { LegalModule } from './modules/legal/legal.module';
+import { PrivacyRequestsModule } from './modules/privacy-requests/privacy-requests.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { DashboardsModule } from './modules/dashboards/dashboards.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
@@ -72,6 +73,7 @@ import { AppVersionGuard } from './common/guards/app-version.guard';
     AgendaModule,
     CatalogsModule,
     LegalModule,
+    PrivacyRequestsModule,
     AnalyticsModule,
     DashboardsModule,
     UploadsModule,
