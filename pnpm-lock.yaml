@@ -13,13 +13,13 @@ overrides:
   engine.io@<6.6.10: ^6.6.10
   body-parser@<1.20.9: ^1.20.9
   qs@<6.16.1: ^6.16.1
-  pdfjs-dist@<6.2.108: ^6.2.108
   lodash@<4.18.1: ^4.18.1
   brace-expansion@1.x: ^1.1.22
   brace-expansion@2.x: ^2.1.8
   file-type@<20.5.0: ^20.5.0
   maplibre-gl@<6.4.1: ^6.4.1
   postcss@<8.5.23: ^8.5.23
+  pdfjs-dist: 6.1.200
 
 importers:
 
@@ -89,8 +89,8 @@ importers:
         specifier: ^9.0.3
         version: 9.0.3
       pdfjs-dist:
-        specifier: ^6.2.108
-        version: 6.5.438
+        specifier: 6.1.200
+        version: 6.1.200
       pdfkit:
         specifier: ^0.15.0
         version: 0.15.2
@@ -6221,8 +6221,8 @@ packages:
     resolution: {integrity: sha512-mnvGdvOrIvJOBGUEdGkrVXjN8E/VkIJCkf2eS1DH2yv82ORUlLttmDt0rWY38yYZmVwciZwBUvHM20qxBZf40w==}
     hasBin: true
 
-  pdfjs-dist@6.5.438:
-    resolution: {integrity: sha512-vg8Pw1x+AFKy4AMDvhuWl5cOYV8d698UoEANoFFhc79hqXDnZQqnOXoxw3HG907WHOg1JYOvLhP756boddFxpA==}
+  pdfjs-dist@6.1.200:
+    resolution: {integrity: sha512-o8MolyzirkkLrcdsae/HEOiIcXWI7DS5zGpvqW8xTC2YUsW30rltFw2bDGvw/fskUdEMrQm2br68jzDS5BH2vw==}
     engines: {node: '>=22.13.0 || >=24'}
 
   pdfkit@0.15.2:
@@ -15188,7 +15188,7 @@ snapshots:
     dependencies:
       resolve-protobuf-schema: 2.1.0
 
-  pdfjs-dist@6.5.438:
+  pdfjs-dist@6.1.200:
     optionalDependencies:
       '@napi-rs/canvas': 1.1.1
 
