@@ -13,7 +13,7 @@ import { randomUUID } from 'node:crypto';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { join } from 'node:path';
 import assert from 'node:assert/strict';
-import { addMember, API, call, db, freshDatabase, login, loginSkippingMfa, PASSWORD, startApi, stopApi } from './harness';
+import { addMember, API, call, db, freshDatabase, login, loginSkippingMfa, PASSWORD, startApi, stopApi, legalAcceptance } from './harness';
 
 const WEB_PORT = 3199;
 const WEB = `http://127.0.0.1:${WEB_PORT}`;
@@ -64,7 +64,7 @@ async function signup(label: string, planCode: string): Promise<{ accountId: str
   const res = await fetch(`${API}/accounts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ businessName: `Cobranzas ${label} ${suffix}`, firstName: 'Dueño', lastName: label, email, password: PASSWORD, planCode }),
+    body: JSON.stringify({ ...(await legalAcceptance()), businessName: `Cobranzas ${label} ${suffix}`, firstName: 'Dueño', lastName: label, email, password: PASSWORD, planCode }),
   });
   assert.equal(res.status, 201, await res.text());
   const prisma = db();

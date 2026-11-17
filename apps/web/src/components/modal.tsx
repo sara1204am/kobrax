@@ -67,10 +67,15 @@ function Dialog({
       aria-labelledby={titleId}
       // Esc: el navegador dispara `cancel` antes de cerrar; con un guardado en curso se frena acá.
       onCancel={(e) => {
+        // React propaga `cancel`/`close` por su árbol aunque el evento nativo no burbujee: un diálogo anidado (p. ej. leer un documento
+        // dentro del pop-up de aceptación) no debe afectar a su padre.
+        if (e.target !== ref.current) return;
         if (locked) e.preventDefault();
       }}
       // Por acá entra la tecla Esc, que cierra el diálogo sin pasar por ningún handler nuestro.
-      onClose={() => {
+      onClose={(e) => {
+        // Ignora el cierre de un diálogo hijo (ver `onCancel`): sin esto, cerrar el hijo cerraba también al padre.
+        if (e.target !== ref.current) return;
         if (closingByCode.current) {
           closingByCode.current = false;
           return;

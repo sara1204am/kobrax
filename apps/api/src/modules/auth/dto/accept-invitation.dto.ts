@@ -1,5 +1,6 @@
 import { IsString, Length, MinLength } from 'class-validator';
 import { MaxBytes, PASSWORD_MAX_BYTES } from '../../../common/validation/max-bytes';
+import { LegalAcceptanceDto } from '../../legal/dto/legal-acceptance.dto';
 
 /**
  * Aceptar una invitación (CUENTA · S2). Endpoint **sin sesión**: este DTO es la única
@@ -9,7 +10,7 @@ import { MaxBytes, PASSWORD_MAX_BYTES } from '../../../common/validation/max-byt
  * La política de contraseña se valida server-side con `isPasswordValid` de
  * `@kobrax/shared`, igual que reset/change-password.
  */
-export class AcceptInvitationDto {
+export class AcceptInvitationDto extends LegalAcceptanceDto {
   @IsString() @Length(8, 24) code!: string;
   @IsString() @MinLength(1) @MaxBytes(PASSWORD_MAX_BYTES) password!: string;
 }

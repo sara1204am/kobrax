@@ -34,6 +34,11 @@
     "en": "Inglés"
   },
   "panel": {
+    "footer": {
+      "rights": "© {year} Ikigai Tech Bolivia",
+      "terms": "Términos",
+      "privacy": "Privacidad"
+    },
     "nav": {
       "label": "Navegación principal",
       "home": "Inicio",
@@ -4959,6 +4964,50 @@
     "data_scope_branch": {
       "name": "Su oficina",
       "description": "Ve los datos de su oficina, con responsable."
+    }
+  },
+  "legal": {
+    "document": {
+      "version": "Versión {version}",
+      "effective": "Vigente desde {date}",
+      "fingerprint": "Huella SHA-256 del texto: {hash}",
+      "loading": "Cargando el documento…",
+      "error": "No se pudo cargar el documento. Inténtalo de nuevo.",
+      "retry": "Reintentar",
+      "close": "Cerrar",
+      "acceptTerms": "He leído y acepto",
+      "acknowledgePrivacy": "He leído y conozco la política",
+      "acceptHint": "Al aceptar volverás al formulario con la casilla marcada.",
+      "openPage": "Abrir en una página aparte",
+      "history": "Versiones anteriores",
+      "current": "vigente",
+      "backHome": "Ir a Kobrax",
+      "others": "Otros documentos",
+      "notFound": "Este documento todavía no está publicado.",
+      "names": {
+        "terms": "Términos y Condiciones",
+        "privacy": "Política de Privacidad",
+        "cookies": "Política de Cookies",
+        "dpa": "Acuerdo de Tratamiento de Datos",
+        "acceptableUse": "Política de Uso Aceptable",
+        "aiPolicy": "Política de Inteligencia Artificial"
+      }
+    },
+    "consent": {
+      "terms": {
+        "before": "He leído y acepto los ",
+        "link": "Términos y Condiciones de Uso",
+        "after": " de Kobrax."
+      },
+      "privacy": {
+        "before": "He leído la ",
+        "link": "Política de Privacidad",
+        "after": " y conozco cómo Kobrax recopila, utiliza, almacena y protege mis datos personales."
+      },
+      "loading": "Cargando los documentos…",
+      "loadError": "No se pudieron cargar los Términos y la Política de Privacidad. No podemos crear tu acceso sin que los puedas leer.",
+      "retry": "Reintentar",
+      "changed": "Los documentos legales se actualizaron mientras completabas el formulario. Revísalos y vuelve a marcar las casillas."
     }
   },
   "onboarding": {

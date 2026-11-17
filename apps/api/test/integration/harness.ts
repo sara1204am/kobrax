@@ -21,6 +21,7 @@ import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { PrismaClient } from '@prisma/client';
+import { createHash } from 'node:crypto';
 import { hash } from 'bcryptjs';
 
 const API_DIR = process.cwd(); // `pnpm test:integration` corre en apps/api
@@ -240,3 +241,32 @@ export function installScopePolicies(): void {
 export function uninstallScopePolicies(): void {
   psqlTest(SCOPE_TABLES.map((t) => `DROP POLICY IF EXISTS scope_${t} ON ${t};`).join(' '));
 }
+
+/**
+ * Lo que el registro y la aceptación de invitación exigen desde el cambio de privacidad: los ids de las versiones vigentes de los
+ * Términos y de la Política. Si la base de prueba aún no tiene documentos publicados, publica dos de PRUEBA (versión `0.0.1-test`);
+ * si ya los hay (los del seed), usa los vigentes. Se difunde con `...(await legalAcceptance())` en el cuerpo del alta.
+ */
+export async function legalAcceptance(): Promise<{ termsVersionId: string; privacyVersionId: string }> {
+  const prisma = db();
+  try {
+    const ids: Record<string, string> = {};
+    for (const type of ['TERMS', 'PRIVACY'] as const) {
+      let v = await prisma.legalDocumentVersion.findFirst({
+        where: { type, locale: 'es', effectiveAt: { lte: new Date() } },
+        orderBy: [{ effectiveAt: 'desc' }, { publishedAt: 'desc' }],
+      });
+      if (!v) {
+        const content = `Documento de prueba ${type}`;
+        v = await prisma.legalDocumentVersion.create({
+          data: { type, locale: 'es', version: '0.0.1-test', title: type, content, contentSha256: createHash('sha256').update(content, 'utf8').digest('hex') },
+        });
+      }
+      ids[type] = v.id;
+    }
+    return { termsVersionId: ids.TERMS!, privacyVersionId: ids.PRIVACY! };
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+

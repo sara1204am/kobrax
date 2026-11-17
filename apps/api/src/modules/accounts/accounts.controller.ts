@@ -13,6 +13,7 @@ import { CreateAccountRequestDto } from './dto/account-request.dto';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { TransferOwnershipDto } from './dto/transfer-ownership.dto';
 import { Public } from '../auth/decorators/authz.decorator';
+import { legalRequestMeta } from '../legal/legal-request';
 
 /**
  * Los guards van **por método**, no en la clase: el registro (S4) es público y
@@ -40,7 +41,7 @@ export class AccountsController {
   @Public()
   @RateLimit({ limit: 10, windowSec: 3600, by: 'ip' })
   create(@Body() dto: CreateAccountDto, @Req() req: Request) {
-    return this.accounts.create(dto, { ip: req.ip, userAgent: req.headers['user-agent'] });
+    return this.accounts.create(dto, legalRequestMeta(req, 'signup'));
   }
 
   @Get('me')

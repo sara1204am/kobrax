@@ -29,6 +29,7 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 import { MfaDisableDto } from './dto/mfa-disable.dto';
 import { MfaSetupStartDto, MfaSetupVerifyDto } from './dto/mfa-setup.dto';
 import { AcceptInvitationDto } from './dto/accept-invitation.dto';
+import { legalRequestMeta } from '../legal/legal-request';
 import { Authenticated, Public } from './decorators/authz.decorator';
 
 @Controller('auth')
@@ -173,9 +174,11 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @RateLimit({ limit: 10, windowSec: 3600, by: 'ip' })
   acceptInvitation(@Body() dto: AcceptInvitationDto, @Req() req: Request) {
-    return this.passwords.acceptInvitation(dto.code, dto.password, {
-      ip: req.ip,
-      userAgent: req.headers['user-agent'],
+    return this.passwords.acceptInvitation(dto.code, dto.password, legalRequestMeta(req, 'invitation'), {
+      termsVersionId: dto.termsVersionId,
+      privacyVersionId: dto.privacyVersionId,
+      marketingOptIn: dto.marketingOptIn,
+      analyticsOptIn: dto.analyticsOptIn,
     });
   }
 

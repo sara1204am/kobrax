@@ -22,8 +22,7 @@ import {
   loginSkippingMfa,
   PASSWORD,
   startApi,
-  stopApi,
-} from './harness';
+  stopApi, legalAcceptance } from './harness';
 
 const suffix = randomUUID().slice(0, 8);
 let prisma: PrismaClient;
@@ -69,6 +68,7 @@ async function signup(label: string): Promise<{ accountId: string; token: string
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
+      ...(await legalAcceptance()),
       businessName: `Cobranzas ${label} ${suffix}`,
       firstName: 'Dueño',
       lastName: label,

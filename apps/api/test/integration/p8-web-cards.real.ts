@@ -20,8 +20,7 @@ import {
   loginSkippingMfa,
   PASSWORD,
   startApi,
-  stopApi,
-} from './harness';
+  stopApi, legalAcceptance } from './harness';
 
 const WEB_PORT = 3199;
 const WEB = `http://127.0.0.1:${WEB_PORT}`;
@@ -85,6 +84,7 @@ async function main() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
+      ...(await legalAcceptance()),
       businessName: `Cobranzas ${suffix}`,
       firstName: 'Dueño',
       lastName: 'Prueba',

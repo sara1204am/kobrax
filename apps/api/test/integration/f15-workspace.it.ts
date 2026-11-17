@@ -12,7 +12,7 @@ import { randomUUID } from 'node:crypto';
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { PrismaClient } from '@prisma/client';
-import { addMember, API, call, db, freshDatabase, login, loginSkippingMfa, PASSWORD, startApi, stopApi } from './harness';
+import { addMember, API, call, db, freshDatabase, login, loginSkippingMfa, PASSWORD, startApi, stopApi, legalAcceptance } from './harness';
 
 const suffix = randomUUID().slice(0, 8);
 let prisma: PrismaClient;
@@ -43,7 +43,7 @@ async function signup(label: string): Promise<{ accountId: string; token: string
   const res = await fetch(`${API}/accounts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ businessName: `Cobranzas ${label} ${suffix}`, firstName: 'Dueño', lastName: label, email, password: PASSWORD, planCode: 'PROFESSIONAL' }),
+    body: JSON.stringify({ ...(await legalAcceptance()), businessName: `Cobranzas ${label} ${suffix}`, firstName: 'Dueño', lastName: label, email, password: PASSWORD, planCode: 'PROFESSIONAL' }),
   });
   assert.equal(res.status, 201, await res.text());
   const owner = await prisma.user.findUniqueOrThrow({ where: { email }, include: { userAccounts: true } });

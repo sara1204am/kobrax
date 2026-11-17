@@ -9,6 +9,8 @@ import { AuthShell } from '@/components/auth-shell';
 import { Button, ErrorBanner, Field, Input } from '@/components/ui';
 import { allPassed, PasswordChecklist } from '@/components/password-checklist';
 import { postJson, routeByStep, type AccountOption, type Step } from '@/lib/client';
+import { LegalConsents, useSignupDocuments } from '@/components/legal-consents';
+import { EMPTY_CHOICE, canSubmitLegal, legalPayload, type LegalChoice } from '@/lib/legal';
 import { PlanPicker } from './plan-picker';
 
 /**
@@ -38,6 +40,10 @@ export default function RegistroPage() {
     email: '',
     password: '',
   });
+  // Privacidad: los documentos vigentes y lo que la persona marcó. Todo nace desmarcado.
+  const legalDocs = useSignupDocuments();
+  const [choice, setChoice] = useState<LegalChoice>(EMPTY_CHOICE);
+  const [stale, setStale] = useState(false);
   /** `null` = todavía está en el paso de elegir plan. */
   const [plan, setPlan] = useState<SignupPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -64,9 +70,18 @@ export default function RegistroPage() {
       // El servidor vuelve a validarlo contra su lista blanca: acá es una preferencia, no una
       // decisión. Un plan pago le da a la cuenta 30 días de prueba, no una factura.
       planCode: plan,
+      // Los ids de las versiones que se le mostraron: el servidor calcula el hash con su copia y rechaza una versión vencida.
+      ...legalPayload(legalDocs.docs, choice),
     });
     if (!alta.ok) {
       setLoading(false);
+      if (alta.data.error?.code === 'LEGAL_VERSION_STALE') {
+        // Se publicó una versión nueva mientras llenaba el formulario: se recarga y se le pide volver a marcar. No se crea nada.
+        setChoice(EMPTY_CHOICE);
+        setStale(true);
+        void legalDocs.reload();
+        return;
+      }
       setError(alta.data.error?.message ?? t('error'));
       return;
     }
@@ -216,6 +231,21 @@ export default function RegistroPage() {
         </Field>
         <PasswordChecklist password={form.password} />
 
+        {!created && (
+          <LegalConsents
+            docs={legalDocs.docs}
+            state={legalDocs.state}
+            onReload={() => void legalDocs.reload()}
+            choice={choice}
+            onChange={(next) => {
+              setStale(false);
+              setChoice(next);
+            }}
+            disabled={loading}
+            stale={stale}
+          />
+        )}
+
         {created ? (
           <Link
             href="/login"
@@ -224,7 +254,12 @@ export default function RegistroPage() {
             {t('goToLogin')}
           </Link>
         ) : (
-          <Button type="submit" variant="cta" loading={loading} disabled={!allPassed(form.password)}>
+          <Button
+            type="submit"
+            variant="cta"
+            loading={loading}
+            disabled={!allPassed(form.password) || !canSubmitLegal(legalDocs.docs, choice)}
+          >
             {t('submit')}
           </Button>
         )}
