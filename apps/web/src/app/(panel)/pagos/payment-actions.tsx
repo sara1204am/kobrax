@@ -258,13 +258,15 @@ export function PaymentModal({
               <Input value={active.code ?? active.id} readOnly disabled />
             </Field>
             {picked && !credit && (
-              <button
+              <Button
                 type="button"
+                variant="link"
+                fullWidth={false}
                 onClick={() => setPicked(null)}
-                className="-mt-2 text-[13px] font-medium text-k-periwinkle hover:underline"
+                className="-mt-2 !justify-start !text-[13px] !font-medium !text-k-periwinkle"
               >
                 {t('register.changeCredit')}
-              </button>
+              </Button>
             )}
 
             {/* Con qué se compara el monto: la cuota que toca y lo que falta para liquidar. Cada cifra
@@ -327,20 +329,22 @@ export function PaymentModal({
                   // eslint-disable-next-line @next/next/no-img-element -- vista previa local (blob:), no un archivo del servidor
                   <img src={receipt.preview} alt={t('register.receiptPhoto')} className="h-12 w-12 rounded-lg border border-k-border object-cover" />
                 )}
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
+                  fullWidth={false}
                   disabled={busy || uploading}
                   onClick={() => fileInput.current?.click()}
-                  className="h-10 rounded-xl border border-dashed border-k-border bg-k-bg px-4 text-[13px] font-medium text-k-text-2 hover:bg-white disabled:opacity-60"
+                  className="!h-10 !border-dashed !px-4 !text-[13px] !font-medium !text-k-text-2"
                 >
                   {uploading ? t('register.uploading') : receipt ? t('register.receiptReplace') : t('register.receiptAdd')}
-                </button>
+                </Button>
                 {receipt && (
                   <span className="flex items-center gap-2 text-[13px] text-k-text-2">
                     <span className="max-w-[180px] truncate">{receipt.name}</span>
-                    <button type="button" onClick={dropReceipt} disabled={busy} className="text-k-danger hover:underline">
+                    <Button type="button" variant="link" fullWidth={false} onClick={dropReceipt} disabled={busy} className="!inline-flex !font-normal !text-k-danger">
                       {t('register.receiptRemove')}
-                    </button>
+                    </Button>
                   </span>
                 )}
               </div>
@@ -355,14 +359,16 @@ export function PaymentModal({
               <p className="-mt-2 text-[12px] text-k-muted">{t('register.suggested')}</p>
             )}
 
-            <button
+            <Button
               type="button"
-              className="text-[14px] font-semibold text-k-slate hover:underline"
+              variant="link"
+              fullWidth={false}
+              className="!justify-start !text-[14px] !text-k-slate"
               onClick={() => setMore((m) => !m)}
               aria-expanded={more}
             >
               {more ? t('register.lessOptions') : t('register.moreOptions')}
-            </button>
+            </Button>
 
             {more && (
               <>

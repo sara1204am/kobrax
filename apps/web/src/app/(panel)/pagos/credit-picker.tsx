@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { CreditDetail } from '@kobrax/shared';
-import { Field, Input } from '@/components/ui';
+import { Button, Field, Input } from '@/components/ui';
 import { money } from '@/lib/format';
 import type { PortfolioRow } from '@/lib/portfolio';
 
@@ -95,9 +95,9 @@ export function CreditPicker({ onPick }: { onPick: (credit: CreditDetail) => voi
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3 rounded-xl border border-k-border bg-k-bg px-3 py-2.5">
         <span className="text-[14px] font-medium text-k-text">{client.name}</span>
-        <button type="button" onClick={back} className="text-[13px] font-medium text-k-periwinkle hover:underline">
+        <Button type="button" variant="link" fullWidth={false} onClick={back} className="!text-[13px] !font-medium !text-k-periwinkle">
           {t('register.changeClient')}
-        </button>
+        </Button>
       </div>
 
       {searching && <p className="text-[13px] text-k-text-2">{t('register.searching')}</p>}
