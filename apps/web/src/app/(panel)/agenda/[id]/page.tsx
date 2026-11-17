@@ -20,6 +20,7 @@ import { dateTime, dayDate, money } from '@/lib/format';
 import { workspaceOfMe } from '@/lib/workspace';
 import { ContactActions } from './contact-actions';
 import { ItemActions } from './item-actions';
+import { requirePermission } from '@/lib/authz';
 
 const INITIAL_ACTIONS: Record<string, 'complete' | 'reschedule' | 'cancel' | 'edit' | 'delete'> = {
   completar: 'complete',
@@ -65,6 +66,8 @@ export default async function GestionPage({
   /** `?accion=` — desde el menú «⋮» de la lista: abre directo el diálogo pedido. */
   searchParams: { accion?: string };
 }) {
+  const blocked = await requirePermission(Permission.AGENDA_READ);
+  if (blocked) return blocked;
   const t = await getTranslations('panel.agenda');
   const locale = await getLocale();
 

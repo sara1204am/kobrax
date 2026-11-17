@@ -17,6 +17,8 @@ vi.mock('next-intl/server', async () => {
     getLocale: async () => 'es',
   };
 });
+// La puerta de permiso de la ruta (`requirePermission`) usa `cache` de React, que no existe en jsdom; aquí se prueba el contenido.
+vi.mock('@/lib/authz', () => ({ requirePermission: async () => null }));
 vi.mock('next/navigation', () => ({
   notFound: () => {
     throw new Error('NEXT_NOT_FOUND');

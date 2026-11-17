@@ -17,6 +17,8 @@ import { isUuid } from '@/lib/payments';
 import { dateTime, dateTimeLong, fullName, money } from '@/lib/format';
 import { workspaceOfMe } from '@/lib/workspace';
 import { ReceiptButton } from './receipt-button';
+import { requirePermission } from '@/lib/authz';
+import { Permission } from '@kobrax/shared';
 
 /**
  * Un pago y su comprobante.
@@ -32,6 +34,8 @@ import { ReceiptButton } from './receipt-button';
  * cargado se corrige con otro asiento, y la pantalla lo dice en vez de dejarlo suponer.
  */
 export default async function PagoPage({ params }: { params: { id: string } }) {
+  const blocked = await requirePermission(Permission.PAYMENT_READ);
+  if (blocked) return blocked;
   const t = await getTranslations('panel.payments');
   const tsrc = await getTranslations('creditSource');
   const locale = await getLocale();

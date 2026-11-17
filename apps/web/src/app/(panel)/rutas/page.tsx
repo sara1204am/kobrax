@@ -22,6 +22,7 @@ import { TodayBoard } from './today-board';
 import { RoutesTable } from './routes-table';
 import { CollectorWorkTable } from './collector-work-table';
 import { WorkSummary } from './work-summary';
+import { requirePermission } from '@/lib/authz';
 
 /**
  * Rutas: **planificar el trabajo de la calle y comprobar qué pasó**.
@@ -35,6 +36,8 @@ import { WorkSummary } from './work-summary';
  * pantalla, porque el contrato no la trae.
  */
 export default async function RutasPage({ searchParams }: { searchParams: RouteParams }) {
+  const blocked = await requirePermission(Permission.ROUTE_READ);
+  if (blocked) return blocked;
   const t = await getTranslations('panel.routes');
   // «Planificar» dejó de ser una pestaña (es una acción del encabezado): el link viejo sigue funcionando.
   if (searchParams.modo === 'planificacion') redirect('/rutas/planificar');

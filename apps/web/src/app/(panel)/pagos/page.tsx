@@ -18,6 +18,8 @@ import { loadOfficers } from './officers';
 import { PaymentActions } from './payment-actions';
 import { PaymentSummary } from './payment-summary';
 import { PaymentsTable } from './payments-table';
+import { requirePermission } from '@/lib/authz';
+import { Permission } from '@kobrax/shared';
 
 /**
  * El ledger del período.
@@ -32,6 +34,8 @@ import { PaymentsTable } from './payments-table';
  * oficial se dibuja si quien mira tiene a quién consultar (`loadOfficers`), y un cobrador no lo tiene.
  */
 export default async function PagosPage({ searchParams }: { searchParams: PaymentParams }) {
+  const blocked = await requirePermission(Permission.PAYMENT_READ);
+  if (blocked) return blocked;
   const t = await getTranslations('panel.payments');
 
   const [list, account, me] = await Promise.all([

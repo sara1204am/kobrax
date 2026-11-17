@@ -23,6 +23,7 @@ import { dateTime, time } from '@/lib/format';
 import { FichaGestion } from '../../../../mora/[creditId]/ficha-gestion';
 import { StopRecordButton } from './stop-actions';
 import { WhatsAppButton } from '../../whatsapp-button';
+import { requirePermission } from '@/lib/authz';
 
 const TABS = ['ficha', 'visits', 'evidence'] as const;
 type Tab = (typeof TABS)[number];
@@ -48,6 +49,8 @@ export default async function ParadaPage({
   params: { id: string; sid: string };
   searchParams: { tab?: string };
 }) {
+  const blocked = await requirePermission(Permission.ROUTE_READ);
+  if (blocked) return blocked;
   const t = await getTranslations('panel.routes');
   const ts = await getTranslations('panel.routes.stopPage');
   const tl = await getTranslations('portfolio.locationType');

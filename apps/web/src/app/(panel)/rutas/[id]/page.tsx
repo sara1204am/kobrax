@@ -25,6 +25,7 @@ import { RouteEditor } from './route-editor';
 import { RouteActions } from './route-actions';
 import { NextStopCard } from './next-stop-card';
 import { ChangeRequestsPanel } from './change-requests-panel';
+import { requirePermission } from '@/lib/authz';
 
 /** Techo de lo que se trae de un día —pagos y visitas—. Un día de un tenant no llega a tanto. */
 const DAY_LIMIT = 100;
@@ -50,6 +51,8 @@ export default async function RutaPage({
   params: { id: string };
   searchParams: PlanParams & { editar?: string };
 }) {
+  const blocked = await requirePermission(Permission.ROUTE_READ);
+  if (blocked) return blocked;
   const t = await getTranslations('panel.routes');
   const locale = await getLocale();
 

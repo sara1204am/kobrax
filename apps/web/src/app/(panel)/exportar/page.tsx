@@ -1,5 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 import { PageHeader, Section } from '@/components/panel-ui';
+import { requirePermission } from '@/lib/authz';
+import { Permission } from '@kobrax/shared';
 
 const ITEMS = [
   { href: '/api/exports/clients', key: 'clients' },
@@ -14,6 +16,8 @@ const ITEMS = [
  * `Content-Disposition: attachment` del backend hace que el navegador lo baje solo.
  */
 export default async function ExportarPage() {
+  const blocked = await requirePermission(Permission.REPORT_EXPORT);
+  if (blocked) return blocked;
   const t = await getTranslations('exports');
 
   return (

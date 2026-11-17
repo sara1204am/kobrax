@@ -5,6 +5,7 @@ import { apiCall, pageMeta } from '@/lib/bff';
 import { hasMoraFilters, moraLimit, moraListQuery, type MoraParams } from '@/lib/mora';
 import { EmptyState } from '@/components/panel-ui';
 import { ArrearsTable } from './arrears-table';
+import { requirePermission } from '@/lib/authz';
 
 /**
  * La cartera en mora.
@@ -22,6 +23,8 @@ import { ArrearsTable } from './arrears-table';
  * la señal la pone la pantalla.
  */
 export default async function MoraPage({ searchParams }: { searchParams: MoraParams }) {
+  const blocked = await requirePermission(Permission.COLLECTION_READ);
+  if (blocked) return blocked;
   const t = await getTranslations('panel.mora');
   const query = moraListQuery(searchParams);
 

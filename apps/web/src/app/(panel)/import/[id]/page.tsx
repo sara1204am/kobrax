@@ -17,6 +17,8 @@ import { isUuid } from '@/lib/uuid';
 import { dateTime, dayDate } from '@/lib/format';
 import { fileSize, RUN_ITEMS_PAGE_SIZE, runItemAction, runItemsQuery, scopeRefName } from '@/lib/import';
 import { RunItemsTable } from './run-items-table';
+import { requirePermission } from '@/lib/authz';
+import { Permission } from '@kobrax/shared';
 
 /** Qué número de la corrida corresponde a cada pestaña. */
 const COUNT_OF: Record<ImportRunItemAction, keyof ImportRunCounts> = {
@@ -53,6 +55,8 @@ export default async function ImportRunPage({
   params: { id: string };
   searchParams: { action?: string; page?: string; pageSize?: string };
 }) {
+  const blocked = await requirePermission(Permission.CLIENT_IMPORT);
+  if (blocked) return blocked;
   const t = await getTranslations('panel.import');
   const locale = await getLocale();
   if (!isUuid(params.id)) notFound();

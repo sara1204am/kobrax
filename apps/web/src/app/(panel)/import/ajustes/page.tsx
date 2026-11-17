@@ -6,6 +6,8 @@ import { getOffices } from '@/lib/offices-server';
 import { EmptyState, PageHeader } from '@/components/panel-ui';
 import { ImportSetup } from './import-setup';
 import { AdvisorLinks } from './advisor-links';
+import { requirePermission } from '@/lib/authz';
+import { Permission } from '@kobrax/shared';
 
 /**
  * Configurar la importación: el archivo, cómo está organizado, de quién es, sus columnas y las
@@ -15,6 +17,8 @@ import { AdvisorLinks } from './advisor-links';
  * alcance: la pantalla no sirve de nada con la config sin lo demás.
  */
 export default async function ImportSettingsPage() {
+  const blocked = await requirePermission(Permission.CLIENT_IMPORT);
+  if (blocked) return blocked;
   const t = await getTranslations('panel.import');
   const [{ status, body }, advisors, offices] = await Promise.all([
     apiCall<ConfigScreen>('/imports/portfolio/config', { method: 'GET', auth: true }),

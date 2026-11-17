@@ -6,6 +6,8 @@ import { EmptyState, PageHeader } from '@/components/panel-ui';
 import { HISTORY_PAGE_SIZE, hasHistoryFilters, historyQuery } from '@/lib/import';
 import { ImportRunner } from './import-runner';
 import { ImportHistoryTable } from './history-table';
+import { requirePermission } from '@/lib/authz';
+import { Permission } from '@kobrax/shared';
 
 /**
  * El import del día. Una sola pantalla con tres estados (elegir · vista previa · resultado) y no
@@ -16,6 +18,8 @@ import { ImportHistoryTable } from './history-table';
  * Debajo, el historial: cada archivo importado con lo que cambió, y su detalle a un clic.
  */
 export default async function ImportPage({ searchParams }: { searchParams: Record<string, string | undefined> }) {
+  const blocked = await requirePermission(Permission.CLIENT_IMPORT);
+  if (blocked) return blocked;
   const t = await getTranslations('panel.import');
   const [screen, runs, me, account, assignees] = await Promise.all([
     apiCall<ConfigScreen>('/imports/portfolio/config', { method: 'GET', auth: true }),
