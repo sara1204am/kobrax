@@ -181,15 +181,16 @@ Decisiones tomadas para continuar (delegadas por la titular; revisables):
 | B1 · modelos, migración, inmutabilidad, módulo `legal`, lectura pública | **Implementado y verificado** (11 unitarios + 10 de integración; 92 de autorización) |
 | B2 · aceptación en registro e invitación (API + BFF + web) | **Implementado y verificado** (2154 unitarios API, 10 integración B2, 1524 web, build de producción). **Móvil NO actualizado: ver nota** |
 | B3 · páginas públicas + borradores + publicación (`db:seed:legal`) + modal de lectura | **Implementado y verificado** (1537 tests web, build de producción). Los textos son **borradores sin revisión legal** |
-| B4 · consentimientos opcionales + pestaña Privacidad | Pendiente |
-| B5 · re-aceptación por cambio material | Pendiente |
-| B6 · solicitudes de derechos | Pendiente |
+| B4 · consentimientos opcionales + pestaña Privacidad (Mi perfil) | **Implementado y verificado** |
+| B5 · re-aceptación por cambio material | **Implementado y verificado** (barrera de interfaz; ver informe) |
+| B6 · solicitudes de derechos (persona, organización, plataforma) | **Implementado y verificado** (registro y seguimiento; no ejecutan la supresión) |
+| B7 · móvil (registro e invitación) | **Implementado y verificado** con jest (1053 tests del móvil); **no probado en un teléfono**. Sigue sin haber Mi perfil › Privacidad en el móvil |
 
 Notas de B1: las tres tablas son **globales** (por persona, sin RLS) y solo admiten INSERT: trigger `legal_forbid_mutation` en la migración `20261116100000_legal_foundations` y `REVOKE`/`GRANT` en `prisma/rls/005b_legal.sql (corre ANTES de 006: ver nota en el archivo)` (se aplica con `db:rls`). Se abrieron 4 rutas públicas `GET /legal/...` y se registraron a conciencia en `authz-coverage.spec.ts` y `docs/epics/F14/authz-snapshot.json`.
 
 Notas de B2:
 
-- 🔴 **El registro y la aceptación de invitación del MÓVIL (`apps/mobile`) quedan rotos contra esta API**: no envían `termsVersionId`/`privacyVersionId` y reciben 422 `LEGAL_ACCEPTANCE_REQUIRED`. Es deliberado (el móvil está en refactor, B7), pero **no se puede desplegar la API sin resolver B7 o sin una decisión explícita sobre las altas desde el móvil**.
+- ✅ **Resuelto en B7** (el móvil ya envía la aceptación). Texto original: 🔴 **El registro y la aceptación de invitación del MÓVIL (`apps/mobile`) quedan rotos contra esta API**: no envían `termsVersionId`/`privacyVersionId` y reciben 422 `LEGAL_ACCEPTANCE_REQUIRED`. Es deliberado (el móvil está en refactor, B7), pero **no se puede desplegar la API sin resolver B7 o sin una decisión explícita sobre las altas desde el móvil**.
 - La aceptación y los consentimientos se guardan **dentro de la misma transacción** que crea la cuenta o activa al invitado: sin aceptación no queda cuenta, usuario ni membresía, y una invitación no se consume (probado contra Postgres real).
 - El servidor valida que la versión enviada sea la vigente (`LEGAL_VERSION_STALE`, 409) y usa **su** hash; el cliente solo manda ids.
 - **No hay casilla de analítica**: el panel no usa hoy ninguna tecnología de seguimiento (verificado en la auditoría), así que no hay nada que consentir. La API ya soporta `analyticsOptIn` para cuando exista.
@@ -209,3 +210,5 @@ Notas de B3 y cambios de diseño pedidos por la titular:
 ## 9. Pendientes que NO se pueden resolver en código
 
 Razón social, NIT, domicilio, representante legal y canal de privacidad de **Ikigai Tech Bolivia** (solo consta el nombre en el footer: **[PENDIENTE DE CONFIRMACIÓN LEGAL]**); si Kobrax cae bajo el régimen ETF/ASFI; alcance del art. 475 Ley 393; ámbito real del D.S. 1793 art. 56; valor probatorio del clic-aceptar y retención de la IP; legalidad de la cobranza (WhatsApp, horarios, geolocalización, fotos de personas); transferencia internacional (servidor en EE. UU.); estado de los proyectos de ley de datos; firma digital con entidad certificadora si se busca valor pleno.
+
+> Estado actualizado: ver `INFORME-CUMPLIMIENTO.md`, `ARQUITECTURA.md` y `PENDIENTES-LEGALES.md`. B8 (endurecer los riesgos de la §4) sigue **sin hacerse**: requiere aprobación.

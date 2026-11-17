@@ -663,6 +663,13 @@
     "any": []
   },
   {
+    "route": "GET /legal/me",
+    "handler": "LegalController.me",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
     "route": "GET /legal/signup-documents",
     "handler": "LegalController.signupDocuments",
     "kind": "public",
@@ -808,6 +815,31 @@
     "kind": "permissions",
     "all": [
       "platform:accounts:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /platform/privacy-requests",
+    "handler": "PrivacyPlatformController.list",
+    "kind": "permissions",
+    "all": [
+      "platform:privacy:manage"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /privacy/requests/mine",
+    "handler": "PrivacyRequestsController.mine",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "GET /privacy/requests/org",
+    "handler": "PrivacyRequestsController.org",
+    "kind": "permissions",
+    "all": [
+      "account:write"
     ],
     "any": []
   },
@@ -1162,6 +1194,24 @@
     "kind": "permissions",
     "all": [
       "collection:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "PATCH /platform/privacy-requests/:id/status",
+    "handler": "PrivacyPlatformController.transition",
+    "kind": "permissions",
+    "all": [
+      "platform:privacy:manage"
+    ],
+    "any": []
+  },
+  {
+    "route": "PATCH /privacy/requests/org/:id/status",
+    "handler": "PrivacyRequestsController.transitionOrg",
+    "kind": "permissions",
+    "all": [
+      "account:write"
     ],
     "any": []
   },
@@ -1693,6 +1743,13 @@
     "any": []
   },
   {
+    "route": "POST /legal/acceptances",
+    "handler": "LegalController.reaccept",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
     "route": "POST /mora/:creditId/activities",
     "handler": "MoraController.addActivity",
     "kind": "permissions",
@@ -1788,6 +1845,22 @@
     "all": [
       "platform:support:open"
     ],
+    "any": []
+  },
+  {
+    "route": "POST /privacy/requests/org",
+    "handler": "PrivacyRequestsController.createOrg",
+    "kind": "permissions",
+    "all": [
+      "account:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /privacy/requests",
+    "handler": "PrivacyRequestsController.create",
+    "kind": "authenticated",
+    "all": [],
     "any": []
   },
   {
@@ -1989,6 +2062,13 @@
     "all": [
       "client:import"
     ],
+    "any": []
+  },
+  {
+    "route": "PUT /legal/consents/:purpose",
+    "handler": "LegalController.setConsent",
+    "kind": "authenticated",
+    "all": [],
     "any": []
   },
   {

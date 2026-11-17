@@ -13,6 +13,8 @@ export enum PlatformPermission {
   ROLES_ROLLOUT = 'platform:roles:rollout',
   SUPPORT_OPEN = 'platform:support:open',
   AUDIT_READ = 'platform:audit:read',
+  /** Atender las solicitudes de derechos de las personas usuarias de Kobrax (privacidad · B6). */
+  PRIVACY_MANAGE = 'platform:privacy:manage',
 }
 
 export const PLATFORM_PERMISSIONS: readonly string[] = Object.values(PlatformPermission);

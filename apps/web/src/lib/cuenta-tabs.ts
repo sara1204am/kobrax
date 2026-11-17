@@ -12,6 +12,7 @@ export type CuentaTabKey =
   | 'catalogos'
   | 'facturacion'
   | 'espacio-de-trabajo'
+  | 'privacidad'
   | 'avanzado';
 
 export interface CuentaTab {
@@ -34,6 +35,8 @@ export const CUENTA_TABS: CuentaTab[] = [
     href: '/cuenta/espacio-de-trabajo',
     permission: Permission.ACCOUNT_WRITE,
   },
+  // Privacidad (B6): solicitudes de derechos de los titulares de cobranza. La organización es la responsable: solo quien edita la cuenta.
+  { key: 'privacidad', href: '/cuenta/privacidad', permission: Permission.ACCOUNT_WRITE },
   { key: 'avanzado', href: '/cuenta/avanzado', permission: Permission.ACCOUNT_WRITE },
 ];
 

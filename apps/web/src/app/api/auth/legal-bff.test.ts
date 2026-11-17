@@ -14,6 +14,9 @@ import { POST as registro } from './registro/route';
 import { POST as invitacion } from './invitacion/route';
 import { GET as signupDocuments } from '../legal/signup-documents/route';
 import { GET as legalDocument } from '../legal/documents/[slug]/route';
+import { GET as legalMe } from '../legal/me/route';
+import { POST as legalAccept } from '../legal/acceptances/route';
+import { PUT as legalConsent } from '../legal/consents/[purpose]/route';
 
 const post = (body: unknown) =>
   new Request('http://localhost/api/x', {
@@ -128,5 +131,66 @@ describe('BFF · lectura de un documento legal', () => {
   it('si la API no tiene esa versión, el 404 llega tal cual', async () => {
     apiCall.mockResolvedValue({ status: 404, body: { data: null, error: { code: 'LEGAL_DOCUMENT_NOT_FOUND', message: 'No hay' }, meta: {} } });
     expect((await get('terms', '?version=9.9.9')).status).toBe(404);
+  });
+});
+
+describe('BFF · lo legal propio (autenticado)', () => {
+  const put = (purpose: string, body: unknown) =>
+    legalConsent(
+      new Request(`http://localhost/api/legal/consents/${purpose}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
+      { params: { purpose } },
+    );
+
+  it('🔴 lee lo propio con la sesión (auth) y sin caché; la persona nunca se manda desde el navegador', async () => {
+    apiCall.mockResolvedValue(ok({ pending: [], acceptances: [], consents: [], history: [] }));
+    const res = await legalMe();
+    const [path, init] = apiCall.mock.calls[0]!;
+    expect(path).toBe('/legal/me');
+    expect(init.auth).toBe(true);
+    expect(res.headers.get('cache-control')).toBe('no-store');
+  });
+
+  it('un error de la API (p. ej. 401) llega tal cual', async () => {
+    apiCall.mockResolvedValue({ status: 401, body: { data: null, error: { code: 'AUTH_001', message: 'x' }, meta: {} } });
+    expect((await legalMe()).status).toBe(401);
+  });
+
+  it('🔴 la re-aceptación transporta SOLO los dos ids con la sesión, y descarta cualquier otro campo (userId, hash…)', async () => {
+    apiCall.mockResolvedValue(ok({ pending: [] }));
+    await legalAccept(post({ termsVersionId: 't-2', privacyVersionId: 'p-2', userId: 'otro', contentSha256: 'x' }));
+    const [path, init] = apiCall.mock.calls[0]!;
+    expect(path).toBe('/legal/acceptances');
+    expect(init.auth).toBe(true);
+    const sent = JSON.parse(init.body);
+    expect(sent).toEqual({ termsVersionId: 't-2', privacyVersionId: 'p-2' });
+  });
+
+  it('la re-aceptación rechaza un origen distinto (CSRF)', async () => {
+    const res = await legalAccept(new Request('http://localhost/api/legal/acceptances', { method: 'POST', headers: { origin: 'https://malo.example', 'content-type': 'application/json' }, body: '{}' }));
+    expect(res.status).toBe(403);
+    expect(apiCall).not.toHaveBeenCalled();
+  });
+
+  it('el consentimiento envía el estado booleano a la finalidad indicada, con la sesión', async () => {
+    apiCall.mockResolvedValue(ok({ consents: [] }));
+    await put('MARKETING', { granted: true });
+    const [path, init] = apiCall.mock.calls[0]!;
+    expect(path).toBe('/legal/consents/MARKETING');
+    expect(init.method).toBe('PUT');
+    expect(init.auth).toBe(true);
+    expect(JSON.parse(init.body)).toEqual({ granted: true });
+  });
+
+  it('🔴 una finalidad con caracteres raros, o un estado que no es booleano, no llegan a la API (400)', async () => {
+    for (const [purpose, body] of [
+      ['../auth', { granted: true }],
+      ['marketing', { granted: true }],
+      ['MARKETING', { granted: 'true' }],
+      ['MARKETING', {}],
+      ['MARKETING', null],
+    ] as const) {
+      expect((await put(purpose, body)).status, `${purpose} ${JSON.stringify(body)}`).toBe(400);
+    }
+    expect(apiCall).not.toHaveBeenCalled();
   });
 });
