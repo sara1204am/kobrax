@@ -1,9 +1,27 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import createNextIntlPlugin from 'next-intl/plugin';
 import { LEGACY_REDIRECTS } from './legacy-redirects.mjs';
+
+/**
+ * Versión pública del producto. El `.env` vive en la raíz del monorepo (lo comparte la API) y Next solo mira `apps/web`, así
+ * que se lee de ahí **solo esta variable** (nada más del `.env` llega al navegador). Si ya viene en el entorno del proceso
+ * (CI, contenedor) manda ese valor.
+ */
+function readAppVersion() {
+  if (process.env.APP_VERSION) return process.env.APP_VERSION;
+  const file = fileURLToPath(new URL('../../.env', import.meta.url));
+  if (!existsSync(file)) return '';
+  const match = readFileSync(file, 'utf8').match(/^APP_VERSION\s*=\s*["']?([^"'\r\n#]+?)["']?\s*(?:#.*)?$/m);
+  return match?.[1]?.trim() ?? '';
+}
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+
+  /** Única variable que se expone al navegador desde el `.env` raíz: `APP_VERSION` (la versión pública del producto). */
+  env: { NEXT_PUBLIC_APP_VERSION: readAppVersion() },
 
   async redirects() {
     return LEGACY_REDIRECTS;

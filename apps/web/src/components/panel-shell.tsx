@@ -18,6 +18,7 @@ import { publishSessionEvent } from '@/lib/session-sync';
 import { SessionWatcher } from './session-watcher';
 import { BillingAlert } from './billing-alert';
 import { SupportBanner } from './support-banner';
+import { PanelFooter } from './panel-footer';
 
 /** Fila de cualquiera de los dos menús de la topbar: 44 px de toque, ancho completo. */
 const MENU_ITEM =
@@ -117,6 +118,7 @@ export function PanelShell({
         <NavList items={nav} pathname={pathname} badges={badges} collapsible />
         <SidebarIdentity user={user} collapsible />
         <SidebarLogout collapsible />
+        <PanelFooter collapsible />
       </aside>
 
       {/*
@@ -139,6 +141,7 @@ export function PanelShell({
           <NavList items={nav} pathname={pathname} badges={badges} />
           <SidebarIdentity user={user} />
           <SidebarLogout />
+          <PanelFooter />
         </div>
       </dialog>
 

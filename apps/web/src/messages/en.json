@@ -34,6 +34,11 @@
     "en": "English"
   },
   "panel": {
+    "footer": {
+      "rights": "© {year} Ikigai Tech Bolivia",
+      "terms": "Terms",
+      "privacy": "Privacy"
+    },
     "nav": {
       "label": "Main navigation",
       "home": "Home",
@@ -4959,6 +4964,50 @@
     "data_scope_branch": {
       "name": "Its office",
       "description": "Sees the data of its office, with an owner."
+    }
+  },
+  "legal": {
+    "document": {
+      "version": "Version {version}",
+      "effective": "In force since {date}",
+      "fingerprint": "SHA-256 fingerprint of the text: {hash}",
+      "loading": "Loading the document…",
+      "error": "The document could not be loaded. Please try again.",
+      "retry": "Retry",
+      "close": "Close",
+      "acceptTerms": "I have read and accept",
+      "acknowledgePrivacy": "I have read and understand the policy",
+      "acceptHint": "When you accept, you will go back to the form with the box checked.",
+      "openPage": "Open on a separate page",
+      "history": "Previous versions",
+      "current": "current",
+      "backHome": "Go to Kobrax",
+      "others": "Other documents",
+      "notFound": "This document has not been published yet.",
+      "names": {
+        "terms": "Terms and Conditions",
+        "privacy": "Privacy Policy",
+        "cookies": "Cookies Policy",
+        "dpa": "Data Processing Agreement",
+        "acceptableUse": "Acceptable Use Policy",
+        "aiPolicy": "Artificial Intelligence Policy"
+      }
+    },
+    "consent": {
+      "terms": {
+        "before": "I have read and accept Kobrax's ",
+        "link": "Terms and Conditions of Use",
+        "after": "."
+      },
+      "privacy": {
+        "before": "I have read the ",
+        "link": "Privacy Policy",
+        "after": " and understand how Kobrax collects, uses, stores and protects my personal data."
+      },
+      "loading": "Loading the documents…",
+      "loadError": "The Terms and the Privacy Policy could not be loaded. We cannot create your access unless you can read them.",
+      "retry": "Retry",
+      "changed": "The legal documents were updated while you were completing the form. Review them and check the boxes again."
     }
   },
   "onboarding": {
