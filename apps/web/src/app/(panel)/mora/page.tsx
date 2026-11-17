@@ -70,6 +70,7 @@ export default async function MoraPage({ searchParams }: { searchParams: MoraPar
         </p>
       )}
 
+      <div data-tour="screen.mora.list">
       <ArrearsTable
         rows={list.body.data}
         meta={pageMeta(list.body, searchParams.page, moraLimit(searchParams))}
@@ -85,6 +86,7 @@ export default async function MoraPage({ searchParams }: { searchParams: MoraPar
         canWrite={canWrite}
         canExport={canExport}
       />
+      </div>
     </>
   );
 }

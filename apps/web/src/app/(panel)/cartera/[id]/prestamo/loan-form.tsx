@@ -17,6 +17,7 @@ import {
 import { PageHeader, Section } from '@/components/panel-ui';
 import { Button, ErrorBanner, Field, Input, Select } from '@/components/ui';
 import { CreditQuotePanel, CreditTermsFields } from '@/components/credit-terms-fields';
+import { useWorkspace } from '@/components/workspace';
 import { PaymentPlanTable } from '@/components/payment-plan-table';
 import { PaidInstallmentsSelect } from '@/components/paid-installments-select';
 import { useToast } from '@/components/toast';
@@ -63,9 +64,13 @@ export function LoanForm({
   const router = useRouter();
   const toast = useToast();
 
+  // F15 · P3: lo que la organización fijó (modalidad, plazo en cuotas, frecuencia) arranca puesto, para que el formulario nunca
+  // envíe vacío algo que el motor exige y que la persona ya no ve.
+  const workspace = useWorkspace();
   const [form, setForm] = useState<CreditForm>(() => ({
     ...initialCreditForm(todayIso()),
     arrearsMethod: defaultArrearsMethod ?? DEFAULT_ARREARS_METHOD,
+    ...workspace.creditDefaults(),
   }));
   /** Cuántas de las primeras cuotas ya estaban pagadas al registrarlo. 0 = crédito nuevo. */
   const [paid, setPaid] = useState(0);
@@ -107,7 +112,11 @@ export function LoanForm({
     });
     setSaving(false);
     if (!ok) {
-      setError(isCreditOfficeError(data.error?.code) ? tc('officeRequired') : (data.error?.message ?? t('saveError')));
+      setError(
+        isCreditOfficeError(data.error?.code)
+          ? tc('officeRequired')
+          : (data.error?.message ?? t('saveError')),
+      );
       return;
     }
     toast(tc('created'));
@@ -128,7 +137,11 @@ export function LoanForm({
               </Button>
             </span>
             <span className="w-44">
-              <Button type="submit" loading={saving} disabled={!state.canSubmit || (needsOffice && !office)}>
+              <Button
+                type="submit"
+                loading={saving}
+                disabled={!state.canSubmit || (needsOffice && !office)}
+              >
                 {tc('save')}
               </Button>
             </span>
@@ -142,7 +155,12 @@ export function LoanForm({
       {needsOffice && (
         <section className="rounded-2xl border border-k-border bg-white p-5">
           <Field label={tc('office')} hint={tc('officeHint')}>
-            <OfficeSelect options={offices} emptyLabel={tc('officePick')} value={office} onChange={(e) => setOffice(e.target.value)} />
+            <OfficeSelect
+              options={offices}
+              emptyLabel={tc('officePick')}
+              value={office}
+              onChange={(e) => setOffice(e.target.value)}
+            />
           </Field>
         </section>
       )}
@@ -197,7 +215,11 @@ export function LoanForm({
               {/* D13: el atajo para un crédito que ya venía corriendo. No cambia el número de cuotas. */}
               {schedule.length > 1 && (
                 <div className="mb-4 max-w-md">
-                  <PaidInstallmentsSelect schedule={schedule} value={paidCount} onChange={setPaid} />
+                  <PaidInstallmentsSelect
+                    schedule={schedule}
+                    value={paidCount}
+                    onChange={setPaid}
+                  />
                 </div>
               )}
               <PaymentPlanTable

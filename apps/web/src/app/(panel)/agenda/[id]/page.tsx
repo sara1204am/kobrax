@@ -17,6 +17,7 @@ import { getAgendaSummary } from '@/lib/agenda-summary';
 import { AGENDA_STATUS_TONE, entrySummary, itemActions, itemWhen } from '@/lib/agenda';
 import { Badge, EmptyState } from '@/components/panel-ui';
 import { dateTime, dayDate, money } from '@/lib/format';
+import { workspaceOfMe } from '@/lib/workspace';
 import { ContactActions } from './contact-actions';
 import { ItemActions } from './item-actions';
 
@@ -78,6 +79,7 @@ export default async function GestionPage({
   }
 
   const { item, client, credit, target, labels, history, execution, rescheduledTo, route } = detail.body.data;
+  const routesShown = workspaceOfMe(me.body.data).showsModule('routes');
   const canWrite = me.body.data?.permissions?.includes(Permission.AGENDA_WRITE) ?? false;
   const actions = canWrite ? itemActions(item.status) : [];
   /**
@@ -250,7 +252,10 @@ export default async function GestionPage({
               rescheduleReasons={rescheduleReasons?.body.data ?? []}
               canExecute={actions.length > 0}
               // Una visita que una ruta lleva se registra en su parada (con GPS y evidencia): acá solo se manda a la ruta.
-              routeStopHref={route ? `/rutas/${route.routeId}/parada/${route.stopId}` : undefined}
+              routeStopHref={route && routesShown ? `/rutas/${route.routeId}/parada/${route.stopId}` : undefined}
+              // F15 (G6): una visita que una ruta lleva se registra en su parada, con GPS y evidencia. Con Rutas oculto no hay a dónde
+              // mandar, y caer a «Completar» la cerraría sin esa evidencia: la acción no se ofrece (sigue pudiendo reagendarse o cancelarse).
+              completeBlocked={Boolean(route) && !routesShown}
               editable={canEdit ? item : undefined}
               schedule={{ timeMode: item.timeMode, scheduledTime: item.scheduledTime, timeSlot: item.timeSlot }}
               assign={me.body.data?.permissions?.includes(Permission.AGENDA_ASSIGN) ? { meId: me.body.data.userId } : undefined}

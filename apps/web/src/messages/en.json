@@ -57,6 +57,7 @@
     },
     "crumbs": {
       "datos-personales": "Personal details",
+      "espacio-de-trabajo": "Workspace",
       "preferencias": "Preferences",
       "seguridad": "Security",
       "avanzado": "Advanced",
@@ -313,6 +314,15 @@
     "offline": {
       "title": "We could not reach the server",
       "text": "Try again in a moment. If it keeps happening, let your administrator know."
+    },
+    "workspace": {
+      "hiddenModule": {
+        "title": "{module} is hidden for your organization.",
+        "textAdmin": "You can show it again in Account › Workspace.",
+        "textMember": "Ask whoever manages the account to show it.",
+        "goTo": "Go to Workspace",
+        "dismiss": "Dismiss"
+      }
     },
     "billingAlert": {
       "title": "Billing details are missing.",
@@ -2388,6 +2398,7 @@
       "facturacion": "Billing",
       "billingPending": "Billing details missing",
       "actividad": "Activity",
+      "espacio-de-trabajo": "Workspace",
       "avanzado": "Advanced",
       "soporte": "Support access"
     },
@@ -2610,6 +2621,116 @@
       "empty_value": "empty",
       "more": "Load more",
       "loadError": "The activity could not be loaded"
+    },
+    "workspace": {
+      "title": "Workspace",
+      "intro": "Choose what you see in Kobrax. What you hide stays saved and does not change what each person can do: hiding is not authorizing. You can go back to «Complete» at any time.",
+      "presets": {
+        "title": "Starting point",
+        "independent": {
+          "title": "Independent",
+          "text": "I work alone. An 8-item menu and simple entry forms."
+        },
+        "team": {
+          "title": "Team",
+          "text": "Several people in one office. No Organization, Import or Export."
+        },
+        "complete": {
+          "title": "Complete",
+          "text": "Everything visible, as today. This is the value of a new account."
+        },
+        "custom": "Custom: a manual adjustment on top of one of the starting points."
+      },
+      "modules": {
+        "title": "Menu modules",
+        "text": "They are removed from the menu, the breadcrumbs and the links. If someone opens a saved address, they go back to Home with a notice.",
+        "hints": {
+          "routes": "Plan and follow visit routes.",
+          "team": "Invite and manage people. It can only be hidden if you are the only person in the account.",
+          "organization": "Offices and hierarchy. It can only be hidden with a single active office.",
+          "import": "Load a portfolio from a file.",
+          "export": "Download data and the backup.",
+          "activity": "Audit log. Only the screen is hidden: auditing keeps recording everything."
+        }
+      },
+      "locked": {
+        "title": "Always visible",
+        "text": "Security includes Roles and Support access: without it nobody could edit permissions."
+      },
+      "credit": {
+        "title": "Credits",
+        "text": "Simplify the entry form. Existing credits open and save exactly as before.",
+        "fixed": {
+          "label": "My credits have an agreed installment",
+          "hint": "Hides rate, interest type, amortization, insurance and charges. The form asks for amount, installment, frequency and first due date."
+        },
+        "advanced": {
+          "label": "Show advanced credit options",
+          "hint": "Interest type, convention, base, insurance and charges."
+        },
+        "arrears": {
+          "label": "Ask how arrears are counted",
+          "hint": "If hidden, each credit uses your account method (Account › Collections)."
+        },
+        "frequencies": {
+          "label": "Payment frequencies I offer",
+          "hint": "At least one must remain. A credit that already uses another frequency still shows it."
+        }
+      },
+      "client": {
+        "title": "Client records",
+        "text": "Sections and fields that are shown. Name, phones, emails and addresses cannot be hidden.",
+        "income": {
+          "label": "Income",
+          "hint": "The client's income and reasons for non-payment."
+        },
+        "guarantors": {
+          "label": "Guarantors",
+          "hint": "People who back the credit."
+        },
+        "collateral": {
+          "label": "Non-personal collateral",
+          "hint": "Assets pledged as collateral."
+        },
+        "attachments": {
+          "label": "Attachments",
+          "hint": "Documents and photos on the record. Files already uploaded are kept."
+        },
+        "gender": {
+          "label": "Gender",
+          "hint": "Optional. Kobrax doesn't use it in any calculation or report: turn it on only if you need it for your operation."
+        },
+        "preferredChannel": {
+          "label": "Preferred contact channel",
+          "hint": "How the client prefers to be contacted: phone call, WhatsApp or visit. It's a note for your team; Kobrax does not send messages on its own."
+        },
+        "keepNote": "If a client already has a guarantor or an attachment saved, you will still see it even if you hid the section. Nothing is deleted."
+      },
+      "blocked": {
+        "members": "Your account has {count} people: it can only be hidden if you are the only one.",
+        "offices": "Your account has {count} active offices: it can only be hidden with one."
+      },
+      "menuPreview": "{shown} of {total} items in the menu",
+      "actions": {
+        "save": "Save changes",
+        "saving": "Saving…",
+        "reset": "Reset to Complete",
+        "unsaved": "You have unsaved changes. They apply to the whole organization.",
+        "clean": "No changes."
+      },
+      "saved": "Workspace saved. Other sessions will see it when they reload.",
+      "errors": {
+        "plan": "Your plan does not include Team or Offices: they must stay hidden.",
+        "conflict": "The workspace changed while you were editing it. Reload to see the latest and apply your change again.",
+        "reload": "Reload",
+        "version": "It was saved by a newer version of Kobrax and this one cannot modify it. Update the application.",
+        "blocked": "Some modules are still in use in your organization and cannot be hidden:",
+        "blockedMembers": "{module}: your account has {count} people.",
+        "blockedOffices": "{module}: your account has {count} active offices.",
+        "blockedRoutes": "{module}: there are {count} routes in progress.",
+        "invalid": "That configuration is not valid.",
+        "generic": "Could not save. Please try again."
+      }
     },
     "advanced": {
       "backup": {
@@ -4839,5 +4960,485 @@
       "name": "Its office",
       "description": "Sees the data of its office, with an owner."
     }
+  },
+  "onboarding": {
+    "title": "Set up Kobrax",
+    "progress": "Step {n} of {total}",
+    "later": "Do it later",
+    "close": "Close",
+    "back": "Back",
+    "next": "Next",
+    "useRecommended": "Use what we recommend for my plan and finish",
+    "save": "Save and get started",
+    "tools": {
+      "title": "Your tools",
+      "intro": "We set Kobrax up for your {plan} plan. Turn on only what you'll use; the rest stays out of your way.",
+      "tools": "Work tools",
+      "team": "Team and offices",
+      "always": "Home, Portfolio, Arrears, Agenda, Payments, Security, Account and My profile are always available.",
+      "inUse": "Your account already uses it, so it cannot be hidden.",
+      "items": {
+        "routes": {
+          "label": "Visit routes",
+          "hint": "Plan and run visits to your clients in the field."
+        },
+        "import": {
+          "label": "Import portfolio",
+          "hint": "Load clients and credits from a file."
+        },
+        "export": {
+          "label": "Export and reports",
+          "hint": "Download your portfolio and reports."
+        },
+        "team": {
+          "label": "Team",
+          "hint": "Invite and manage the people who collect with you. It also shows the account Activity."
+        },
+        "organization": {
+          "label": "Offices",
+          "hint": "Organize several offices or branches and who serves each one."
+        }
+      }
+    },
+    "clients": {
+      "title": "Your client file",
+      "intro": "Choose what's recorded for each client. Whatever you don't use is hidden so signing up a client is shorter.",
+      "core": "Client information",
+      "optional": "Optional data",
+      "note": "What's already saved on a client is always still shown. Nothing is deleted."
+    },
+    "credits": {
+      "title": "Your credits",
+      "intro": "Choose how a credit is defined when you create it.",
+      "definition": "Credit type",
+      "more": "More settings",
+      "definitions": {
+        "agreed_installment": {
+          "name": "Agreed installment",
+          "desc": "You agree on each installment amount and the number of installments."
+        },
+        "agreed_total": {
+          "name": "Agreed total",
+          "desc": "You agree on the total to pay and the number of installments."
+        },
+        "calculated": {
+          "name": "Calculated with interest",
+          "desc": "Calculated from an interest rate and a term."
+        },
+        "choose": {
+          "name": "I'll choose on each credit",
+          "desc": "You're asked every time."
+        }
+      },
+      "advanced": "Advanced options",
+      "advancedHint": "How arrears are counted and other financial settings."
+    },
+    "summary": {
+      "title": "Review your setup",
+      "intro": "This is what you'll see in Kobrax. Change anything before saving.",
+      "change": "Change",
+      "menu": "Tools in your menu",
+      "hiddenModules": "You won't see: {list}.",
+      "clients": "Client file",
+      "clientsShown": "You record: {list}.",
+      "clientsNone": "Only the basic client details.",
+      "clientsHidden": "Hidden: {list}.",
+      "credits": "Credits",
+      "creditsFixed": "Always created as: {name}.",
+      "creditsChoose": "You choose the type on each credit.",
+      "advancedOn": "Advanced options visible.",
+      "advancedOff": "Advanced options hidden.",
+      "guarantee": "This does not change permissions, plan or data: only what is shown. You can change it any time in Account › Workspace."
+    },
+    "done": {
+      "title": "Your workspace is ready",
+      "intro": "Kobrax is set up for your {plan} plan.",
+      "menu": "{n, plural, one {Your menu has # section.} other {Your menu has # sections.}}",
+      "change": "Change any setting in Account › Workspace. A good first step: register your first client.",
+      "close": "Done",
+      "enter": "Go to home",
+      "firstClient": "Register my first client"
+    },
+    "errors": {
+      "conflict": "Someone else changed the setup in the meantime.",
+      "reload": "Reload",
+      "blocked": "Something your account still uses could not be hidden (people, offices or routes in progress).",
+      "plan": "Your plan does not include Team or Offices: they must stay hidden.",
+      "invalid": "The setup is not valid. Review your choices.",
+      "generic": "Couldn't save. Try again."
+    },
+    "welcomeCard": {
+      "title": "Welcome to {org}",
+      "role": "Your role is {role}.",
+      "can": "From the menu you can work with:",
+      "help": "If you need something you can't see, ask whoever administers your organization.",
+      "ok": "Got it"
+    },
+    "firstSteps": {
+      "title": "First steps",
+      "intro": "Three things to get started. They check off by themselves as you do them.",
+      "close": "Close",
+      "done": "Done",
+      "pending": "Pending",
+      "items": {
+        "createClient": "Register your first client",
+        "createCredit": "Create your first credit",
+        "registerPayment": "Register your first payment"
+      }
+    },
+    "launcher": {
+      "button": "Review with the wizard",
+      "hint": "Go through the setup step by step."
+    }
+  },
+  "guides": {
+    "tour": {
+      "nav": {
+        "home": {
+          "title": "Home",
+          "what": "Your summary of the day.",
+          "does": "Shows the key portfolio numbers and what needs attention now.",
+          "startWith": "Start here every morning."
+        },
+        "portfolio": {
+          "title": "Portfolio",
+          "what": "Your clients and their credits.",
+          "does": "Search, filter and open each client's file; this is where you create clients and credits.",
+          "startWith": "Create your first client."
+        },
+        "import": {
+          "title": "Import",
+          "what": "Bulk upload from a spreadsheet.",
+          "does": "Upload clients and credits from a file and review errors before confirming.",
+          "startWith": "Download the template and try it with a few rows."
+        },
+        "mora": {
+          "title": "Arrears",
+          "what": "Overdue credits.",
+          "does": "Lists what is overdue by priority and category, and lets you log each collection action.",
+          "startWith": "Sort by priority and open the first one."
+        },
+        "agenda": {
+          "title": "Agenda",
+          "what": "Your pending actions.",
+          "does": "Gathers overdue and today's items: calls, visits and payment promises.",
+          "startWith": "Handle the overdue ones first."
+        },
+        "routes": {
+          "title": "Routes",
+          "what": "Field visit planning.",
+          "does": "Groups visits into a route and orders them to travel less.",
+          "startWith": "Pick a day and build the first route."
+        },
+        "payments": {
+          "title": "Payments",
+          "what": "Payments received.",
+          "does": "Record and review payments; each one updates the credit's balance and arrears.",
+          "startWith": "Record a test payment on a credit."
+        },
+        "export": {
+          "title": "Export",
+          "what": "Your data outside Kobrax.",
+          "does": "Generates files with the information your role can see.",
+          "startWith": "Choose what to export and the date range."
+        },
+        "organization": {
+          "title": "Organization",
+          "what": "Offices and who sees what.",
+          "does": "Create offices and assign people and portfolios to each.",
+          "startWith": "Create your first office."
+        },
+        "team": {
+          "title": "Team",
+          "what": "The people in your organization.",
+          "does": "Invite users, give them a role and suspend access.",
+          "startWith": "Invite your first teammate."
+        },
+        "accessSecurity": {
+          "title": "Security",
+          "what": "Access and account protection.",
+          "does": "Manage roles and permissions, open sessions and support access.",
+          "startWith": "Review roles before inviting people."
+        },
+        "activity": {
+          "title": "Activity",
+          "what": "The record of what happened.",
+          "does": "Shows who did what and when in your organization.",
+          "startWith": "Filter by person to review a change."
+        },
+        "account": {
+          "title": "Account",
+          "what": "Your company's details.",
+          "does": "Tax data, branding, plan and the workspace: which modules and options you see.",
+          "startWith": "Complete the billing details."
+        },
+        "profile": {
+          "title": "My profile",
+          "what": "Your personal details.",
+          "does": "Change your name, photo, password and two-step verification.",
+          "startWith": "Turn on two-step verification."
+        }
+      },
+      "topbar": {
+        "language": {
+          "title": "Language",
+          "what": "Spanish or English.",
+          "does": "Switches the language of the whole panel instantly.",
+          "startWith": "Pick the one you prefer."
+        },
+        "help": {
+          "title": "Help",
+          "what": "This button is always here.",
+          "does": "Use it to repeat this tour whenever you want or pick up where you left off.",
+          "startWith": "Come back whenever you need."
+        },
+        "notifications": {
+          "title": "Notices",
+          "what": "The notification bell.",
+          "does": "Shows what was newly assigned to you or changed; one click takes you there.",
+          "startWith": "Mark them as read once reviewed."
+        },
+        "sessionMenu": {
+          "title": "Your session",
+          "what": "Who you are and your role.",
+          "does": "Shows your name and role, and below it you can sign out.",
+          "startWith": "Sign out on a shared computer."
+        },
+        "accountSwitcher": {
+          "title": "Organization",
+          "what": "Switch company.",
+          "does": "If you belong to several organizations, move between them without signing in again.",
+          "startWith": "Choose the organization you'll work with."
+        }
+      }
+    },
+    "screen": {
+      "portfolio": {
+        "newClient": {
+          "title": "New client",
+          "what": "Register someone who owes you.",
+          "does": "It asks only the basics; the rest can wait.",
+          "startWith": "Start with the name and ID."
+        },
+        "filters": {
+          "title": "Filters",
+          "what": "Narrow down the list.",
+          "does": "Search by name, status or office.",
+          "startWith": "Combine two filters to find someone fast."
+        },
+        "clientCard": {
+          "title": "The client list",
+          "what": "Each row is a client.",
+          "does": "Open it to see the file: credits, payments and log.",
+          "startWith": "Open a client to see their file."
+        }
+      },
+      "mora": {
+        "list": {
+          "title": "Overdue credits",
+          "what": "Everything that is late, in one list.",
+          "does": "Sorted by priority, with the days overdue.",
+          "startWith": "Open the most urgent credit."
+        },
+        "filters": {
+          "title": "Filters",
+          "what": "Reduce the list to what is yours.",
+          "does": "Filter by category, collector or office.",
+          "startWith": "Filter by your portfolio."
+        },
+        "registerActivity": {
+          "title": "Log an action",
+          "what": "Keep a record of every collection attempt.",
+          "does": "Call, visit or promise: it goes into the credit log.",
+          "startWith": "Log the action as soon as you finish."
+        }
+      },
+      "agenda": {
+        "today": {
+          "title": "Your day",
+          "what": "What you have to do today and what's overdue.",
+          "does": "Overdue items come first; check each one off when done.",
+          "startWith": "Handle the overdue ones first."
+        },
+        "promises": {
+          "title": "Payment promises",
+          "what": "What people promised to pay.",
+          "does": "Each promise has a date; if missed, it returns to the agenda.",
+          "startWith": "Review the ones due today."
+        }
+      },
+      "payments": {
+        "list": {
+          "title": "Payments received",
+          "what": "The list of all payments.",
+          "does": "Filter by period or collector and open any to see its detail.",
+          "startWith": "Filter by the period you need."
+        },
+        "register": {
+          "title": "Record a payment",
+          "what": "Enter a payment received.",
+          "does": "Updates the credit's balance and arrears right away.",
+          "startWith": "Pick the credit and the amount."
+        }
+      },
+      "routes": {
+        "plan": {
+          "title": "Plan routes",
+          "what": "Build the day's itinerary here.",
+          "does": "Switch between the day view and the work summary.",
+          "startWith": "Pick a day and build a route."
+        },
+        "visits": {
+          "title": "The visits",
+          "what": "The day's routes and stops.",
+          "does": "Each collector sees their own; admins see all.",
+          "startWith": "Open a route to see its stops."
+        }
+      },
+      "team": {
+        "invite": {
+          "title": "Invite someone",
+          "what": "Add a person to your team.",
+          "does": "They get a code and join with the role you choose.",
+          "startWith": "Choose the role with the least access they need."
+        },
+        "roles": {
+          "title": "Your team",
+          "what": "Everyone in the organization.",
+          "does": "You see each person's role and can suspend or change access.",
+          "startWith": "Check that everyone has the right role."
+        }
+      },
+      "organization": {
+        "offices": {
+          "title": "Offices",
+          "what": "Your organization's structure.",
+          "does": "Create offices and move people and portfolios between them.",
+          "startWith": "Create your first office."
+        },
+        "assign": {
+          "title": "Assign",
+          "what": "Decide who handles what.",
+          "does": "Assign people and portfolios to each office.",
+          "startWith": "Assign a person to their office."
+        }
+      }
+    },
+    "help": {
+      "home": {
+        "title": "Home",
+        "what": "Your summary of the day.",
+        "does": "Shows the key portfolio numbers and what needs attention now.",
+        "startWith": "Start here every morning."
+      },
+      "portfolio": {
+        "title": "Portfolio",
+        "what": "Your clients and their credits.",
+        "does": "Search, filter and open each client's file; this is where you create clients and credits.",
+        "startWith": "Create your first client."
+      },
+      "import": {
+        "title": "Import",
+        "what": "Bulk upload from a spreadsheet.",
+        "does": "Upload clients and credits from a file and review errors before confirming.",
+        "startWith": "Download the template and try it with a few rows."
+      },
+      "mora": {
+        "title": "Arrears",
+        "what": "Overdue credits.",
+        "does": "Lists what is overdue by priority and category, and lets you log each collection action.",
+        "startWith": "Sort by priority and open the first one."
+      },
+      "agenda": {
+        "title": "Agenda",
+        "what": "Your pending actions.",
+        "does": "Gathers overdue and today's items: calls, visits and payment promises.",
+        "startWith": "Handle the overdue ones first."
+      },
+      "routes": {
+        "title": "Routes",
+        "what": "Field visit planning.",
+        "does": "Groups visits into a route and orders them to travel less.",
+        "startWith": "Pick a day and build the first route."
+      },
+      "payments": {
+        "title": "Payments",
+        "what": "Payments received.",
+        "does": "Record and review payments; each one updates the credit's balance and arrears.",
+        "startWith": "Record a test payment on a credit."
+      },
+      "export": {
+        "title": "Export",
+        "what": "Your data outside Kobrax.",
+        "does": "Generates files with the information your role can see.",
+        "startWith": "Choose what to export and the date range."
+      },
+      "organization": {
+        "title": "Organization",
+        "what": "Offices and who sees what.",
+        "does": "Create offices and assign people and portfolios to each.",
+        "startWith": "Create your first office."
+      },
+      "team": {
+        "title": "Team",
+        "what": "The people in your organization.",
+        "does": "Invite users, give them a role and suspend access.",
+        "startWith": "Invite your first teammate."
+      },
+      "accessSecurity": {
+        "title": "Security",
+        "what": "Access and account protection.",
+        "does": "Manage roles and permissions, open sessions and support access.",
+        "startWith": "Review roles before inviting people."
+      },
+      "activity": {
+        "title": "Activity",
+        "what": "The record of what happened.",
+        "does": "Shows who did what and when in your organization.",
+        "startWith": "Filter by person to review a change."
+      },
+      "account": {
+        "title": "Account",
+        "what": "Your company's details.",
+        "does": "Tax data, branding, plan and the workspace: which modules and options you see.",
+        "startWith": "Complete the billing details."
+      },
+      "profile": {
+        "title": "My profile",
+        "what": "Your personal details.",
+        "does": "Change your name, photo, password and two-step verification.",
+        "startWith": "Turn on two-step verification."
+      }
+    }
+  },
+  "tour": {
+    "label": "General tour",
+    "progress": "Step {current} of {total}",
+    "back": "Back",
+    "next": "Next",
+    "finish": "Finish",
+    "skip": "Skip tour",
+    "close": "Close",
+    "startWith": "To get started:",
+    "noAnchor": "This element is not in view on your screen right now.",
+    "wizardCta": "Take the tour now",
+    "welcomeCta": "Take the tour"
+  },
+  "help": {
+    "button": "Help",
+    "menuTitle": "Help",
+    "tour": "General tour",
+    "resume": "Pick up where I left off",
+    "screen": "Guide to this screen",
+    "center": "Help center"
+  },
+  "helpCenter": {
+    "title": "Help center",
+    "subtitle": "What each part of Kobrax does and where to start.",
+    "search": "Search help",
+    "empty": "Nothing matches that search.",
+    "open": "Go to {name}",
+    "actions": "What you can do here",
+    "tour": "Take the general tour"
   }
 }

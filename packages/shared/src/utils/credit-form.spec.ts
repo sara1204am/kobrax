@@ -9,7 +9,7 @@ import {
   RepaymentForm,
   TermUnit,
 } from '../enums/credit.enum.js';
-import { buildNewCreditPayload, creditFormState, creditFormTerms, initialCreditForm, type CreditForm } from './credit-form.js';
+import { buildNewCreditPayload, creditFormState, creditFormTerms, initialCreditForm, type CreditForm, creditFormHasAdvanced } from './credit-form.js';
 import { resolveCreditTerms } from './credit-engine.js';
 
 // Estos tests hablan de tasa por cuota y período en cuotas; la pantalla arranca en anual / años (D17).
@@ -147,5 +147,23 @@ describe('buildNewCreditPayload', () => {
   it('incompleto o inválido: no hay payload', () => {
     expect(buildNewCreditPayload(initialCreditForm('2026-10-25'), 'client-1')).toBeNull();
     expect(buildNewCreditPayload(form({ principal: '1000', ratePercent: '150', installmentsCount: '5' }), 'client-1')).toBeNull();
+  });
+});
+
+describe('creditFormHasAdvanced (F15 · R7)', () => {
+  it('un formulario de fábrica no trae nada avanzado', () => {
+    expect(creditFormHasAdvanced(initialCreditForm('2026-12-15'))).toBe(false);
+  });
+
+  it('seguro, cargos, tipo, convención o base distintos de fábrica sí cuentan', () => {
+    const base = initialCreditForm('2026-12-15');
+    expect(creditFormHasAdvanced({ ...base, insuranceMonthlyPercent: '0.05' })).toBe(true);
+    expect(creditFormHasAdvanced({ ...base, charges: [{ id: 'x', label: '', kind: 'per_installment', value: '1' }] })).toBe(true);
+    expect(creditFormHasAdvanced({ ...base, interestType: InterestType.COMPOUND })).toBe(true);
+  });
+
+  it('el método de mora NO es parte del bloque avanzado (C-4)', () => {
+    const base = initialCreditForm('2026-12-15');
+    expect(creditFormHasAdvanced({ ...base, arrearsMethod: 'CONTRACTUAL' as never })).toBe(false);
   });
 });

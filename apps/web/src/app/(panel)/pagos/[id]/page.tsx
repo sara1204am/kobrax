@@ -15,6 +15,7 @@ import { apiCall } from '@/lib/bff';
 import { EmptyState } from '@/components/panel-ui';
 import { isUuid } from '@/lib/payments';
 import { dateTime, dateTimeLong, fullName, money } from '@/lib/format';
+import { workspaceOfMe } from '@/lib/workspace';
 import { ReceiptButton } from './receipt-button';
 
 /**
@@ -71,7 +72,8 @@ export default async function PagoPage({ params }: { params: { id: string } }) {
   const who = [client ? fullName(client) : null, credit?.code ? t('detail.creditLine', { code: credit.code }) : null].filter(Boolean).join(' · ');
 
   // El enlace a la parada sólo si hay a dónde ir y quien mira puede abrir rutas: si no, un 403 detrás de un clic.
-  const canRoutes = (me.body.data?.permissions ?? []).includes('route:read');
+  // F15 · A-5: tampoco si la organización ocultó Rutas.
+  const canRoutes = (me.body.data?.permissions ?? []).includes('route:read') && workspaceOfMe(me.body.data).showsModule('routes');
   const visit = payment.visit;
   const visitHref = canRoutes && visit?.routeId && visit.stopId ? `/rutas/${visit.routeId}/parada/${visit.stopId}` : null;
 

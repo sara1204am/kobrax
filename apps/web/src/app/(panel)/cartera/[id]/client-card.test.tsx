@@ -6,6 +6,7 @@ import type { ClientDetail } from '@kobrax/shared';
 import { server } from '@/test/msw-server';
 import { PermissionsProvider } from '@/components/permissions';
 import { ToastProvider } from '@/components/toast';
+import { WorkspaceProvider } from '@/components/workspace';
 import { ClientCard } from './client-card';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
@@ -210,5 +211,52 @@ describe('ClientCard — quien no tiene client:contact:read (VIEWER, F14 · F4)'
     expect(screen.queryByText('Calle ****')).not.toBeInTheDocument();
     expect(screen.queryByText('7****23')).not.toBeInTheDocument();
     expect(screen.getByText('1234***')).toBeInTheDocument(); // el documento sigue tapado
+  });
+});
+
+describe('ClientCard · espacio de trabajo (F15 · P3)', () => {
+  const todoOculto = {
+    version: 1,
+    rev: 1,
+    hiddenModules: [],
+    options: { 'client.income': false, 'client.guarantors': false, 'client.collateral': false, 'client.attachments': false },
+  } as never;
+  const SECCIONES = ['Perfil de ingreso', 'Garantes y contactos', 'Garantías', 'Adjuntos'];
+
+  function renderWs(workspace: unknown, client: ClientDetail = TAPADO) {
+    return render(
+      <PermissionsProvider permissions={['client:read', 'client:write', 'client:contact:read']}>
+        <WorkspaceProvider workspace={workspace as never}>
+          <ToastProvider>
+            <ClientCard client={client} creditOptions={[]} currency="BOB" collateralTypes={[]} />
+          </ToastProvider>
+        </WorkspaceProvider>
+      </PermissionsProvider>,
+    );
+  }
+
+  it('🔴 A-1: sin workspace aparecen todas las secciones de siempre', () => {
+    renderWs(undefined);
+    for (const nombre of SECCIONES) expect(screen.getByRole('region', { name: nombre })).toBeInTheDocument();
+  });
+
+  it('con las cuatro ocultas, ninguna se dibuja y la identificación y los contactos siguen', () => {
+    renderWs(todoOculto);
+    for (const nombre of SECCIONES) expect(screen.queryByRole('region', { name: nombre })).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Identificación' })).toBeInTheDocument();
+  });
+
+  it('🔴 R7: un cliente que ya tiene garantes, garantías o adjuntos los muestra aunque se hayan ocultado (nada se borra, nada se esconde)', () => {
+    renderWs(todoOculto, {
+      ...TAPADO,
+      relations: [{ id: 'r1', relatedName: 'Pedro', relationshipType: 'GUARANTOR', isContactable: true }],
+      collaterals: [{ id: 'k1', type: 'MOTO', description: 'Moto', currency: 'BOB' } as never],
+      attachments: [],
+    });
+    expect(screen.getByRole('region', { name: 'Garantes y contactos' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Garantías' })).toBeInTheDocument();
+    // Lo que no tiene datos sigue oculto.
+    expect(screen.queryByRole('region', { name: 'Perfil de ingreso' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Adjuntos' })).not.toBeInTheDocument();
   });
 });

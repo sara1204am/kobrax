@@ -40,6 +40,7 @@ export function ItemActions({
   rescheduleReasons,
   canExecute,
   routeStopHref,
+  completeBlocked = false,
   editable,
   schedule,
   assign,
@@ -60,6 +61,8 @@ export function ItemActions({
   canExecute: boolean;
   /** La parada de ruta que lleva esta visita: «Registrar la ejecución» pasa a ser un enlace a ella. */
   routeStopHref?: string;
+  /** F15: la visita la lleva una ruta que esta organización ocultó: no hay parada a dónde mandar y «Completar» saltaría la evidencia. */
+  completeBlocked?: boolean;
   /**
    * Editar y eliminar: SOLO si quien mira es quien creó la gestión (lo decide la página con `createdBy`).
    * Llega la gestión entera para precargar el formulario.
@@ -177,9 +180,11 @@ export function ItemActions({
               </Button>
             </a>
           ) : (
-            <Button onClick={() => setAction('complete')} className="sm:w-auto sm:px-6">
-              {t('actions.complete')}
-            </Button>
+            !completeBlocked && (
+              <Button onClick={() => setAction('complete')} className="sm:w-auto sm:px-6">
+                {t('actions.complete')}
+              </Button>
+            )
           )}
           <Button variant="ghost" onClick={() => setAction('reschedule')} className="sm:w-auto sm:px-6">
             {t('actions.reschedule')}

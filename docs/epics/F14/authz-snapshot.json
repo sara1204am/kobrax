@@ -940,6 +940,13 @@
     "any": []
   },
   {
+    "route": "GET /users/me/guides",
+    "handler": "UsersController.getMyGuides",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
     "route": "GET /users/me/profile",
     "handler": "UsersController.getMyProfile",
     "kind": "authenticated",
@@ -1949,6 +1956,13 @@
     "all": [
       "role:write"
     ],
+    "any": []
+  },
+  {
+    "route": "PUT /users/me/guides",
+    "handler": "UsersController.putMyGuides",
+    "kind": "authenticated",
+    "all": [],
     "any": []
   }
 ]

@@ -11,6 +11,7 @@ import { SendWhatsappDialog } from '@/components/send-whatsapp-dialog';
 import { Button } from '@/components/ui';
 import { Modal } from '@/components/modal';
 import { usePermissions } from '@/components/permissions';
+import { useWorkspace } from '@/components/workspace';
 import { useToast } from '@/components/toast';
 import { postJson, sendJson } from '@/lib/client';
 import { date, fullName, money } from '@/lib/format';
@@ -78,6 +79,8 @@ export function ClientCard({
   const toast = useToast();
   const { can } = usePermissions();
   const [shown, setShown] = useState(client);
+  // F15 · P3: Ingresos, Garantes, Garantías y Adjuntos se pueden ocultar. Los que el cliente ya tiene cargados se muestran igual (R7).
+  const workspace = useWorkspace();
   const [revealed, setRevealed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirmBaja, setConfirmBaja] = useState(false);
@@ -189,7 +192,10 @@ export function ClientCard({
                 {tw('send')}
               </button>
             )}
-            <a href={`/api/clients/${client.id}/pdf`} className="text-[13px] font-medium text-k-purple hover:underline">
+            <a
+              href={`/api/clients/${client.id}/pdf`}
+              className="text-[13px] font-medium text-k-purple hover:underline"
+            >
               {t('downloadPdf')}
             </a>
             {/* La baja no se ofrece si hay plata en la calle: la API la rechaza igual, pero un
@@ -209,11 +215,16 @@ export function ClientCard({
 
       {/* F14 · F2 (H-7): el cliente no tiene dueño. Si tiene créditos que yo no veo, un aviso con SÓLO agregados (nunca su detalle). */}
       {shown.otherCredits && (
-        <p role="note" className="mb-4 rounded-lg bg-k-highlight px-4 py-3 text-[13px] text-k-periwinkle">
+        <p
+          role="note"
+          className="mb-4 rounded-lg bg-k-highlight px-4 py-3 text-[13px] text-k-periwinkle"
+        >
           {t('otherCredits.notice', {
             count: shown.otherCredits.count,
             total: money(shown.otherCredits.totalOutstanding, currency),
-            names: shown.otherCredits.responsibles.map((p) => p.name).join(', ') || t('otherCredits.nobody'),
+            names:
+              shown.otherCredits.responsibles.map((p) => p.name).join(', ') ||
+              t('otherCredits.nobody'),
           })}
         </p>
       )}
@@ -244,17 +255,29 @@ export function ClientCard({
               {shown.preferredContactChannel && (
                 <Dato
                   label={t('form.preferredChannel')}
-                  value={['PHONE', 'WHATSAPP', 'VISIT'].includes(shown.preferredContactChannel) ? t(`channel.${shown.preferredContactChannel}`) : shown.preferredContactChannel}
+                  value={
+                    ['PHONE', 'WHATSAPP', 'VISIT'].includes(shown.preferredContactChannel)
+                      ? t(`channel.${shown.preferredContactChannel}`)
+                      : shown.preferredContactChannel
+                  }
                 />
               )}
-              {shown.createdAt && <Dato label={t('fields.createdAt')} value={date(shown.createdAt, locale)} />}
+              {shown.createdAt && (
+                <Dato label={t('fields.createdAt')} value={date(shown.createdAt, locale)} />
+              )}
             </dl>
           </Section>
 
           {/* F4/13 · E3: de qué vive y cuándo le llega el dinero. Opcional: sin perfil dice que no está cargado. */}
-          <Section title={t('sections.income')} action={editarAction('income')}>
-            <IncomeSummary profile={shown.incomeProfile} sources={incomeSources} occupations={occupations} />
-          </Section>
+          {(workspace.shows('client.income') || shown.incomeProfile) && (
+            <Section title={t('sections.income')} action={editarAction('income')}>
+              <IncomeSummary
+                profile={shown.incomeProfile}
+                sources={incomeSources}
+                occupations={occupations}
+              />
+            </Section>
+          )}
 
           {/*
            * Los créditos los pinta el servidor y bajan como children: esta tarjeta es cliente por
@@ -291,31 +314,38 @@ export function ClientCard({
            * que es la verdad de lo que pasó—; por eso las dos listas comparten el mismo `reveal`.
            */}
           {canSeeContact && (
-          <div className="grid gap-5 sm:grid-cols-2">
-            <ContactList
-              rows={shown.contacts ?? []}
-              revealed={revealed}
-              onReveal={() => void reveal()}
-              busy={busy}
-              canWrite={canWrite}
-              onEdit={() => void editar('contacts')}
-            />
-            <LocationList
-              rows={shown.locations ?? []}
-              revealed={revealed}
-              onReveal={() => void reveal()}
-              busy={busy}
-              onEdit={() => void editar('locations')}
-              canWrite={canWrite}
-              modalities={collectionModalities}
-            />
-          </div>
+            <div className="grid gap-5 sm:grid-cols-2">
+              <ContactList
+                rows={shown.contacts ?? []}
+                revealed={revealed}
+                onReveal={() => void reveal()}
+                busy={busy}
+                canWrite={canWrite}
+                onEdit={() => void editar('contacts')}
+              />
+              <LocationList
+                rows={shown.locations ?? []}
+                revealed={revealed}
+                onReveal={() => void reveal()}
+                busy={busy}
+                onEdit={() => void editar('locations')}
+                canWrite={canWrite}
+                modalities={collectionModalities}
+              />
+            </div>
           )}
 
           {/* 🔴 Con `client`, no con `shown`: los adjuntos no llevan máscara, y `shown` es una copia
               congelada del primer render — el `router.refresh()` de la subida traía el adjunto
               nuevo y no se veía hasta recargar la página. */}
-          {canSeeContact && <AttachmentsSection clientId={client.id} rows={client.attachments ?? []} canWrite={canWrite} />}
+          {canSeeContact &&
+            (workspace.shows('client.attachments') || (client.attachments?.length ?? 0) > 0) && (
+              <AttachmentsSection
+                clientId={client.id}
+                rows={client.attachments ?? []}
+                canWrite={canWrite}
+              />
+            )}
         </div>
 
         {/* La columna de consulta: cuánto debe, qué se hizo, y quién responde si no paga. */}
@@ -328,14 +358,22 @@ export function ClientCard({
            * también destapa los teléfonos del garante** —es a quien se llama cuando el deudor no
            * aparece—, y con el cliente original quedarían tapados para siempre.
            */}
-          <GuarantorsSection client={shown} canWrite={canWrite} onEdit={() => void editar('guarantors')} />
-          <CollateralsSection
-            client={shown}
-            currency={currency}
-            types={collateralTypes}
-            canWrite={canWrite}
-            onEdit={() => void editar('collaterals')}
-          />
+          {(workspace.shows('client.guarantors') || (shown.relations?.length ?? 0) > 0) && (
+            <GuarantorsSection
+              client={shown}
+              canWrite={canWrite}
+              onEdit={() => void editar('guarantors')}
+            />
+          )}
+          {(workspace.shows('client.collateral') || (shown.collaterals?.length ?? 0) > 0) && (
+            <CollateralsSection
+              client={shown}
+              currency={currency}
+              types={collateralTypes}
+              canWrite={canWrite}
+              onEdit={() => void editar('collaterals')}
+            />
+          )}
         </div>
       </div>
 
@@ -396,9 +434,12 @@ function IncomeSummary({
   if (!profile) return <p className="text-[13px] text-k-muted">{t('income.empty')}</p>;
 
   const fuente = profile.incomeSourceCode
-    ? sources.find((s) => s.code === profile.incomeSourceCode)?.label ?? t(`income.sourceDefault.${profile.incomeSourceCode}`)
+    ? (sources.find((s) => s.code === profile.incomeSourceCode)?.label ??
+      t(`income.sourceDefault.${profile.incomeSourceCode}`))
     : undefined;
-  const rubro = profile.occupationCode ? occupations.find((o) => o.code === profile.occupationCode)?.label ?? profile.occupationCode : undefined;
+  const rubro = profile.occupationCode
+    ? (occupations.find((o) => o.code === profile.occupationCode)?.label ?? profile.occupationCode)
+    : undefined;
   const ciclo = profile.incomeCycle ? t(`income.cycleOptions.${profile.incomeCycle}`) : undefined;
   const dia =
     profile.incomeDay != null
@@ -412,7 +453,12 @@ function IncomeSummary({
       {fuente && <Dato label={t('income.source')} value={fuente} />}
       {rubro && <Dato label={t('income.occupation')} value={rubro} />}
       {ciclo && <Dato label={t('income.cycle')} value={ciclo} />}
-      {dia && <Dato label={profile.incomeCycle === 'WEEKLY' ? t('income.dayOfWeek') : t('income.dayOfMonth')} value={dia} />}
+      {dia && (
+        <Dato
+          label={profile.incomeCycle === 'WEEKLY' ? t('income.dayOfWeek') : t('income.dayOfMonth')}
+          value={dia}
+        />
+      )}
       {profile.notes && <Dato label={t('income.notes')} value={profile.notes} />}
     </dl>
   );

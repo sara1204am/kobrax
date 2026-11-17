@@ -59,7 +59,9 @@ export default async function RutasPage({ searchParams }: { searchParams: RouteP
         subtitle={t('subtitle')}
         // Sin «Planificar rutas» aquí: cada cobrador se planifica desde su fila en «Hoy» (y por «Planificar» en la lista).
       />
+      <div data-tour="screen.routes.plan">
       <RouteTabs modo={modo} vista={vista} />
+      </div>
     </>
   );
 
@@ -87,6 +89,7 @@ export default async function RutasPage({ searchParams }: { searchParams: RouteP
           today={today}
           labels={{ previous: t('previousDay'), next: t('nextDay'), today: t('today'), date: t('date') }}
         />
+        <div data-tour="screen.routes.visits">
         <TodayBoard
           day={day}
           routes={todays.body.data}
@@ -97,6 +100,7 @@ export default async function RutasPage({ searchParams }: { searchParams: RouteP
           canPlan={supervises}
           params={searchParams}
         />
+        </div>
       </>
     );
   }
@@ -140,6 +144,7 @@ export default async function RutasPage({ searchParams }: { searchParams: RouteP
             today={today}
             labels={{ previous: t('previousDay'), next: t('nextDay'), today: t('today'), date: t('date') }}
           />
+          <div data-tour="screen.routes.visits">
           <RoutesTable
             rows={list.body.data}
             meta={pageMeta(list.body, searchParams.page, routeLimit(searchParams))}
@@ -149,6 +154,7 @@ export default async function RutasPage({ searchParams }: { searchParams: RouteP
             // Sin `route:assign` la API acota a lo propio, y sin `user:read` no hay nombres que ofrecer.
             showCollector={supervises && members.length > 0}
           />
+          </div>
         </>
       ) : (
         /*

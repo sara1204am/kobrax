@@ -116,6 +116,7 @@ model Account {
   agendaItems             AgendaItem[]
   catalogItems            CatalogItem[]
   dashboards              Dashboard[]
+  userGuideStates         UserGuideState[]
   creditAssignments       CreditAssignment[]
   creditArrearEpisodes    CreditArrearEpisode[]
   creditNotes             CreditNote[]
@@ -2246,4 +2247,26 @@ enum PermissionRisk {
 enum PermissionReserved {
   PLATFORM
   ADMIN_CORE
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// F15 · P6 — Estado de las guías por persona y organización
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Qué guías vio, descartó o dejó a medias cada persona **en cada organización** (D-13, D-17). Es estado de interfaz: no
+/// guarda progreso de negocio (eso se deriva de datos) y vive en una tabla propia, aparte de `user_accounts`, que lleva
+/// triggers de autorización. `state` es un jsonb versionado que valida `validateGuideStateInput` de shared.
+model UserGuideState {
+  id        String   @id @default(uuid())
+  accountId String   @map("account_id")
+  /// users.id (ref suave, como `dashboards.owner_user_id`): cada persona solo toca su fila; lo garantiza el service.
+  userId    String   @map("user_id")
+  state     Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  account Account @relation(fields: [accountId], references: [id])
+
+  @@unique([accountId, userId])
+  @@map("user_guide_states")
 }

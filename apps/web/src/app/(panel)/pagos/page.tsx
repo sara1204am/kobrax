@@ -106,6 +106,7 @@ export default async function PagosPage({ searchParams }: { searchParams: Paymen
         </Link>
       )}
 
+      <div data-tour="screen.payments.list">
       <PaymentsTable
         rows={rows}
         meta={pagination}
@@ -114,8 +115,13 @@ export default async function PagosPage({ searchParams }: { searchParams: Paymen
         filtered={hasPaymentFilters(searchParams)}
         userId={me.body.data?.userId}
         period={defaultPeriod()}
-        action={<PaymentActions credit={credit} />}
+        action={
+          <span data-tour="screen.payments.register" className="inline-block">
+            <PaymentActions credit={credit} />
+          </span>
+        }
       />
+      </div>
     </>
   );
 }

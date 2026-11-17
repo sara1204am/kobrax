@@ -137,6 +137,7 @@ export default async function EquipoPage({ searchParams }: { searchParams: TeamP
 
       {/* Los roles pueden venir vacíos si el rol de quien mira no tiene `role:read`: en ese
           caso el selector no se dibuja y la lista sigue siendo legible. */}
+      <div data-tour="screen.team.roles">
       <MembersTable
         members={rows}
         // Todo el equipo, no solo la página visible: de acá sale a quién se le puede pasar el trabajo de quien se desactiva.
@@ -150,8 +151,13 @@ export default async function EquipoPage({ searchParams }: { searchParams: TeamP
         offices={offices.multi ? offices.rows : []}
         filtered={hasTeamFilters(searchParams)}
         seats={seats ? { used: seats.usage.users, max } : undefined}
-        action={<InviteButton roles={roles.body.data ?? []} offices={officeOptions(activeOffices(offices.rows))} full={level === 'full'} />}
+        action={
+          <span data-tour="screen.team.invite" className="inline-block">
+            <InviteButton roles={roles.body.data ?? []} offices={officeOptions(activeOffices(offices.rows))} full={level === 'full'} />
+          </span>
+        }
       />
+      </div>
     </>
   );
 }
