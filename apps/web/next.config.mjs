@@ -16,12 +16,30 @@ function readAppVersion() {
   return match?.[1]?.trim() ?? '';
 }
 
+/**
+ * S-10: cabeceras de seguridad. El CSP lleva sólo las directivas que no dependen de los scripts en línea de Next
+ * (anti-clickjacking, `<base>`, formularios, plugins): un `script-src` estricto exige nonce por petición y se hace aparte.
+ * Permisos: la cámara y la ubicación se piden a propósito (evidencia, rutas); el resto queda apagado.
+ */
+const SECURITY_HEADERS = [
+  { key: 'X-Frame-Options', value: 'DENY' },
+  { key: 'X-Content-Type-Options', value: 'nosniff' },
+  { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+  { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' },
+  { key: 'Permissions-Policy', value: 'camera=(self), geolocation=(self), microphone=(), payment=(), usb=()' },
+  { key: 'Content-Security-Policy', value: "frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'" },
+];
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
 
   /** Única variable que se expone al navegador desde el `.env` raíz: `APP_VERSION` (la versión pública del producto). */
   env: { NEXT_PUBLIC_APP_VERSION: readAppVersion() },
+
+  async headers() {
+    return [{ source: '/:path*', headers: SECURITY_HEADERS }];
+  },
 
   async redirects() {
     return LEGACY_REDIRECTS;

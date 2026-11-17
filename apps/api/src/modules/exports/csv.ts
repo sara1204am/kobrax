@@ -1,7 +1,8 @@
 /** Una celda de CSV: comillada sólo si hace falta (coma, comilla o salto de línea adentro). */
 function csvCell(v: unknown): string {
   if (v === null || v === undefined) return '';
-  const s = v instanceof Date ? v.toISOString() : String(v);
+  // S-8: todo TEXTO que llega a una celda pasa por `csvSafeText` (idempotente); números y fechas no son texto de nadie.
+  const s = v instanceof Date ? v.toISOString() : typeof v === 'string' ? csvSafeText(v) : String(v);
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 

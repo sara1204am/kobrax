@@ -1,4 +1,6 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { HttpException, Inject, Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
+import type Redis from 'ioredis';
+import { REDIS } from '../../redis/redis.module';
 import { randomBytes } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 import { compare, hash } from 'bcryptjs';
@@ -57,6 +59,10 @@ const REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const GRACE_MS = 10_000;
 
 
+/** S-9: fallos de MFA tolerados por usuario en la ventana (15 min) antes de bloquear los intentos. */
+const MFA_MAX_FAILS = 5;
+const MFA_FAIL_WINDOW_SEC = 900;
+
 @Injectable()
 export class AuthService implements OnModuleInit {
   private readonly logger = new Logger(AuthService.name);
@@ -72,6 +78,8 @@ export class AuthService implements OnModuleInit {
     private readonly mfa: MfaService,
     private readonly audit: AuditService,
     private readonly authz: AuthzVersionService,
+    /** Contador de fallos de MFA por usuario. Opcional: sin Redis (tests unitarios) no cuenta, y el límite por IP sigue. */
+    @Optional() @Inject(REDIS) private readonly redis?: Redis,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -134,8 +142,21 @@ export class AuthService implements OnModuleInit {
     } catch {
       throw invalidPreAuth();
     }
+    // S-9: tope de fallos POR USUARIO (el límite por IP no frena a quien rota de IP con un pre-auth token válido).
+    const failKey = `mfa:fail:${pre.sub}`;
+    const fails = this.redis ? Number((await this.redis.get(failKey)) ?? 0) : 0;
+    if (fails >= MFA_MAX_FAILS) {
+      throw new HttpException(
+        { code: 'RATE_LIMITED', message: 'Demasiados intentos de MFA, intenta más tarde', details: { retryAfterSeconds: MFA_FAIL_WINDOW_SEC } },
+        429,
+      );
+    }
     const ok = await this.mfa.challenge(pre.sub, code);
-    if (!ok) throw mfaInvalid();
+    if (!ok) {
+      if (this.redis) await this.redis.multi().incr(failKey).expire(failKey, MFA_FAIL_WINDOW_SEC).exec();
+      throw mfaInvalid();
+    }
+    if (this.redis) await this.redis.del(failKey);
     return this.proceedToAccountStep(pre.sub, meta, true);
   }
 
