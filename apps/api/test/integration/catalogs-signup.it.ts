@@ -13,7 +13,7 @@ import { randomUUID } from 'node:crypto';
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { PrismaClient } from '@prisma/client';
-import { addMember, API, call, db, freshDatabase, login, startApi, stopApi } from './harness';
+import { addMember, API, call, db, freshDatabase, login, startApi, stopApi, legalAcceptance } from './harness';
 
 interface Item {
   id: string;
@@ -33,7 +33,7 @@ before(async () => {
   const res = await fetch(`${API}/accounts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ businessName: 'Cobranzas Prueba', firstName: 'Sara', lastName: 'Prueba', email, password: 'Kobrax123!' }),
+    body: JSON.stringify({ ...(await legalAcceptance()), businessName: 'Cobranzas Prueba', firstName: 'Sara', lastName: 'Prueba', email, password: 'Kobrax123!' }),
   });
   assert.equal(res.status, 201, await res.text());
   // El dueño que se registra es ACCOUNT_ADMIN: rol crítico, así que su primer login exige configurar MFA (enrolar TOTP

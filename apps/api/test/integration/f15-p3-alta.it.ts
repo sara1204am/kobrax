@@ -21,7 +21,7 @@ import {
   type CreditForm,
   type Workspace,
 } from '@kobrax/shared';
-import { API, call, db, freshDatabase, loginSkippingMfa, PASSWORD, startApi, stopApi } from './harness';
+import { API, call, db, freshDatabase, loginSkippingMfa, PASSWORD, startApi, stopApi, legalAcceptance } from './harness';
 
 const suffix = randomUUID().slice(0, 8);
 let prisma: PrismaClient;
@@ -53,7 +53,7 @@ before(async () => {
   const res = await fetch(`${API}/accounts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ businessName: `Cobranzas ${suffix}`, firstName: 'Dueño', lastName: 'Prueba', email, password: PASSWORD, planCode: 'PROFESSIONAL' }),
+    body: JSON.stringify({ ...(await legalAcceptance()), businessName: `Cobranzas ${suffix}`, firstName: 'Dueño', lastName: 'Prueba', email, password: PASSWORD, planCode: 'PROFESSIONAL' }),
   });
   assert.equal(res.status, 201, await res.text());
   admin = await loginSkippingMfa(email);

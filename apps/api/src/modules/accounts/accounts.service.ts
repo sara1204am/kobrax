@@ -17,11 +17,12 @@ import { ForbiddenException, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { hash } from 'bcryptjs';
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { DEFAULT_ARREAR_CATEGORIES, KOBRAX, PLANS, TRIAL_DAYS, catalogDefaultRows, isPasswordValid, newAccountOnboarding, officePath, parseOnboarding, resolveOnboarding } from '@kobrax/shared';
+import { LegalAcceptanceSource, DEFAULT_ARREAR_CATEGORIES, KOBRAX, PLANS, TRIAL_DAYS, catalogDefaultRows, isPasswordValid, newAccountOnboarding, officePath, parseOnboarding, resolveOnboarding } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { PlanLimitsService } from '../../common/plan/plan-limits.service';
+import { LegalService } from '../legal/legal.service';
 import { weakPassword } from '../auth/auth.errors';
 import { serializeAccount } from './accounts.serializer';
 import { UpdateAccountDto, WorkspaceDto } from './dto/account.dto';
@@ -43,6 +44,7 @@ export class AccountsService {
     private readonly tenant: TenantContextService,
     private readonly audit: AuditService,
     private readonly plan: PlanLimitsService,
+    private readonly legal: LegalService,
   ) {}
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
@@ -76,7 +78,7 @@ export class AccountsService {
    */
   async create(
     dto: CreateAccountDto,
-    meta: { ip?: string; userAgent?: string },
+    meta: { ip?: string; userAgent?: string; appVersion?: string; source?: LegalAcceptanceSource },
   ): Promise<{ accountId: string; email: string }> {
     if (!isPasswordValid(dto.password)) throw weakPassword();
 
@@ -150,6 +152,18 @@ export class AccountsService {
         });
         await tx.userAccount.create({
           data: { userId: user.id, accountId, roleId: role.id, isOwner: true, isDefault: true },
+        });
+        // Privacidad: sin Términos aceptados y Política reconocida no hay cuenta. Va DENTRO de esta transacción: si falta una
+        // aceptación o la versión ya no es la vigente, se revierte todo (cuenta, usuario y membresía) y no queda nada a medias.
+        await this.legal.recordOnboarding(tx, {
+          userId: user.id,
+          accountId,
+          source: meta.source ?? LegalAcceptanceSource.SIGNUP_WEB,
+          evidence: { ip: meta.ip, userAgent: meta.userAgent, appVersion: meta.appVersion },
+          termsVersionId: dto.termsVersionId,
+          privacyVersionId: dto.privacyVersionId,
+          marketingOptIn: dto.marketingOptIn,
+          analyticsOptIn: dto.analyticsOptIn,
         });
         // F4/08 · D1-b: la cuenta nace con los rangos de ejemplo (A 1–30, B 31–60, C 61+); se editan en Administración.
         await tx.arrearCategory.createMany({

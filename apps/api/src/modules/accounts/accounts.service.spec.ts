@@ -69,12 +69,13 @@ function makeService(opts: { found?: Record<string, unknown> | null; members?: n
     tenant as never,
     audit as never,
     fakePlanLimits({ limits: opts.limits, usage: { users: opts.members ?? 3, branches: opts.offices ?? 1 } }),
+    {} as never,
   );
   return { service, calls };
 }
 
 /** Fakes del registro público (S4): además del `tx` necesita `role` fuera del contexto. */
-function makeSignupService(opts: { role?: { id: string } | null; failWith?: unknown } = {}) {
+function makeSignupService(opts: { role?: { id: string } | null; failWith?: unknown; legalFails?: boolean } = {}) {
   const calls = {
     tenantContext: undefined as string | undefined,
     account: undefined as Record<string, unknown> | undefined,
@@ -85,6 +86,7 @@ function makeSignupService(opts: { role?: { id: string } | null; failWith?: unkn
     catalogs: undefined as Record<string, unknown>[] | undefined,
     types: undefined as Record<string, unknown>[] | undefined,
     branch: undefined as Record<string, unknown> | undefined,
+    legal: undefined as Record<string, unknown> | undefined,
   };
   const tx = {
     branchType: { createMany: async (a: { data: Record<string, unknown>[] }) => void (calls.types = a.data) },
@@ -122,7 +124,13 @@ function makeSignupService(opts: { role?: { id: string } | null; failWith?: unkn
       return fn(tx);
     },
   };
-  const service = new AccountsService(prisma as never, {} as never, {} as never, fakePlanLimits());
+  const legal = {
+    recordOnboarding: async (_tx: unknown, input: Record<string, unknown>) => {
+      if (opts.legalFails) throw new Error('LEGAL_ACCEPTANCE_REQUIRED');
+      calls.legal = input;
+    },
+  };
+  const service = new AccountsService(prisma as never, {} as never, {} as never, fakePlanLimits(), legal as never);
   return { service, calls };
 }
 
@@ -133,6 +141,36 @@ const SIGNUP = {
   email: 'Sara@Ejemplo.com',
   password: 'Kobrax123!',
 };
+
+describe('AccountsService.create · aceptación legal', () => {
+  it('🔴 registra los Términos y la Privacidad con el origen y la evidencia, y los consentimientos opcionales que se marcaron', async () => {
+    const { service, calls } = makeSignupService();
+    await service.create(
+      { ...SIGNUP, termsVersionId: 't1', privacyVersionId: 'p1', marketingOptIn: true, analyticsOptIn: false },
+      { ip: '1.2.3.4', userAgent: 'expo', appVersion: '0.1.0', source: 'SIGNUP_MOBILE' as never },
+    );
+    const l = calls.legal!;
+    assert.equal(l.userId, 'u-new');
+    assert.equal(l.accountId, calls.account!.id);
+    assert.equal(l.source, 'SIGNUP_MOBILE');
+    assert.equal(l.termsVersionId, 't1');
+    assert.equal(l.privacyVersionId, 'p1');
+    assert.equal(l.marketingOptIn, true);
+    assert.equal(l.analyticsOptIn, false);
+    assert.deepEqual(l.evidence, { ip: '1.2.3.4', userAgent: 'expo', appVersion: '0.1.0' });
+  });
+
+  it('🔴 si la aceptación legal falla, el alta falla (y por ser la misma transacción, no queda nada a medias)', async () => {
+    const { service } = makeSignupService({ legalFails: true });
+    await assert.rejects(service.create(SIGNUP, {}), /LEGAL_ACCEPTANCE_REQUIRED/);
+  });
+
+  it('sin origen informado el registro cuenta como web', async () => {
+    const { service, calls } = makeSignupService();
+    await service.create(SIGNUP, {});
+    assert.equal(calls.legal!.source, 'SIGNUP_WEB');
+  });
+});
 
 describe('AccountsService.create (registro público · S4)', () => {
   it('crea cuenta, usuario, perfil, membresía de dueño y audit', async () => {

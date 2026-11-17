@@ -20,6 +20,7 @@
     "db:deploy": "pnpm --filter @kobrax/database prisma migrate deploy",
     "db:reset": "pnpm --filter @kobrax/database prisma migrate reset",
     "db:seed": "pnpm --filter @kobrax/database db:seed",
+    "db:seed:legal": "pnpm --filter @kobrax/database db:seed:legal",
     "db:studio": "pnpm --filter @kobrax/database prisma studio"
   },
   "devDependencies": {

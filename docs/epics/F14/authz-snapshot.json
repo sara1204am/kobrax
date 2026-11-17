@@ -640,6 +640,34 @@
     "any": []
   },
   {
+    "route": "GET /legal/documents/:slug/current",
+    "handler": "LegalController.current",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "GET /legal/documents/:slug/versions/:version",
+    "handler": "LegalController.version",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "GET /legal/documents/:slug/versions",
+    "handler": "LegalController.versions",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "GET /legal/signup-documents",
+    "handler": "LegalController.signupDocuments",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
     "route": "GET /mora/:creditId/episodes",
     "handler": "MoraController.episodes",
     "kind": "permissions",

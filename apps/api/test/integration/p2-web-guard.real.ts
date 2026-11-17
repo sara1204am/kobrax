@@ -10,7 +10,7 @@ import { randomUUID } from 'node:crypto';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { join } from 'node:path';
 import assert from 'node:assert/strict';
-import { API, call, db, freshDatabase, loginSkippingMfa, PASSWORD, startApi, stopApi } from './harness';
+import { API, call, db, freshDatabase, loginSkippingMfa, PASSWORD, startApi, stopApi, legalAcceptance } from './harness';
 
 const WEB_PORT = 3199;
 const WEB = `http://127.0.0.1:${WEB_PORT}`;
@@ -74,7 +74,7 @@ async function main() {
   const res = await fetch(`${API}/accounts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ businessName: `Cobranzas ${suffix}`, firstName: 'Dueño', lastName: 'Prueba', email, password: PASSWORD, planCode: 'PROFESSIONAL' }),
+    body: JSON.stringify({ ...(await legalAcceptance()), businessName: `Cobranzas ${suffix}`, firstName: 'Dueño', lastName: 'Prueba', email, password: PASSWORD, planCode: 'PROFESSIONAL' }),
   });
   assert.equal(res.status, 201, await res.text());
   token = await loginSkippingMfa(email);

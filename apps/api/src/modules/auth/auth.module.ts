@@ -3,6 +3,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { AuditModule } from '../../common/audit/audit.module';
 import { MailModule } from '../../common/mail/mail.module';
+import { LegalModule } from '../legal/legal.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { TokenService } from './token.service';
@@ -16,7 +17,7 @@ import { AuthzGuard } from './guards/authz.guard';
 import { TenantGuard } from './guards/tenant.guard';
 
 @Module({
-  imports: [JwtModule.register({}), MailModule, AuditModule],
+  imports: [JwtModule.register({}), MailModule, AuditModule, LegalModule],
   controllers: [AuthController],
   providers: [
     AuthService,

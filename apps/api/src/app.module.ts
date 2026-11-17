@@ -23,6 +23,7 @@ import { PaymentsModule } from './modules/payments/payments.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { AgendaModule } from './modules/agenda/agenda.module';
 import { CatalogsModule } from './modules/catalogs/catalogs.module';
+import { LegalModule } from './modules/legal/legal.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { DashboardsModule } from './modules/dashboards/dashboards.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
@@ -70,6 +71,7 @@ import { AppVersionGuard } from './common/guards/app-version.guard';
     PlanLifecycleModule,
     AgendaModule,
     CatalogsModule,
+    LegalModule,
     AnalyticsModule,
     DashboardsModule,
     UploadsModule,

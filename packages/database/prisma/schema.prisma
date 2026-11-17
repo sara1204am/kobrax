@@ -250,6 +250,8 @@ model User {
   branchAssignments   UserBranchAssignment[]
   sessions            UserSession[]
   auditLogs           AuditLog[]
+  legalAcceptances    UserLegalAcceptance[]
+  consentRecords      ConsentRecord[]
   mfaBackupCodes      MfaBackupCode[]
   passwordResetTokens PasswordResetToken[]
 
@@ -301,23 +303,23 @@ model Role {
 
 /// Capacidad específica del sistema (RBAC granular). code = `{recurso}:{acción}`.
 model Permission {
-  id          String           @id @default(uuid())
+  id          String              @id @default(uuid())
   name        String
-  code        String           @unique
+  code        String              @unique
   description String?
   module      String
   action      PermissionAction
   resource    String?
-  scope       PermissionScope  @default(GLOBAL)
-  active      Boolean          @default(true)
+  scope       PermissionScope     @default(GLOBAL)
+  active      Boolean             @default(true)
   /// F14·F5: LOW | MEDIUM | HIGH | CRITICAL. Lo usa el editor de roles (F7) para pedir confirmación.
-  risk        PermissionRisk           @default(LOW)
+  risk        PermissionRisk      @default(LOW)
   /// F14·F5: NULL | PLATFORM (nunca concedible a un rol de cuenta) | ADMIN_CORE (el ACCOUNT_ADMIN no puede perderlo).
   reserved    PermissionReserved?
   /// F14·F5: permisos de los que éste depende (arreglo JSON de códigos).
-  requires    Json             @default("[]")
-  createdAt   DateTime         @default(now()) @map("created_at")
-  updatedAt   DateTime         @updatedAt @map("updated_at")
+  requires    Json                @default("[]")
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
 
   roles        RolePermission[]
   templates    RoleTemplatePermission[]
@@ -432,13 +434,13 @@ model AccountRole {
 }
 
 model AccountRolePermission {
-  accountRoleId String   @map("account_role_id")
-  permissionId  String   @map("permission_id")
-  accountId     String   @map("account_id")
+  accountRoleId String               @map("account_role_id")
+  permissionId  String               @map("permission_id")
+  accountId     String               @map("account_id")
   /// TEMPLATE | CUSTOM
-  source        RolePermissionSource   @default(TEMPLATE)
-  grantedBy     String?  @map("granted_by")
-  grantedAt     DateTime @default(now()) @map("granted_at")
+  source        RolePermissionSource @default(TEMPLATE)
+  grantedBy     String?              @map("granted_by")
+  grantedAt     DateTime             @default(now()) @map("granted_at")
 
   accountRole AccountRole @relation(fields: [accountRoleId], references: [id], onDelete: Cascade)
   permission  Permission  @relation(fields: [permissionId], references: [id], onDelete: Cascade)
@@ -451,20 +453,20 @@ model AccountRolePermission {
 
 /// F14·F5 (H-11) — la persona de plataforma: UNA sola fila (índice único), sin membresía en empresas, MFA obligatorio. Se aprovisiona por seed / CLI.
 model PlatformUser {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  passwordHash String   @map("password_hash")
+  id             String    @id @default(uuid())
+  email          String    @unique
+  passwordHash   String    @map("password_hash")
   /// Secreto TOTP cifrado en reposo. Nulo hasta enrolar.
-  mfaSecret    String?  @map("mfa_secret")
-  mfaEnabled   Boolean  @default(false) @map("mfa_enabled")
-  isActive     Boolean  @default(true) @map("is_active")
+  mfaSecret      String?   @map("mfa_secret")
+  mfaEnabled     Boolean   @default(false) @map("mfa_enabled")
+  isActive       Boolean   @default(true) @map("is_active")
   /// Intentos fallidos seguidos; al llegar al tope se bloquea hasta `lockedUntil`.
-  failedAttempts Int     @default(0) @map("failed_attempts")
-  lockedUntil  DateTime? @map("locked_until")
+  failedAttempts Int       @default(0) @map("failed_attempts")
+  lockedUntil    DateTime? @map("locked_until")
   /// Último tramo TOTP aceptado: un código ya usado no vuelve a valer.
-  mfaLastStep  BigInt?  @map("mfa_last_step")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  mfaLastStep    BigInt?   @map("mfa_last_step")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
   sessions SupportSession[]
 
@@ -474,21 +476,21 @@ model PlatformUser {
 /// F14·F5 — el acceso excepcional de plataforma a UNA cuenta: vence (≤ 240 min), lleva motivo y ticket, un subconjunto de permisos y —para escritura
 /// sensible— el consentimiento del ACCOUNT_ADMIN de esa cuenta.
 model SupportSession {
-  id             String    @id @default(uuid())
-  accountId      String    @map("account_id")
-  platformUserId String    @map("platform_user_id")
+  id             String        @id @default(uuid())
+  accountId      String        @map("account_id")
+  platformUserId String        @map("platform_user_id")
   reason         String
   ticket         String?
   permissions    String[]
-  sensitive      Boolean   @default(false)
+  sensitive      Boolean       @default(false)
   /// NOT_REQUIRED | PENDING | GRANTED | DENIED | REVOKED
-  consentStatus  ConsentStatus    @default(NOT_REQUIRED) @map("consent_status")
-  consentBy      String?   @map("consent_by")
-  consentAt      DateTime? @map("consent_at")
-  expiresAt      DateTime  @map("expires_at")
-  revokedAt      DateTime? @map("revoked_at")
-  revokedBy      String?   @map("revoked_by")
-  createdAt      DateTime  @default(now()) @map("created_at")
+  consentStatus  ConsentStatus @default(NOT_REQUIRED) @map("consent_status")
+  consentBy      String?       @map("consent_by")
+  consentAt      DateTime?     @map("consent_at")
+  expiresAt      DateTime      @map("expires_at")
+  revokedAt      DateTime?     @map("revoked_at")
+  revokedBy      String?       @map("revoked_by")
+  createdAt      DateTime      @default(now()) @map("created_at")
 
   platformUser PlatformUser @relation(fields: [platformUserId], references: [id])
 
@@ -654,23 +656,23 @@ model PasswordResetToken {
 
 /// Auditoría append-only: who / when / what / before / after / ip.
 model AuditLog {
-  id        String   @id @default(uuid())
-  accountId String   @map("account_id")
+  id               String         @id @default(uuid())
+  accountId        String         @map("account_id")
   /// Nulo cuando actuó plataforma (`actorType = PLATFORM`): la persona de plataforma no es un usuario de empresa.
-  userId    String?  @map("user_id")
+  userId           String?        @map("user_id")
   /// F14·F5: USER | PLATFORM.
-  actorType AuditActorType   @default(USER) @map("actor_type")
+  actorType        AuditActorType @default(USER) @map("actor_type")
   /// Quién actuó cuando no es un usuario de empresa (id de `platform_users`).
-  actorId   String?  @map("actor_id")
-  supportSessionId String? @map("support_session_id")
-  action    String
-  entity    String
-  entityId  String   @map("entity_id")
-  before    Json?
-  after     Json?
-  ip        String?
-  userAgent String?  @map("user_agent")
-  createdAt DateTime @default(now()) @map("created_at")
+  actorId          String?        @map("actor_id")
+  supportSessionId String?        @map("support_session_id")
+  action           String
+  entity           String
+  entityId         String         @map("entity_id")
+  before           Json?
+  after            Json?
+  ip               String?
+  userAgent        String?        @map("user_agent")
+  createdAt        DateTime       @default(now()) @map("created_at")
 
   account Account @relation(fields: [accountId], references: [id])
   user    User?   @relation(fields: [userId], references: [id])
@@ -2269,4 +2271,118 @@ model UserGuideState {
 
   @@unique([accountId, userId])
   @@map("user_guide_states")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Legal — documentos versionados, aceptaciones y consentimientos (evidencia inmutable)
+// ─────────────────────────────────────────────────────────────────────────────
+// Tablas **globales** (por persona, como `users`): sin RLS. Son de SOLO INSERT: un trigger y un REVOKE (rls/007) impiden
+// UPDATE, DELETE y TRUNCATE incluso al rol de la aplicación. Una versión publicada nunca se edita: se publica otra.
+
+enum LegalDocumentType {
+  TERMS
+  PRIVACY
+  COOKIES
+  DPA
+  ACCEPTABLE_USE
+  AI_POLICY
+}
+
+enum LegalAcceptanceAction {
+  ACCEPTED
+  ACKNOWLEDGED
+}
+
+enum LegalAcceptanceSource {
+  SIGNUP_WEB
+  SIGNUP_MOBILE
+  INVITATION_WEB
+  INVITATION_MOBILE
+  RE_ACCEPT
+  PROFILE
+  ORGANIZATION
+}
+
+enum LegalConsentPurpose {
+  MARKETING
+  ANALYTICS
+  COOKIES_NON_ESSENTIAL
+}
+
+enum LegalConsentStatus {
+  GRANTED
+  WITHDRAWN
+}
+
+/// Una versión exacta de un documento legal en un idioma. `contentSha256` = SHA-256 (hex) del `content` en UTF-8: demuestra
+/// QUÉ texto vio la persona. `isMaterial` decide si exige nueva aceptación (un cambio editorial no).
+model LegalDocumentVersion {
+  id            String            @id @default(uuid())
+  type          LegalDocumentType
+  locale        String            @default("es")
+  /// Semver del documento (p. ej. 1.0.0). Único por tipo e idioma.
+  version       String
+  title         String
+  content       String
+  contentSha256 String            @map("content_sha256")
+  isMaterial    Boolean           @default(false) @map("is_material")
+  changeSummary String?           @map("change_summary")
+  publishedAt   DateTime          @default(now()) @map("published_at")
+  /// Desde cuándo rige. Antes de esta fecha no es la versión vigente.
+  effectiveAt   DateTime          @default(now()) @map("effective_at")
+  /// platform_users.id (ref suave): quién la publicó.
+  publishedBy   String?           @map("published_by")
+
+  acceptances UserLegalAcceptance[]
+  consents    ConsentRecord[]
+
+  @@unique([type, locale, version])
+  @@index([type, locale, effectiveAt])
+  @@map("legal_document_versions")
+}
+
+/// Constancia de que una persona aceptó o conoció una versión. `acceptedAt` lo pone la base (UTC), nunca el cliente.
+model UserLegalAcceptance {
+  id                String                @id @default(uuid())
+  userId            String                @map("user_id")
+  /// Organización en cuyo contexto ocurrió (null si fue previa a la sesión o a nivel de persona).
+  accountId         String?               @map("account_id")
+  documentVersionId String                @map("document_version_id")
+  /// Copia del hash de la versión aceptada: la prueba no depende de seguir teniendo la fila de la versión a mano.
+  contentSha256     String                @map("content_sha256")
+  action            LegalAcceptanceAction
+  source            LegalAcceptanceSource
+  acceptedAt        DateTime              @default(now()) @map("accepted_at")
+  ip                String?
+  userAgent         String?               @map("user_agent")
+  appVersion        String?               @map("app_version")
+
+  user            User                 @relation(fields: [userId], references: [id])
+  documentVersion LegalDocumentVersion @relation(fields: [documentVersionId], references: [id])
+
+  @@unique([userId, documentVersionId, action])
+  @@index([userId, acceptedAt])
+  @@map("user_legal_acceptances")
+}
+
+/// Historial de un consentimiento **opcional**. El estado vigente es la última fila por (persona, finalidad): retirar es
+/// INSERTAR una fila `WITHDRAWN`, nunca actualizar la anterior.
+model ConsentRecord {
+  id                String                @id @default(uuid())
+  userId            String                @map("user_id")
+  purpose           LegalConsentPurpose
+  status            LegalConsentStatus
+  /// Versión del documento que describía la finalidad cuando se decidió (null si no aplica).
+  documentVersionId String?               @map("document_version_id")
+  source            LegalAcceptanceSource
+  recordedAt        DateTime              @default(now()) @map("recorded_at")
+  ip                String?
+  userAgent         String?               @map("user_agent")
+  appVersion        String?               @map("app_version")
+
+  user            User                  @relation(fields: [userId], references: [id])
+  documentVersion LegalDocumentVersion? @relation(fields: [documentVersionId], references: [id])
+
+  @@index([userId, purpose, recordedAt])
+  @@map("consent_records")
 }

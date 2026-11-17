@@ -12,6 +12,8 @@ function makeDeps(opts: {
   resetRecord?: { id: string; userId: string; user?: Record<string, unknown> } | null;
   /** Filas que devuelve `auth_memberships()` (la cuenta a la que pertenece el invitado). */
   memberships?: { account_id: string; account_name: string }[];
+  /** `LegalService.recordOnboarding` lanza (falta una aceptación obligatoria). */
+  legalFails?: boolean;
 } = {}) {
   const calls = {
     resetCreate: [] as unknown[],
@@ -20,6 +22,7 @@ function makeDeps(opts: {
     revokeAll: [] as { userId: string; except?: string }[],
     mail: [] as { to: string; subject: string; text: string }[],
     audit: [] as Record<string, unknown>[],
+    legal: [] as Record<string, unknown>[],
   };
   const prisma = {
     user: {
@@ -63,6 +66,12 @@ function makeDeps(opts: {
     sessions as never,
     config as never,
     mail as never,
+    {
+      recordOnboarding: async (_tx: unknown, input: Record<string, unknown>) => {
+        if (opts.legalFails) throw new Error('LEGAL_ACCEPTANCE_REQUIRED');
+        calls.legal.push(input);
+      },
+    } as never,
   );
   return { service, calls };
 }
@@ -169,6 +178,37 @@ describe('PasswordService — invitación (S2)', () => {
     assert.equal(data.requiresPasswordChange, false);
     assert.equal(typeof data.passwordHash, 'string');
     assert.equal(calls.resetUpdateMany.length, 1);
+  });
+
+  it('🔴 registra la aceptación legal de la persona invitada, con el origen y la evidencia, en la misma transacción', async () => {
+    const { service, calls } = makeDeps({
+      resetRecord: INVITED,
+      memberships: [{ account_id: 'acc-A', account_name: 'Cobranzas Rosa' }],
+    });
+    await service.acceptInvitation(
+      'K7F29-QX3TM',
+      'Kobrax123!',
+      { ip: '10.0.0.1', userAgent: 'Mozilla', appVersion: '0.1.0', source: 'INVITATION_MOBILE' as never },
+      { termsVersionId: 't1', privacyVersionId: 'p1', marketingOptIn: true },
+    );
+    assert.equal(calls.legal.length, 1);
+    const l = calls.legal[0]!;
+    assert.equal(l.userId, INVITED.userId);
+    assert.equal(l.accountId, 'acc-A');
+    assert.equal(l.source, 'INVITATION_MOBILE');
+    assert.equal(l.termsVersionId, 't1');
+    assert.equal(l.privacyVersionId, 'p1');
+    assert.equal(l.marketingOptIn, true);
+    assert.deepEqual(l.evidence, { ip: '10.0.0.1', userAgent: 'Mozilla', appVersion: '0.1.0' });
+  });
+
+  it('🔴 si falta la aceptación legal la invitación falla y no se consume (el error sale tal cual)', async () => {
+    const { service } = makeDeps({
+      resetRecord: INVITED,
+      memberships: [{ account_id: 'acc-A', account_name: 'Cobranzas Rosa' }],
+      legalFails: true,
+    });
+    await assert.rejects(service.acceptInvitation('K7F29-QX3TM', 'Kobrax123!', {}), /LEGAL_ACCEPTANCE_REQUIRED/);
   });
 
   it('deja fila de audit con la IP (endpoint público: AuditService no-opearía)', async () => {
