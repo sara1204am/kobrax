@@ -15,6 +15,30 @@ import { RATE_LIMIT_KEY, type RateLimitConfig } from '../decorators/rate-limit.d
  */
 const GLOBAL_LIMIT = 600;
 const GLOBAL_WINDOW = 60;
+/**
+ * Techo por IP, aparte del por token. El token del cubo global no se valida aquí (este guard corre
+ * ANTES de JwtAuthGuard), así que sin esto bastaba inventar un `Authorization` distinto en cada
+ * petición para tener un cubo nuevo y esquivar el límite. Es 10× el global porque el BFF comparte IP.
+ */
+const IP_BACKSTOP_LIMIT = GLOBAL_LIMIT * 10;
+
+/** Sondas de salud exentas: rutas exactas y solo GET (antes `includes('/health')` eximía cualquier ruta). */
+const HEALTH_PATHS = new Set(['/api/health', '/api/health/live']);
+
+/** Un Bearer plausible: tres segmentos base64url. Lo demás cuenta como no autenticado (por IP). */
+const BEARER_JWT = /^Bearer [\w-]+\.[\w-]+\.[\w-]+$/;
+
+/**
+ * Contador atómico: INCR y, si es el primero, EXPIRE, en un solo paso. Con INCR+EXPIRE separados un
+ * corte entre ambos dejaba la clave sin TTL y bloqueaba esa IP para siempre.
+ */
+const INCR_WITH_TTL = `
+local c = redis.call('INCR', KEYS[1])
+if c == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end
+local t = redis.call('TTL', KEYS[1])
+if t < 0 then redis.call('EXPIRE', KEYS[1], ARGV[1]); t = tonumber(ARGV[1]) end
+return {c, t}
+`;
 
 /**
  * Rate limiting de ventana fija sobre Redis. Se registra como guard global:
@@ -31,14 +55,15 @@ export class RateLimitGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<Request>();
     const path = req.path ?? '';
-    // Las sondas de salud no se limitan (liveness/readiness).
-    if (path.includes('/health')) return true;
+    // Las sondas de salud no se limitan (liveness/readiness): solo GET y ruta exacta.
+    if (req.method === 'GET' && HEALTH_PATHS.has(path.replace(/\/+$/, ''))) return true;
 
     const ip = req.ip ?? 'unknown';
     // La clave del límite por endpoint sale del HANDLER, no de `req.path`. Con la URL
     // concreta, una ruta con parámetro (`/auth/invitation/:code`) le daba a cada valor su
     // propio cubo: 10 intentos POR CÓDIGO en vez de 10 por IP, o sea ningún límite útil.
     const route = `${context.getClass().name}.${context.getHandler().name}`;
+    await this.enforce(`rl:ip:${ip}`, IP_BACKSTOP_LIMIT, GLOBAL_WINDOW);
     await this.enforce(`rl:global:${this.caller(req, ip)}`, GLOBAL_LIMIT, GLOBAL_WINDOW);
 
     const cfg = this.reflector.get<RateLimitConfig>(RATE_LIMIT_KEY, context.getHandler());
@@ -61,7 +86,7 @@ export class RateLimitGuard implements CanActivate {
    */
   private caller(req: Request, ip: string): string {
     const auth = req.headers.authorization;
-    if (!auth) return `ip:${ip}`;
+    if (!auth || !BEARER_JWT.test(auth)) return `ip:${ip}`;
     return `t:${createHash('sha256').update(auth).digest('hex').slice(0, 32)}`;
   }
 
@@ -72,12 +97,10 @@ export class RateLimitGuard implements CanActivate {
     return ip;
   }
 
-  /** INCR + EXPIRE en la primera petición de la ventana; 429 al exceder. */
+  /** Contador atómico en Redis (Lua); 429 al exceder. */
   private async enforce(key: string, limit: number, windowSec: number): Promise<void> {
-    const count = await this.redis.incr(key);
-    if (count === 1) await this.redis.expire(key, windowSec);
+    const [count, ttl] = (await this.redis.eval(INCR_WITH_TTL, 1, key, windowSec)) as [number, number];
     if (count > limit) {
-      const ttl = await this.redis.ttl(key);
       throw new HttpException(
         {
           code: 'RATE_LIMITED',
