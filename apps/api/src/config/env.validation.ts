@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /** Esquema de entorno. Si algo falta o es inválido → la app NO arranca (fail-fast). */
-export const envSchema = z.object({
+const baseSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   API_PORT: z.coerce.number().int().positive().default(4000),
   // Runtime de la API: rol kobrax_app (NOBYPASSRLS) — nunca el superuser.
@@ -49,7 +49,30 @@ export const envSchema = z.object({
   MIN_APP_VERSION: z.string().optional(),
 });
 
-export type Env = z.infer<typeof envSchema>;
+/** Textos que delatan un secreto de ejemplo copiado del `.env.example`. */
+const PLACEHOLDER = /change[-_ ]?me|changeme|example|placeholder|replace[-_ ]?me|your[-_ ]?secret|secret123|password|dev[-_ ]?secret/i;
+
+/**
+ * S-4: en producción los secretos no pueden ser de ejemplo ni repetirse entre sí, y las claves de cifrado
+ * son obligatorias (sin ellas el cifrado de PII queda a medias). En desarrollo y test no cambia nada.
+ */
+export const envSchema = baseSchema.superRefine((env, ctx) => {
+  if (env.NODE_ENV !== 'production') return;
+  const fail = (path: string, message: string) => ctx.addIssue({ code: z.ZodIssueCode.custom, path: [path], message });
+  const secrets = { JWT_SECRET: env.JWT_SECRET, JWT_REFRESH_SECRET: env.JWT_REFRESH_SECRET, FILE_LINK_SECRET: env.FILE_LINK_SECRET };
+  for (const [name, value] of Object.entries(secrets)) {
+    if (value && PLACEHOLDER.test(value)) fail(name, 'parece un secreto de ejemplo; genera uno aleatorio para producción');
+  }
+  if (env.JWT_SECRET === env.JWT_REFRESH_SECRET) fail('JWT_REFRESH_SECRET', 'debe ser distinto de JWT_SECRET');
+  if (env.FILE_LINK_SECRET && (env.FILE_LINK_SECRET === env.JWT_SECRET || env.FILE_LINK_SECRET === env.JWT_REFRESH_SECRET)) {
+    fail('FILE_LINK_SECRET', 'debe ser distinto de los secretos del JWT');
+  }
+  if (!env.APP_ENCRYPTION_KEY) fail('APP_ENCRYPTION_KEY', 'es obligatoria en producción');
+  if (!env.APP_BLIND_INDEX_KEY) fail('APP_BLIND_INDEX_KEY', 'es obligatoria en producción');
+  if (env.APP_ENCRYPTION_KEY && env.APP_ENCRYPTION_KEY === env.APP_BLIND_INDEX_KEY) fail('APP_BLIND_INDEX_KEY', 'debe ser distinta de APP_ENCRYPTION_KEY');
+});
+
+export type Env = z.infer<typeof baseSchema>;
 
 /** Validador usado por ConfigModule.forRoot({ validate }). Lanza → fail-fast. */
 export function validateEnv(config: Record<string, unknown>): Env {
