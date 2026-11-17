@@ -20,26 +20,49 @@ import { useTranslations } from 'next-intl';
  * - `ghost` — borde, para lo terciario.
  * - `danger` — rojo sólido, para confirmar lo destructivo (desactivar, eliminar).
  */
+export type ButtonVariant = 'cta' | 'primary' | 'secondary' | 'ghost' | 'danger' | 'link';
+export type ButtonSize = 'sm' | 'md' | 'lg';
+
+/** Alturas y tipografía por tamaño. `md` es el que siempre tuvo el botón (h-12, 15px); `cta` conserva su 52px. */
+const BUTTON_SIZES: Record<ButtonSize, string> = {
+  sm: 'h-9 rounded-lg px-3 text-[13px]',
+  md: 'h-12 rounded-xl text-[15px]',
+  lg: 'h-[52px] rounded-xl text-[15px]',
+};
+
+const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
+  cta: 'bg-k-cta text-white shadow-k-card hover:brightness-110 active:scale-[.99]',
+  primary: 'bg-k-navy text-white hover:bg-k-slate active:scale-[.98]',
+  secondary: 'bg-k-bg text-k-navy border border-k-border hover:bg-white',
+  ghost: 'bg-white text-k-text-2 border border-k-border hover:bg-k-bg',
+  danger: 'bg-k-danger text-white hover:brightness-110 active:scale-[.98]',
+  link: 'bg-transparent text-k-navy underline-offset-2 hover:underline !h-auto !px-0',
+};
+
+/**
+ * Botón del sistema. Sin `size` ni `fullWidth` se ve exactamente como siempre (ancho completo, 48px): los usos existentes no cambian.
+ *
+ * - `size` — `sm` (36px, para barras y filas), `md` (48px), `lg` (52px). `cta` es `lg` por defecto.
+ * - `fullWidth` — `true` por defecto; `false` ajusta el ancho al contenido (antes se lograba pisando con `w-auto`).
+ * - `secondary` — acción secundaria con relleno suave; `link` — acción de texto.
+ */
 export function Button({
   children,
   loading,
   variant = 'primary',
+  size,
+  fullWidth = true,
   className = '',
   disabled,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { loading?: boolean; variant?: 'cta' | 'primary' | 'ghost' | 'danger' }) {
-  const styles = {
-    cta: 'h-[52px] bg-k-cta text-white shadow-k-card hover:brightness-110 active:scale-[.99]',
-    primary: 'h-12 bg-k-navy text-white hover:bg-k-slate active:scale-[.98]',
-    ghost: 'h-12 bg-white text-k-text-2 border border-k-border hover:bg-k-bg',
-    danger: 'h-12 bg-k-danger text-white hover:brightness-110 active:scale-[.98]',
-  }[variant];
+}: ButtonHTMLAttributes<HTMLButtonElement> & { loading?: boolean; variant?: ButtonVariant; size?: ButtonSize; fullWidth?: boolean }) {
+  const effectiveSize: ButtonSize = size ?? (variant === 'cta' ? 'lg' : 'md');
 
   return (
     <button
       {...props}
       disabled={disabled || loading}
-      className={`relative flex w-full items-center justify-center rounded-xl text-[15px] font-semibold transition-all duration-150 disabled:opacity-50 ${styles} ${className}`}
+      className={`relative flex ${fullWidth ? 'w-full' : 'w-auto'} items-center justify-center font-semibold transition-all duration-150 disabled:opacity-50 ${BUTTON_SIZES[effectiveSize]} ${BUTTON_VARIANTS[variant]} ${className}`}
     >
       {loading ? (
         <Spinner />
@@ -49,6 +72,26 @@ export function Button({
           {variant === 'cta' && <IconArrow className="absolute right-5" />}
         </>
       )}
+    </button>
+  );
+}
+
+/** Botón cuadrado solo con icono. `label` es obligatorio: es el nombre accesible. */
+export function IconButton({
+  label,
+  children,
+  className = '',
+  ...props
+}: Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'aria-label'> & { label: string }) {
+  return (
+    <button
+      type="button"
+      {...props}
+      aria-label={label}
+      title={props.title ?? label}
+      className={`inline-flex h-9 w-9 items-center justify-center rounded-lg text-k-text-2 transition-colors hover:bg-k-bg disabled:opacity-50 ${className}`}
+    >
+      {children}
     </button>
   );
 }

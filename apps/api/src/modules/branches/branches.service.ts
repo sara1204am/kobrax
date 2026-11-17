@@ -11,7 +11,7 @@ import { PlanLimitsService } from '../../common/plan/plan-limits.service';
 import { isUniqueViolation } from '../../common/unique-violation';
 import { serializeBranch, serializeBranchType, type BranchStats, type BranchWithType } from './branches.serializer';
 import { deactivationBlock } from './branch-rules';
-import type { BranchDetailView, BranchPortfolioView, BranchTypeView, BranchView } from './branches.dto';
+import type { BranchDetailView, BranchPortfolioView, BranchTypeView, BranchView } from './dto/branch-view.dto';
 import {
   AssignMembersDto,
   CreateBranchDto,
