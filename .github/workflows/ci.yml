@@ -39,6 +39,13 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Avisos de seguridad de dependencias (informativo)
+        # B-5: el monorepo incluye el móvil, que arrastra avisos propios fuera del alcance de esta auditoría; por eso no bloquea todavía.
+        # Cuando el móvil quede limpio, quitar `continue-on-error` para que un aviso high/critical nuevo rompa el CI.
+        continue-on-error: true
+        run: pnpm audit --prod --audit-level=high
+      - name: Elementos de UI crudos (ratchet de diseño)
+        run: pnpm --filter @kobrax/web lint
       - name: Cliente de Prisma
         run: pnpm db:generate
       - name: Compilar shared y database (la API los importa desde dist/, que no está en el repositorio)
