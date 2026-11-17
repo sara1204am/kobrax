@@ -634,3 +634,29 @@ describe('FieldService.list · el día es el de la empresa (F4/12)', () => {
     assert.equal(range.lt.toISOString(), '2026-08-13T04:00:00.000Z');
   });
 });
+
+/** S-1: las visitas se acotan por oficina para quien no ve toda la cuenta (antes sólo se acotaba al cobrador). */
+describe('FieldService — alcance por oficina (S-1)', () => {
+  const SUP = ['route:read', 'route:assign', 'data:scope:branch'];
+
+  it('supervisor: el listado agrega el filtro de créditos visibles + lo propio', async () => {
+    const { service, calls } = makeService({ permissions: SUP });
+    await service.list({} as never);
+    assert.deepEqual(calls.listWhere!.AND, [
+      { OR: [{ creditId: { in: ['cr1'] } }, { collectorId: 'collector-1' }, { registeredBy: 'collector-1' }] },
+    ]);
+  });
+
+  it('data:scope:all: sin filtro por oficina ni consulta de alcance', async () => {
+    const { service, calls } = makeService({ permissions: ['route:read', 'route:assign', 'data:scope:all'] });
+    await service.list({} as never);
+    assert.equal('AND' in calls.listWhere!, false);
+    assert.equal(calls.scopeQueries, 0);
+  });
+
+  it('supervisor: findOne y addEvidence consultan con el filtro de alcance (visita de otra oficina → 404)', async () => {
+    const { service } = makeService({ permissions: [...SUP, 'route:write'] });
+    await rejectsWithCode(service.findOne('v-ajena'), 'RESOURCE_NOT_FOUND');
+    await rejectsWithCode(service.addEvidence('v-ajena', { type: 'PHOTO', fileUrl: 'u', fileHash: 'a'.repeat(64) } as never), 'RESOURCE_NOT_FOUND');
+  });
+});

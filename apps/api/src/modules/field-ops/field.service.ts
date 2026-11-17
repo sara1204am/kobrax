@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { DataOrigin, PayerParty, Prisma, PrismaClient } from '@prisma/client';
+import type { DataOrigin, PayerParty, PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { AgendaItemStatus, CatalogType, LocationType, RouteStopStatus } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
@@ -20,7 +21,7 @@ import {
 import { isValidGps, verifyEvidenceHash } from './field-integrity';
 import { serializeVisit, serializeVisitDetail } from './field.serializer';
 import { AddEvidenceDto, CreateVisitDto, ListVisitsQueryDto } from './dto/field.dto';
-import { moraScopeOf, visibleCredits } from '../mora/mora-query';
+import { moraScopeOf, seesWholeAccount, visibleCreditIdsSql, visibleCredits } from '../mora/mora-query';
 import { recordCreditActivity } from '../mora/credit-activity';
 import { routeRoles } from '../routes/route-access';
 import { isUniqueViolation } from '../../common/unique-violation';
@@ -81,6 +82,19 @@ export class FieldService {
   }
 
   /**
+   * S-1: alcance por oficina de las visitas. Quien no ve toda la cuenta (supervisor, gerente regional, cobrador) ve las
+   * visitas de créditos que SÍ ve (misma regla que Mora/Cartera/Pagos) y las que él mismo hizo o cargó. Fail-closed: una
+   * visita sin crédito de otra persona queda fuera. `null` = toda la cuenta, sin filtro. Antes sólo se acotaba al cobrador.
+   */
+  private async officeFilter(tx: PrismaClient): Promise<Prisma.FieldVisitWhereInput | null> {
+    const scope = moraScopeOf(this.tenant);
+    if (seesWholeAccount(scope)) return null;
+    const rows = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`SELECT v.id FROM (${visibleCreditIdsSql(scope)}) v`);
+    const me = this.tenant.userId;
+    return { OR: [{ creditId: { in: rows.map((r) => r.id) } }, ...(me ? [{ collectorId: me }, { registeredBy: me }] : [])] };
+  }
+
+  /**
    * Las visitas registradas (F9 W6-T0). **Sin evidencias**: es un listado, y traer las fotos de 40
    * visitas para dibujar una tabla es tráfico que nadie mira. El detalle las trae.
    */
@@ -110,8 +124,10 @@ export class FieldService {
     if (this.scopedToOwnVisits()) where.collectorId = this.tenant.userId;
     else if (query.collectorId) where.collectorId = query.collectorId;
 
-    const [rows, total] = await this.tx((tx) =>
-      Promise.all([
+    const [rows, total] = await this.tx(async (tx) => {
+      const office = await this.officeFilter(tx);
+      if (office) where.AND = [office];
+      return Promise.all([
         tx.fieldVisit.findMany({
           where,
           // 🔴 El desempate por `id` va SIEMPRE: sin él, `LIMIT/OFFSET` repite y saltea filas entre
@@ -121,8 +137,8 @@ export class FieldService {
           take: limit,
         }),
         tx.fieldVisit.count({ where }),
-      ]),
-    );
+      ]);
+    });
 
     /*
      * El punto donde se registró la visita es PII: dice dónde vive el deudor. Se audita el
@@ -151,12 +167,13 @@ export class FieldService {
    * Fuera de scope → 404 y no 403: no se filtra que exista, igual que en rutas y en casos.
    */
   async findOne(id: string): Promise<ReturnType<typeof serializeVisitDetail>> {
-    const visit = await this.tx((tx) =>
-      tx.fieldVisit.findFirst({
-        where: { id },
+    const visit = await this.tx(async (tx) => {
+      const office = await this.officeFilter(tx);
+      return tx.fieldVisit.findFirst({
+        where: { id, ...(office ? { AND: [office] } : {}) },
         include: { evidences: { orderBy: [{ capturedAt: 'asc' }, { id: 'asc' }] } },
-      }),
-    );
+      });
+    });
     if (!visit) throw resourceNotFound();
     if (this.scopedToOwnVisits() && visit.collectorId !== this.tenant.userId) throw resourceNotFound();
 
@@ -413,7 +430,8 @@ export class FieldService {
     const hash = dto.fileHash.trim().toLowerCase();
 
     const { evidence, replay } = await this.tx(async (tx) => {
-      const visit = await tx.fieldVisit.findFirst({ where: { id: visitId }, select: { id: true, latitude: true, longitude: true, collectorId: true, registeredBy: true } });
+      const office = await this.officeFilter(tx);
+      const visit = await tx.fieldVisit.findFirst({ where: { id: visitId, ...(office ? { AND: [office] } : {}) }, select: { id: true, latitude: true, longitude: true, collectorId: true, registeredBy: true } });
       if (!visit) throw resourceNotFound();
       if (!isManager && visit.collectorId !== actorId && visit.registeredBy !== actorId) throw resourceNotFound();
       const prev = await tx.fieldEvidence.findFirst({ where: { visitId, fileHash: hash } });
