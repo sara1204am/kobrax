@@ -31,7 +31,20 @@
   "pnpm": {
     "overrides": {
       "react": "18.2.0",
-      "react-dom": "18.2.0"
+      "react-dom": "18.2.0",
+      "proxy-addr@<2.0.8": "^2.0.8",
+      "multer@<2.5.0": "^2.5.0",
+      "socket.io-parser@<4.2.7": "^4.2.7",
+      "engine.io@<6.6.10": "^6.6.10",
+      "body-parser@<1.20.9": "^1.20.9",
+      "qs@<6.16.1": "^6.16.1",
+      "pdfjs-dist@<6.2.108": "^6.2.108",
+      "lodash@<4.18.1": "^4.18.1",
+      "brace-expansion@1.x": "^1.1.22",
+      "brace-expansion@2.x": "^2.1.8",
+      "file-type@<20.5.0": "^20.5.0",
+      "maplibre-gl@<6.4.1": "^6.4.1",
+      "postcss@<8.5.23": "^8.5.23"
     }
   }
 }
