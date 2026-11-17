@@ -4,7 +4,7 @@ import { useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { memberName, type InvitedMember, type Member } from '@kobrax/shared';
-import { Button } from '@/components/ui';
+import { Button, Select } from '@/components/ui';
 import { Modal } from '@/components/modal';
 import { useToast } from '@/components/toast';
 import { postJson, sendJson } from '@/lib/client';
@@ -210,11 +210,11 @@ export function useMemberDialogs({
             </ul>
             <label className="block">
               <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-k-text-2">{t('transfer.target')}</span>
-              <select
+              <Select
                 value={target}
                 onChange={(e) => setTarget(e.target.value)}
                 disabled={busy}
-                className="h-12 w-full rounded-xl border-[1.5px] border-k-border bg-white px-3 text-[14px] text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus"
+                className="!h-12 !border-k-border !px-3 !text-[14px]"
               >
                 <option value="">{t('transfer.pick')}</option>
                 {candidates(transfer.member).map((m) => (
@@ -222,7 +222,7 @@ export function useMemberDialogs({
                     {memberName(m)}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             {candidates(transfer.member).length === 0 && <p className="text-[13px] text-k-danger">{t('transfer.nobody')}</p>}
             <label className="flex items-start gap-2.5 text-[13px] text-k-text">

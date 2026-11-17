@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { PLANS, PLAN_ORDER, type AccountInfo, type AccountRequestInfo, type PlanCode } from '@kobrax/shared';
-import { Button, ErrorBanner, Field } from '@/components/ui';
+import { Button, ErrorBanner, Field, Textarea } from '@/components/ui';
 import { Section } from '@/components/panel-ui';
 import { Modal } from '@/components/modal';
 import { usePermissions } from '@/components/permissions';
@@ -179,12 +179,12 @@ export function PlanRequest({ account, requests }: { account: AccountInfo; reque
           </fieldset>
 
           <Field label={t('note')} hint={t('noteHint')}>
-            <textarea
+            <Textarea
               value={note}
               maxLength={500}
               rows={3}
               onChange={(e) => setNote(e.target.value)}
-              className="w-full rounded-xl border border-k-border bg-white px-3 py-2 text-[14px] text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus"
+              className="!border !border-k-border !px-3 !py-2 !text-[14px]"
             />
           </Field>
         </div>

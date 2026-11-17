@@ -8,7 +8,7 @@ import type { ClientDetail, CreditOption } from '@kobrax/shared';
 import type { CatalogOption } from '@/components/client-form';
 import { Badge, PageHeader, Section } from '@/components/panel-ui';
 import { SendWhatsappDialog } from '@/components/send-whatsapp-dialog';
-import { Button } from '@/components/ui';
+import { Button, TextButton } from '@/components/ui';
 import { Modal } from '@/components/modal';
 import { usePermissions } from '@/components/permissions';
 import { useWorkspace } from '@/components/workspace';
@@ -161,14 +161,14 @@ export function ClientCard({
   /** El botón «Editar» de un encabezado de sección. Sin permiso de escritura no se dibuja. */
   const editarAction = (section: SectionKey) =>
     canWrite ? (
-      <button
+      <TextButton
         type="button"
         onClick={() => void editar(section)}
         disabled={busy}
-        className="text-[13px] font-medium text-k-periwinkle hover:underline disabled:opacity-50"
+        tone="periwinkle"
       >
         {t('edit')}
-      </button>
+      </TextButton>
     ) : undefined;
 
   return (
@@ -184,13 +184,13 @@ export function ClientCard({
                 la API lo audita como `client/PII_REVEAL`. */}
             {/* Escribirle con una plantilla de la cuenta; queda como gestión pendiente de resultado. */}
             {can('collection:write') && (
-              <button
+              <TextButton
                 type="button"
                 onClick={() => setWriting(true)}
-                className="text-[13px] font-medium text-k-periwinkle hover:underline"
+                tone="periwinkle"
               >
                 {tw('send')}
-              </button>
+              </TextButton>
             )}
             <a
               href={`/api/clients/${client.id}/pdf`}
@@ -201,13 +201,13 @@ export function ClientCard({
             {/* La baja no se ofrece si hay plata en la calle: la API la rechaza igual, pero un
                 botón que siempre falla enseña a desconfiar de la pantalla. */}
             {canDelete && !hasActiveCredits && shown.status !== 'INACTIVE' && (
-              <button
+              <TextButton
                 type="button"
                 onClick={() => setConfirmBaja(true)}
-                className="text-[13px] font-medium text-k-danger hover:underline"
+                tone="danger"
               >
                 {t('archive')}
-              </button>
+              </TextButton>
             )}
           </>
         }

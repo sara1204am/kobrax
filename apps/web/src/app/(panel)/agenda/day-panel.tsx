@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { memberName, type AgendaListItem, type Member } from '@kobrax/shared';
-import { Select } from '@/components/ui';
+import { Button, Select } from '@/components/ui';
 import { EmptyState } from '@/components/panel-ui';
 import { groupDay, longDay, shiftDay, type DaySort } from '@/lib/agenda';
 import { AgendaRow } from './agenda-row';
@@ -60,14 +60,14 @@ export function DayPanel({
         <Step dir="prev" label={t('previousDay')} onClick={() => onPickDay(shiftDay(day, -1))} />
         <h2 className="min-w-0 text-[18px] font-semibold text-k-navy">{longDay(day, locale)}</h2>
         <Step dir="next" label={t('nextDay')} onClick={() => onPickDay(shiftDay(day, 1))} />
-        <button
+        <Button
           type="button"
           onClick={() => onPickDay(today)}
           disabled={day === today}
-          className="h-9 rounded-lg border border-k-border bg-white px-4 text-[13px] font-medium text-k-periwinkle hover:bg-k-bg disabled:opacity-50"
+          variant="ghost" size="sm" fullWidth={false} className="!font-medium !px-4 !text-k-periwinkle"
         >
           {t('today')}
-        </button>
+        </Button>
         <Select
           aria-label={t('sort.label')}
           value={sort}
@@ -86,13 +86,13 @@ export function DayPanel({
           text={filtered ? undefined : t('emptyText')}
           action={
             filtered ? undefined : (
-              <button
+              <Button
                 type="button"
                 onClick={() => events.onCreateRequest({ date: day })}
-                className="h-9 rounded-lg bg-k-navy px-4 text-[13px] font-medium text-white hover:bg-k-slate"
+                variant="primary" size="sm" fullWidth={false} className="!font-medium !px-4"
               >
                 {t('createCta')}
-              </button>
+              </Button>
             )
           }
         />

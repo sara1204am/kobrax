@@ -8,7 +8,8 @@ import { Icon } from '@/components/panel-shell';
 import { Section } from '@/components/panel-ui';
 import { Modal } from '@/components/modal';
 import { money } from '@/lib/format';
-import { ContactDetail, Dato, EyeButton, LocationDetail } from './client-contacts';
+import { ContactDetail, Dato, EyeButton, LocationDetail } from './client-contacts';
+import { TextButton } from '@/components/ui';
 
 /**
  * Qué respalda esta deuda: **la persona y el bien**.
@@ -63,9 +64,9 @@ function Vacio({ icon, text, action }: { icon: 'team' | 'security'; text: string
 /** El «Editar» del encabezado de la sección. Con la lista vacía no aparece: ahí está el «+ Agregar». */
 function EditarLink({ onClick, label }: { onClick: () => void; label: string }) {
   return (
-    <button type="button" onClick={onClick} className="text-[13px] font-medium text-k-periwinkle hover:underline">
+    <TextButton type="button" onClick={onClick} tone="periwinkle">
       {label}
-    </button>
+    </TextButton>
   );
 }
 

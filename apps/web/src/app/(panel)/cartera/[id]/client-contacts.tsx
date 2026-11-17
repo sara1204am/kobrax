@@ -7,7 +7,8 @@ import type { ClientContactDetail, ClientLocationDetail } from '@kobrax/shared';
 import { Icon } from '@/components/panel-shell';
 import { Section } from '@/components/panel-ui';
 import { Modal } from '@/components/modal';
-import { PhotoViewer } from '@/components/photo-viewer';
+import { PhotoViewer } from '@/components/photo-viewer';
+import { TextButton } from '@/components/ui';
 
 /**
  * El mapa se carga **sólo cuando alguien abre el modal**.
@@ -269,14 +270,14 @@ export function EyeButton({ onClick }: { onClick: () => void }) {
 function EditarLink({ onClick, busy }: { onClick: () => void; busy: boolean }) {
   const t = useTranslations('portfolio');
   return (
-    <button
+    <TextButton
       type="button"
       onClick={onClick}
       disabled={busy}
-      className="text-[13px] font-medium text-k-periwinkle hover:underline disabled:opacity-50"
+      tone="periwinkle"
     >
       {t('edit')}
-    </button>
+    </TextButton>
   );
 }
 

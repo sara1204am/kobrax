@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { locationTypeChoices } from '@kobrax/shared';
-import { Button, ErrorBanner, Field, Input, Select } from '@/components/ui';
+import { Button, ErrorBanner, Field, Input, Select, TextButton } from '@/components/ui';
 import { Icon } from '@/components/panel-shell';
 import { LocationPhotos } from '@/components/location-photos';
 import { postJson, sendJson } from '@/lib/client';
@@ -269,14 +269,14 @@ export function LocationPicker({
       )}
 
       {!creando ? (
-        <button
+        <TextButton
           type="button"
           onClick={() => setCreando(true)}
           disabled={disabled}
-          className="text-[13px] font-medium text-k-periwinkle hover:underline disabled:opacity-50"
+          tone="periwinkle"
         >
           {t('create.addLocation')}
-        </button>
+        </TextButton>
       ) : (
         <div className="space-y-4 rounded-xl border border-k-border bg-k-bg p-4">
           <ErrorBanner message={error} />

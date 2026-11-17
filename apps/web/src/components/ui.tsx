@@ -96,6 +96,35 @@ export function IconButton({
   );
 }
 
+export type TextButtonTone = 'periwinkle' | 'danger' | 'purple' | 'success' | 'muted';
+
+const TEXT_BUTTON_TONES: Record<TextButtonTone, string> = {
+  periwinkle: 'text-k-periwinkle',
+  danger: 'text-k-danger',
+  purple: 'text-k-purple',
+  success: 'text-k-success',
+  muted: 'text-k-text-2',
+};
+
+/**
+ * Acción de texto dentro de una fila o tarjeta («Cambiar», «Quitar», «Ver más»): 13px, medium, se subraya al pasar el mouse.
+ * `tone` elige el color; el resto de la caja (márgenes, `shrink-0`…) llega por `className`. Si la acción necesita fondo, borde o altura, no es esta: es `Button`.
+ */
+export function TextButton({
+  tone = 'periwinkle',
+  className = '',
+  type = 'button',
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & { tone?: TextButtonTone }) {
+  return (
+    <button
+      type={type}
+      {...props}
+      className={`text-[13px] font-medium hover:underline disabled:opacity-50 ${TEXT_BUTTON_TONES[tone]} ${className}`}
+    />
+  );
+}
+
 function IconArrow({ className = '' }: { className?: string }) {
   return (
     <svg

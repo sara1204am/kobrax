@@ -7,7 +7,7 @@ import type { MoraAssignment } from '@kobrax/shared';
 import { Modal } from '@/components/modal';
 import { Badge, Section } from '@/components/panel-ui';
 import { useToast } from '@/components/toast';
-import { Button, ErrorBanner, Field, Input, Select } from '@/components/ui';
+import { Button, ErrorBanner, Field, Input, Select, TextButton } from '@/components/ui';
 import { errorText } from '@/lib/api-error';
 import { sendJson } from '@/lib/client';
 import { dayDate, todayIso } from '@/lib/format';
@@ -128,14 +128,14 @@ export function ResponsiblesSection({
             <span className="text-[14px] font-medium text-k-text">{nameOf(a.userId)}</span>
             {a.expiresAt && <span className="text-[13px] text-k-text-2">{tr('expires', { date: dayDate(a.expiresAt.slice(0, 10), locale) })}</span>}
             {canAssign && a.id && (
-              <button
+              <TextButton
                 type="button"
                 onClick={() => void remove(a.id!)}
                 disabled={busy}
-                className="text-[13px] font-medium text-k-danger hover:underline disabled:opacity-50"
+                tone="danger"
               >
                 {tr('remove')}
-              </button>
+              </TextButton>
             )}
           </li>
         ))}

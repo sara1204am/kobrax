@@ -8,7 +8,8 @@ import type { PermissionCatalogEntry, RoleDetail, RoleUpdateResult } from '@kobr
 import { usePermissions } from '@/components/permissions';
 import { useToast } from '@/components/toast';
 import { ConfirmSensitiveDialog } from '@/components/roles/confirm-sensitive-dialog';
-import { summarizeChange } from '@/lib/roles';
+import { summarizeChange } from '@/lib/roles';
+import { Button } from '@/components/ui';
 
 /** Las acciones del detalle de un rol: editar y restaurar la plantilla. Sólo se dibujan con `role:write`; la API valida igual. */
 export function RoleActions({ role, catalog, roleName }: { role: RoleDetail; catalog: PermissionCatalogEntry[]; roleName: string }) {
@@ -29,9 +30,9 @@ export function RoleActions({ role, catalog, roleName }: { role: RoleDetail; cat
   return (
     <>
       {role.diverged && role.templateKey && (
-        <button type="button" onClick={() => setRestoring(true)} className="h-10 rounded-xl border border-k-border bg-white px-4 text-[14px] font-medium text-k-text-2 hover:bg-k-bg">
+        <Button type="button" onClick={() => setRestoring(true)} variant="ghost" fullWidth={false} className="!h-10 !px-4 !text-[14px] !font-medium">
           {t('detail.restore')}
-        </button>
+        </Button>
       )}
       <Link href={`/seguridad/roles/${key}/editar`} className="flex h-10 items-center rounded-xl bg-k-navy px-4 text-[14px] font-semibold text-white hover:bg-k-slate">
         {t('detail.edit')}

@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { TRIAL_DAYS, type SignupPlan } from '@kobrax/shared';
 import { AuthShell } from '@/components/auth-shell';
-import { Button, ErrorBanner, Field, Input } from '@/components/ui';
+import { Button, ErrorBanner, Field, Input, TextButton } from '@/components/ui';
 import { allPassed, PasswordChecklist } from '@/components/password-checklist';
 import { postJson, routeByStep, type AccountOption, type Step } from '@/lib/client';
 import { LegalConsents, useSignupDocuments } from '@/components/legal-consents';
@@ -164,13 +164,13 @@ export default function RegistroPage() {
           <span className="text-[13px] text-k-text-2">
             {t('plan.chosen', { plan: tPlans(`names.${plan}`) })}
           </span>
-          <button
+          <TextButton
             type="button"
             onClick={() => setPlan(null)}
-            className="text-[13px] font-medium text-k-purple hover:underline"
+            tone="purple"
           >
             {t('plan.change')}
-          </button>
+          </TextButton>
         </div>
 
         <ErrorBanner message={error} />

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { MORA_NOTE_COLORS, MORA_NOTE_KINDS, MORA_NOTE_MAX_LENGTH, type MoraNoteColor, type MoraNoteKind } from '@kobrax/shared';
 import { Modal } from '@/components/modal';
-import { Button, ErrorBanner, Field, Select } from '@/components/ui';
+import { Button, ErrorBanner, Field, Select, Textarea } from '@/components/ui';
 import { NOTE_COLORS } from '@/lib/mora-notes';
 
 export interface NoteDraft {
@@ -80,14 +80,14 @@ export function NoteDialog({
         </Field>
         <label className="block">
           <span className="sr-only">{t('title')}</span>
-          <textarea
+          <Textarea
             autoFocus
             value={body}
             onChange={(e) => setBody(e.target.value)}
             maxLength={MORA_NOTE_MAX_LENGTH}
             rows={5}
             placeholder={t('placeholder')}
-            className="w-full rounded-lg border border-k-border bg-white px-3 py-2 text-[14px] text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus"
+            className="!rounded-lg !border !border-k-border !px-3 !py-2 !text-[14px]"
           />
           <span className="mt-1 block text-right text-[12px] text-k-muted">{t('remaining', { n: MORA_NOTE_MAX_LENGTH - body.length })}</span>
         </label>

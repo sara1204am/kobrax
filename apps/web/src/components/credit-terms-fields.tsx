@@ -29,7 +29,7 @@ import {
   type RegistrationSituation,
 } from '@kobrax/shared';
 import { Segmented } from '@/components/panel-ui';
-import { Button, Field, Input, Select } from '@/components/ui';
+import { Button, Field, Input, Select, TextButton } from '@/components/ui';
 import { dayDate, money } from '@/lib/format';
 import { useWorkspace } from '@/components/workspace';
 import { downloadText } from '@/lib/download';
@@ -445,22 +445,22 @@ export function CreditTermsFields({
                         value={c.value}
                         onChange={(e) => setCharge(c.id, { value: e.target.value })}
                       />
-                      <button
+                      <TextButton
                         type="button"
                         onClick={() => set({ charges: form.charges.filter((x) => x.id !== c.id) })}
-                        className="text-[13px] font-medium text-k-danger hover:underline"
+                        tone="danger"
                       >
                         {t('chargeRemove')}
-                      </button>
+                      </TextButton>
                     </div>
                   ))}
-                  <button
+                  <TextButton
                     type="button"
                     onClick={addCharge}
-                    className="text-[13px] font-medium text-k-periwinkle hover:underline"
+                    tone="periwinkle"
                   >
                     + {t('chargeAdd')}
-                  </button>
+                  </TextButton>
                 </div>
               </>
             )}

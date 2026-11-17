@@ -6,7 +6,8 @@ import { ROLE_REASON_MIN_LENGTH, type RoleUpdateResult } from '@kobrax/shared';
 import { Modal } from '@/components/modal';
 import { sendJson } from '@/lib/client';
 import { errorText, type ApiError } from '@/lib/api-error';
-import { permissionKey, type ChangeSummary } from '@/lib/roles';
+import { permissionKey, type ChangeSummary } from '@/lib/roles';
+import { Button, Textarea } from '@/components/ui';
 
 export interface RoleSaveFailure {
   message: string;
@@ -94,27 +95,27 @@ export function ConfirmSensitiveDialog({
       title={mode === 'restore' ? t('detail.restoreTitle', { name: roleName }) : t('confirm.title', { name: roleName })}
       actions={
         <>
-          <button
+          <Button
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="h-10 rounded-xl border border-k-border bg-white px-4 text-[14px] font-medium text-k-text-2 hover:bg-k-bg disabled:opacity-50"
+            variant="ghost" fullWidth={false} className="!h-10 !px-4 !text-[14px] !font-medium"
           >
             {t('confirm.cancel')}
-          </button>
+          </Button>
           {conflict ? (
-            <button type="button" onClick={() => window.location.reload()} className="h-10 rounded-xl bg-k-navy px-5 text-[14px] font-semibold text-white hover:bg-k-slate">
+            <Button type="button" onClick={() => window.location.reload()} variant="primary" fullWidth={false} className="!h-10 !px-5 !text-[14px]">
               {t('errors.reload')}
-            </button>
+            </Button>
           ) : (
-            <button
+            <Button
               type="button"
               onClick={() => void confirm()}
               disabled={busy || !valid}
-              className="h-10 rounded-xl bg-k-navy px-5 text-[14px] font-semibold text-white hover:bg-k-slate disabled:opacity-50"
+              variant="primary" fullWidth={false} className="!h-10 !px-5 !text-[14px]"
             >
               {mode === 'restore' ? t('detail.restoreConfirm') : t('confirm.confirm')}
-            </button>
+            </Button>
           )}
         </>
       }
@@ -141,14 +142,14 @@ export function ConfirmSensitiveDialog({
       <label htmlFor="role-reason" className="mb-1.5 block text-[13px] font-medium text-k-text">
         {t('confirm.reasonLabel')}
       </label>
-      <textarea
+      <Textarea
         id="role-reason"
         value={reason}
         onChange={(e) => setReason(e.target.value)}
         maxLength={500}
         rows={3}
         placeholder={t('confirm.reasonPlaceholder')}
-        className="w-full rounded-xl border border-k-border bg-white px-3 py-2.5 text-[14px] text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus"
+        className="!border !border-k-border !px-3 !text-[14px]"
       />
       <p className="mt-1 text-[12px] text-k-muted">{t('confirm.reasonHint', { n: ROLE_REASON_MIN_LENGTH })}</p>
       <p className="mt-2 text-[12px] text-k-muted">{t('confirm.safe')}</p>

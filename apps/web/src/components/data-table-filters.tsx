@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { useTranslations } from 'next-intl';
+import { useTranslations } from 'next-intl';
+import { TextButton } from '@/components/ui';
 
 /**
  * Los controles de filtro del `DataTable`, **uno por tipo**.
@@ -345,9 +346,9 @@ export function FilterPanel({
       <div className="mb-4 flex items-center justify-between">
         <span className="text-[13px] font-semibold uppercase tracking-wide text-k-text">{t('filters')}</span>
         <div className="flex items-center gap-3">
-          <button type="button" onClick={onClear} className="text-[13px] font-medium text-k-periwinkle hover:underline">
+          <TextButton type="button" onClick={onClear} tone="periwinkle">
             {t('clear')}
-          </button>
+          </TextButton>
           <button type="button" onClick={onClose} aria-label={t('closeFilters')} className="text-k-muted hover:text-k-text">
             ✕
           </button>

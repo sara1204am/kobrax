@@ -23,7 +23,8 @@ import type { CatalogOption } from '@/components/client-form';
 import { Modal } from '@/components/modal';
 import { dayDate, money } from '@/lib/format';
 import { postJson } from '@/lib/client';
-import { usePaymentMethods } from '@/lib/use-payment-methods';
+import { usePaymentMethods } from '@/lib/use-payment-methods';
+import { Button, Textarea } from '@/components/ui';
 
 /** La parada sobre la que se registra: lo que el formulario necesita saber de ella. */
 export interface RecordStop {
@@ -270,27 +271,27 @@ export function RecordVisitDialog({
       title={correctsVisitId ? t('titleFix') : t('title')}
       actions={
         warnings.length > 0 ? (
-          <button type="button" onClick={onClose} className="h-10 rounded-xl bg-k-navy px-5 text-[14px] font-semibold text-white hover:bg-k-slate">
+          <Button type="button" onClick={onClose} variant="primary" fullWidth={false} className="!h-10 !px-5 !text-[14px]">
             {t('close')}
-          </button>
+          </Button>
         ) : (
           <>
-            <button
+            <Button
               type="button"
               onClick={onClose}
               disabled={busy}
-              className="h-10 rounded-xl border border-k-border bg-white px-4 text-[14px] font-medium text-k-text-2 hover:bg-k-bg disabled:opacity-50"
+              variant="ghost" fullWidth={false} className="!h-10 !px-4 !text-[14px] !font-medium"
             >
               {t('cancel')}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               onClick={() => void submit()}
               disabled={!ready || busy || !stop.creditId || contextInvalid !== null}
-              className="h-10 rounded-xl bg-k-navy px-5 text-[14px] font-semibold text-white hover:bg-k-slate disabled:opacity-50"
+              variant="primary" fullWidth={false} className="!h-10 !px-5 !text-[14px]"
             >
               {busy ? t('saving') : correctsVisitId ? t('submitFix') : t('submit')}
-            </button>
+            </Button>
           </>
         )
       }
@@ -507,13 +508,13 @@ export function RecordVisitDialog({
                 <label htmlFor="rv-notes" className={label}>
                   {variant === 'WRONG_ADDRESS' ? t('notesRequired') : t('notes')}
                 </label>
-                <textarea
+                <Textarea
                   id="rv-notes"
                   rows={3}
                   value={form.notes}
                   onChange={(e) => set('notes', e.target.value)}
                   placeholder={t('notesPlaceholder')}
-                  className="w-full rounded-xl border border-k-border bg-white px-3 py-2.5 text-[14px] text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus"
+                  className="!border !border-k-border !px-3 !text-[14px]"
                 />
               </div>
 

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { Badge } from '@/components/panel-ui';
-import { Button, ErrorBanner, Field, Input, Select } from '@/components/ui';
+import { Button, ErrorBanner, Field, Input, Select, TextButton } from '@/components/ui';
 import { Modal } from '@/components/modal';
 import { useToast } from '@/components/toast';
 import { postJson } from '@/lib/client';
@@ -71,13 +71,13 @@ export function ArrearsActions({
   return (
     <>
       {enMora ? (
-        <button type="button" onClick={() => setAbierto('clear')} className="text-[13px] font-medium text-k-success hover:underline">
+        <TextButton type="button" onClick={() => setAbierto('clear')} tone="success">
           {t('arrears.clearCta')}
-        </button>
+        </TextButton>
       ) : (
-        <button type="button" onClick={() => setAbierto('mark')} className="text-[13px] font-medium text-k-danger hover:underline">
+        <TextButton type="button" onClick={() => setAbierto('mark')} tone="danger">
           {t('arrears.markCta')}
-        </button>
+        </TextButton>
       )}
 
       <Modal

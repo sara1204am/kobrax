@@ -5,7 +5,8 @@ import { useLocale, useTranslations } from 'next-intl';
 import type { RoleHistoryPage } from '@kobrax/shared';
 import { EmptyState } from '@/components/panel-ui';
 import { dateTime } from '@/lib/format';
-import { permissionKey } from '@/lib/roles';
+import { permissionKey } from '@/lib/roles';
+import { Button } from '@/components/ui';
 
 /** El historial de un rol (vista E): quién, cuándo, qué se añadió o quitó y por qué. Pagina por cursor. */
 export function HistoryList({ roleKey, initial, timezone }: { roleKey: string; initial: RoleHistoryPage; timezone: string | null }) {
@@ -63,9 +64,9 @@ export function HistoryList({ roleKey, initial, timezone }: { roleKey: string; i
         </p>
       )}
       {page.nextCursor && (
-        <button type="button" onClick={() => void more()} disabled={busy} className="h-10 rounded-xl border border-k-border bg-white px-4 text-[14px] font-medium text-k-text-2 hover:bg-k-bg disabled:opacity-50">
+        <Button type="button" onClick={() => void more()} disabled={busy} variant="ghost" fullWidth={false} className="!h-10 !px-4 !text-[14px] !font-medium">
           {t('loadMore')}
-        </button>
+        </Button>
       )}
     </div>
   );

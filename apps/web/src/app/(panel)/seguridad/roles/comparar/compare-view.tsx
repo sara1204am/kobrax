@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { RoleCompare } from '@kobrax/shared';
 import { Badge, EmptyState } from '@/components/panel-ui';
-import { permissionKey } from '@/lib/roles';
+import { permissionKey } from '@/lib/roles';
+import { Select } from '@/components/ui';
 
 /** Dos selectores y una fila por permiso: quién lo tiene. Elegir otro rol escribe la URL (la comparación se comparte por link). */
 export function CompareView({ roles, a, b, compare }: { roles: { key: string }[]; a?: string; b?: string; compare: RoleCompare | null }) {
@@ -26,7 +27,7 @@ export function CompareView({ roles, a, b, compare }: { roles: { key: string }[]
   const select = (value: string | undefined, onChange: (v: string) => void, label: string) => (
     <label className="flex items-center gap-2 text-[14px] text-k-text">
       <span className="sr-only">{label}</span>
-      <select value={value ?? ''} onChange={(e) => onChange(e.target.value)} aria-label={label} className="h-10 rounded-xl border border-k-border bg-white px-3 text-[14px] text-k-text">
+      <Select value={value ?? ''} onChange={(e) => onChange(e.target.value)} aria-label={label} className="!h-10 !w-auto !border !border-k-border !px-3 !text-[14px]">
         <option value="" disabled>
           —
         </option>
@@ -35,7 +36,7 @@ export function CompareView({ roles, a, b, compare }: { roles: { key: string }[]
             {roleName(r.key)}
           </option>
         ))}
-      </select>
+      </Select>
     </label>
   );
 

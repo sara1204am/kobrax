@@ -24,7 +24,7 @@ import {
   type LocationRow,
   type RelationRow,
 } from '@kobrax/shared';
-import { Field, Input, Select } from '@/components/ui';
+import { Field, Input, Select, TextButton } from '@/components/ui';
 import { useWorkspace } from '@/components/workspace';
 
 /**
@@ -1172,13 +1172,13 @@ function Acordeon({
       <div className="border-t border-k-border p-4">
         {onAdd && (
           <div className="mb-3 flex justify-end">
-            <button
+            <TextButton
               type="button"
               onClick={onAdd}
-              className="text-[13px] font-medium text-k-periwinkle hover:underline"
+              tone="periwinkle"
             >
               + {addLabel}
-            </button>
+            </TextButton>
           </div>
         )}
         {children}
@@ -1203,13 +1203,13 @@ function Sub({
       <div className="mb-4 flex items-center justify-between gap-3">
         <h2 className="text-[16px] font-semibold text-k-navy">{title}</h2>
         {onAdd && (
-          <button
+          <TextButton
             type="button"
             onClick={onAdd}
-            className="text-[13px] font-medium text-k-purple hover:underline"
+            tone="purple"
           >
             {addLabel}
-          </button>
+          </TextButton>
         )}
       </div>
       {children}
@@ -1253,12 +1253,12 @@ function RemoveButton({
 }) {
   if (disabled) return null;
   return (
-    <button
+    <TextButton
       type="button"
       onClick={onClick}
-      className="text-[13px] font-medium text-k-danger hover:underline"
+      tone="danger"
     >
       {label}
-    </button>
+    </TextButton>
   );
 }

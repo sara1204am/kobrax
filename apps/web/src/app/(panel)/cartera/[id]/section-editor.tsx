@@ -20,7 +20,7 @@ import {
   type CatalogOption,
 } from '@/components/client-form';
 import { IncomeFields } from '@/components/income-fields';
-import { Button, ErrorBanner } from '@/components/ui';
+import { Button, ErrorBanner, TextButton } from '@/components/ui';
 import { Modal } from '@/components/modal';
 import { useToast } from '@/components/toast';
 import { sendJson } from '@/lib/client';
@@ -197,14 +197,14 @@ function Agregar({
   return (
     <>
       {children}
-      <button
+      <TextButton
         type="button"
         onClick={onAdd}
         disabled={disabled}
-        className="text-[13px] font-medium text-k-periwinkle hover:underline disabled:opacity-50"
+        tone="periwinkle"
       >
         + {label}
-      </button>
+      </TextButton>
     </>
   );
 }

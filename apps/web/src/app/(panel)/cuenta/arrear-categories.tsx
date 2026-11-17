@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { ArrearCategory } from '@kobrax/shared';
-import { Button, ErrorBanner } from '@/components/ui';
+import { Button, ErrorBanner, TextButton } from '@/components/ui';
 import { Section } from '@/components/panel-ui';
 import { usePermissions } from '@/components/permissions';
 import { useToast } from '@/components/toast';
@@ -191,14 +191,14 @@ export function ArrearCategories({ categories }: { categories: ArrearCategory[] 
         <div className="mt-4 space-y-3">
           <ErrorBanner message={error} />
           <div className="flex flex-wrap items-center gap-3">
-            <button
+            <TextButton
               type="button"
               disabled={busy || rows.length >= 26}
               onClick={() => setRows((prev) => [...prev, blankRow(prev[prev.length - 1])])}
-              className="text-[13px] font-medium text-k-purple hover:underline disabled:opacity-50"
+              tone="purple"
             >
               {t('add')}
-            </button>
+            </TextButton>
             {!managed && (
               <span className="ml-auto sm:w-48">
                 <Button loading={busy} disabled={errors.length > 0 || !dirty} onClick={() => void save()}>

@@ -3,7 +3,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { isValidReason, ROUTE_REASON_MAX } from '@kobrax/shared';
-import { Modal } from '@/components/modal';
+import { Modal } from '@/components/modal';
+import { Button, Textarea } from '@/components/ui';
 
 /**
  * Un diálogo que pide **el motivo escrito** antes de hacer algo que lo exige: cancelar una ruta, cerrarla con paradas
@@ -71,14 +72,14 @@ export function ReasonDialog({
       title={title}
       actions={
         <>
-          <button
+          <Button
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="h-10 rounded-xl border border-k-border bg-white px-4 text-[14px] font-medium text-k-text-2 hover:bg-k-bg disabled:opacity-50"
+            variant="ghost" fullWidth={false} className="!h-10 !px-4 !text-[14px] !font-medium"
           >
             {t('back')}
-          </button>
+          </Button>
           <button
             type="button"
             onClick={() => void confirm()}
@@ -96,14 +97,14 @@ export function ReasonDialog({
       <label htmlFor="reason" className="mb-1.5 block text-[13px] font-medium text-k-text">
         {label ?? t('reasonLabel')}
       </label>
-      <textarea
+      <Textarea
         id="reason"
         value={reason}
         onChange={(e) => setReason(e.target.value)}
         maxLength={ROUTE_REASON_MAX}
         rows={3}
         placeholder={placeholder ?? t('reasonPlaceholder')}
-        className="w-full rounded-xl border border-k-border bg-white px-3 py-2.5 text-[14px] text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus"
+        className="!border !border-k-border !px-3 !text-[14px]"
       />
       {required && <p className="mt-1 text-[12px] text-k-muted">{t('reasonHint')}</p>}
       {error && (

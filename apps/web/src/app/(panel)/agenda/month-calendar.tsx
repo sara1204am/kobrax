@@ -5,7 +5,8 @@ import type { AgendaListItem } from '@kobrax/shared';
 import { isWorkingDate } from '@kobrax/shared';
 import { itemWhen, loadByDay, monthGrid, shiftMonth } from '@/lib/agenda';
 import { useWorkPreferences } from '@/lib/use-work-preferences';
-import type { AgendaEvents } from './agenda-screen';
+import type { AgendaEvents } from './agenda-screen';
+import { Button } from '@/components/ui';
 
 /** Cuántas gestiones se nombran en una celda antes de resumir con «+N». */
 const CHIPS = 3;
@@ -71,13 +72,13 @@ export function MonthCalendar({
         <Nav label={t('previousMonth')} dir="prev" onClick={() => onPickMonth(shiftMonth(month, -1))} />
         <span className="min-w-[160px] text-[15px] font-medium capitalize text-k-navy">{nombreMes}</span>
         <Nav label={t('nextMonth')} dir="next" onClick={() => onPickMonth(shiftMonth(month, 1))} />
-        <button
+        <Button
           type="button"
           onClick={() => onPickMonth(today)}
-          className="h-9 rounded-lg border border-k-border bg-white px-3 text-[13px] font-medium text-k-text-2 hover:bg-k-bg"
+          variant="ghost" size="sm" fullWidth={false} className="!font-medium"
         >
           {t('today')}
-        </button>
+        </Button>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-k-border bg-white">

@@ -31,7 +31,8 @@ import { SituationBadge } from '@/components/situation-badge';
 import { CREDIT_STATUS_TONE, CreditProgress } from '@/components/credit-progress';
 import { PaymentPlanTable } from '@/components/payment-plan-table';
 import { date, dateTime, dayDate, money } from '@/lib/format';
-import { downloadText } from '@/lib/download';
+import { downloadText } from '@/lib/download';
+import { TextButton } from '@/components/ui';
 
 /**
  * La ficha del crédito en modo lectura (F4/06 · Fase 3): Condiciones · Estado actual · Plan · Cobranza
@@ -72,7 +73,7 @@ export function CreditView({
         title={t('sections.plan')}
         action={
           planRows.length > 0 ? (
-            <button
+            <TextButton
               type="button"
               onClick={() =>
                 downloadText(
@@ -80,10 +81,10 @@ export function CreditView({
                   paymentPlanFileName(credit.code ?? undefined, planRows[0]!.dueDate),
                 )
               }
-              className="text-[13px] font-medium text-k-periwinkle hover:underline"
+              tone="periwinkle"
             >
               {tf('exportPlan')}
-            </button>
+            </TextButton>
           ) : undefined
         }
       >

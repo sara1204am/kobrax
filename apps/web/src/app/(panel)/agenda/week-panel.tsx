@@ -6,7 +6,8 @@ import { isWorkingDate } from '@kobrax/shared';
 import { longDay, shiftDay, weekOf } from '@/lib/agenda';
 import { useWorkPreferences } from '@/lib/use-work-preferences';
 import { AgendaRow } from './agenda-row';
-import type { AgendaEvents } from './agenda-screen';
+import type { AgendaEvents } from './agenda-screen';
+import { Button } from '@/components/ui';
 
 /**
  * La semana (lunes a domingo): cada día con sus gestiones, de corrido.
@@ -59,14 +60,14 @@ export function WeekPanel({
         <button type="button" aria-label={t('week.next')} onClick={() => onPickDay(shiftDay(day, 7))} className={step}>
           ›
         </button>
-        <button
+        <Button
           type="button"
           onClick={() => onPickDay(today)}
           disabled={days.includes(today)}
-          className="h-9 rounded-lg border border-k-border bg-white px-4 text-[13px] font-medium text-k-periwinkle hover:bg-k-bg disabled:opacity-50"
+          variant="ghost" size="sm" fullWidth={false} className="!font-medium !px-4 !text-k-periwinkle"
         >
           {t('today')}
-        </button>
+        </Button>
       </div>
 
       <div className="space-y-3">

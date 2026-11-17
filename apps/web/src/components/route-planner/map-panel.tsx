@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { PhotoViewer } from '@/components/photo-viewer';
 import { RADIUS_KM } from '@/lib/plan';
-import { BADGE_CLASS, PointsMap, type MapPoint, type PinTone, type PointBadge } from './points-map';
+import { BADGE_CLASS, PointsMap, type MapPoint, type PinTone, type PointBadge } from './points-map';
+import { Button, Select } from '@/components/ui';
 
 export interface PlanArea {
   latitude: number;
@@ -175,17 +176,17 @@ export function MapPanel({
           {area && !noArea && (
             <label className="flex items-center gap-1.5 text-[13px] text-k-text-2">
               {t('areaRadius')}
-              <select
+              <Select
                 value={area.radiusKm}
                 onChange={(e) => onArea({ ...area, radiusKm: Number(e.target.value) })}
-                className="h-8 rounded-lg border border-k-border bg-white px-2 text-[13px] text-k-text outline-none focus:border-k-periwinkle"
+                className="!h-8 !w-auto !rounded-lg !border !border-k-border !px-2 !text-[13px]"
               >
                 {RADIUS_KM.map((km) => (
                   <option key={km} value={km}>
                     {radioLabel(km)}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
           )}
 
@@ -204,14 +205,14 @@ export function MapPanel({
             </button>
           )}
 
-          <button
+          <Button
             type="button"
             onClick={() => setBigMap((v) => !v)}
             aria-expanded={bigMap}
-            className="h-8 rounded-lg border border-k-border bg-white px-3 text-[13px] font-medium text-k-text-2 hover:bg-k-bg"
+            variant="ghost" size="sm" fullWidth={false} className="!font-medium !h-8"
           >
             {bigMap ? t('mapSmall') : t('mapBig')}
-          </button>
+          </Button>
 
           {actions}
         </div>

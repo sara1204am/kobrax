@@ -64,13 +64,13 @@ export function NewClientButton({
     <>
       {/* A la medida de los otros botones de la barra de la tabla (h-9, 13 px): tres controles en una
           misma fila con tres alturas distintas se leen como tres cosas sin relación entre sí. */}
-      <button
+      <Button
         type="button"
         onClick={() => setAbierto(true)}
-        className="flex h-9 items-center justify-center rounded-lg bg-k-navy px-3 text-[13px] font-medium text-white transition-all hover:bg-k-slate active:scale-[.98]"
+        variant="primary" size="sm" fullWidth={false} className="!font-medium"
       >
         {t('new')}
-      </button>
+      </Button>
 
       {abierto && (
         <NewClientModal

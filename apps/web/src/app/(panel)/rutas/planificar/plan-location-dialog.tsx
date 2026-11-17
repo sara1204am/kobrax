@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Modal } from '@/components/modal';
-import { LocationPicker, type Loc } from '../../agenda/location-picker';
+import { LocationPicker, type Loc } from '../../agenda/location-picker';
+import { Button } from '@/components/ui';
 
 /** La ubicación elegida para una parada: lo que el planificador necesita saber de ella. */
 export interface ChosenLocation {
@@ -85,10 +86,10 @@ export function PlanLocationDialog({
       title={t('title', { name: clientName ?? '' })}
       actions={
         <>
-          <button type="button" onClick={onClose} className="h-10 rounded-xl border border-k-border bg-white px-4 text-[14px] font-medium text-k-text-2 hover:bg-k-bg">
+          <Button type="button" onClick={onClose} variant="ghost" fullWidth={false} className="!h-10 !px-4 !text-[14px] !font-medium">
             {t('cancel')}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             disabled={!chosen || !hasPoint}
             onClick={() => {
@@ -113,10 +114,10 @@ export function PlanLocationDialog({
               });
               onClose();
             }}
-            className="h-10 rounded-xl bg-k-navy px-5 text-[14px] font-semibold text-white hover:bg-k-slate disabled:opacity-50"
+            variant="primary" fullWidth={false} className="!h-10 !px-5 !text-[14px]"
           >
             {t('use')}
-          </button>
+          </Button>
         </>
       }
     >

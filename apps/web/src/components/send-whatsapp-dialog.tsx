@@ -16,7 +16,7 @@ import {
 import { useAccountBrand } from '@/components/account-brand';
 import { Modal } from '@/components/modal';
 import { useToast } from '@/components/toast';
-import { Button, ErrorBanner, Field, Input, Select } from '@/components/ui';
+import { Button, ErrorBanner, Field, Input, Select, Textarea } from '@/components/ui';
 import { postJson } from '@/lib/client';
 import { fullName, money, todayIso } from '@/lib/format';
 import type { PortfolioRow } from '@/lib/portfolio';
@@ -299,12 +299,12 @@ export function SendWhatsappDialog({
             </div>
 
             <Field label={t('message')} hint={t('messageHint')}>
-              <textarea
+              <Textarea
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 rows={5}
                 maxLength={RECOVERY_NOTES_MAX_LENGTH}
-                className="w-full rounded-xl border-[1.5px] border-k-light-bg bg-white px-3.5 py-2.5 text-[15px] text-k-text outline-none transition-all focus:border-k-periwinkle focus:shadow-k-focus"
+                
               />
             </Field>
 

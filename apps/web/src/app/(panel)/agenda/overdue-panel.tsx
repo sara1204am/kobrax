@@ -6,7 +6,8 @@ import type { AgendaListItem } from '@kobrax/shared';
 // El día de un agendado no tiene hora: en la zona local se corría un día para atrás.
 import { dayDate as fmtDate } from '@/lib/format';
 import { AgendaRow } from './agenda-row';
-import type { AgendaEvents } from './agenda-screen';
+import type { AgendaEvents } from './agenda-screen';
+import { TextButton } from '@/components/ui';
 
 /** Cuántas se muestran plegado. Dos: las que se pueden mirar sin dejar de ver el día. */
 const PREVIEW = 2;
@@ -53,14 +54,14 @@ export function OverduePanel({
         <span aria-hidden className="text-[15px]">⚠</span>
         <span className="text-[14px] font-semibold text-k-danger">{t('overdue.count', { n: total })}</span>
         <span className="text-[13px] text-k-danger">{t('overdue.text')}</span>
-        <button
+        <TextButton
           type="button"
           onClick={() => setAbierto((v) => !v)}
           aria-expanded={abierto}
-          className="ml-auto text-[13px] font-medium text-k-danger underline-offset-2 hover:underline"
+          tone="danger" className="ml-auto"
         >
           {abierto ? t('overdue.collapse') : t('overdue.expand', { n: total })}
-        </button>
+        </TextButton>
       </div>
 
       {/*

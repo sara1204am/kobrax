@@ -15,7 +15,7 @@ import {
   type TemplateCategory,
   type TemplateVariable,
 } from '@kobrax/shared';
-import { Button, ErrorBanner, Field, Input, Select } from '@/components/ui';
+import { Button, ErrorBanner, Field, Input, Select, TextButton, Textarea } from '@/components/ui';
 import { Badge, Section, EmptyState, Segmented } from '@/components/panel-ui';
 import { DictationButton } from '@/components/dictation-button';
 import { Modal } from '@/components/modal';
@@ -330,22 +330,22 @@ export function WhatsappTemplates({
                       </button>
                       {editable && (
                         <span className="flex shrink-0 items-center gap-3 pr-4">
-                          <button
+                          <TextButton
                             type="button"
                             onClick={() => edit(item)}
                             aria-label={`${t('edit')} ${item.label}`}
-                            className="text-[13px] font-medium text-k-periwinkle hover:underline"
+                            tone="periwinkle"
                           >
                             {t('edit')}
-                          </button>
-                          <button
+                          </TextButton>
+                          <TextButton
                             type="button"
                             onClick={() => setRemoving(item)}
                             aria-label={`${t('remove')} ${item.label}`}
-                            className="text-[13px] font-medium text-k-danger hover:underline disabled:opacity-50"
+                            tone="danger"
                           >
                             {t('remove')}
-                          </button>
+                          </TextButton>
                         </span>
                       )}
                     </li>
@@ -432,7 +432,7 @@ export function WhatsappTemplates({
                 error={unknown.length > 0 ? t('unknownVars', { names: unknown.map((k) => `{{${k}}}`).join(', ') }) : null}
                 hint={t('bodyHint')}
               >
-                <textarea
+                <Textarea
                   ref={bodyRef}
                   value={editing.body}
                   onChange={(e) => setEditing({ ...editing, body: e.target.value })}
@@ -445,7 +445,7 @@ export function WhatsappTemplates({
                   rows={5}
                   maxLength={MAX_BODY}
                   aria-label={t('body')}
-                  className="w-full rounded-xl border-[1.5px] border-k-light-bg bg-white px-3.5 py-2.5 text-[15px] text-k-text outline-none transition-all focus:border-k-periwinkle focus:shadow-k-focus"
+                  
                 />
               </Field>
               <div className="-mt-2 flex items-center justify-between gap-3">
@@ -476,14 +476,14 @@ export function WhatsappTemplates({
                               <p className="text-[13px] font-medium text-k-text">{sug.label}</p>
                               <p className="mt-0.5 line-clamp-3 text-[12px] text-k-text-2">{sug.body}</p>
                             </div>
-                            <button
+                            <TextButton
                               type="button"
                               onClick={() => applySuggestion(sug)}
                               aria-label={`${t('useSuggestion')} ${sug.label}`}
-                              className="shrink-0 text-[13px] font-medium text-k-periwinkle hover:underline"
+                              tone="periwinkle" className="shrink-0"
                             >
                               {t('useSuggestion')}
-                            </button>
+                            </TextButton>
                           </div>
                         </div>
                       </div>

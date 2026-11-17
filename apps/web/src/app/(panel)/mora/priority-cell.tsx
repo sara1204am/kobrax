@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { CollectionPriority } from '@kobrax/shared';
 import { Badge } from '@/components/panel-ui';
-import { Button, ErrorBanner } from '@/components/ui';
+import { Button, ErrorBanner, TextButton } from '@/components/ui';
 import { Modal } from '@/components/modal';
 import { useToast } from '@/components/toast';
 import { sendJson } from '@/lib/client';
@@ -134,14 +134,14 @@ export function PriorityCell({
 
         {/* Sólo si está fijada: ofrecer «volver a la automática» sobre una que ya lo es no hace nada. */}
         {pinned && (
-          <button
+          <TextButton
             type="button"
             onClick={() => void aplicar('auto')}
             disabled={busy}
-            className="mt-4 text-[13px] font-medium text-k-periwinkle hover:underline disabled:opacity-50"
+            tone="periwinkle" className="mt-4"
           >
             {t('priorityBackToAuto')}
-          </button>
+          </TextButton>
         )}
       </Modal>
     </>

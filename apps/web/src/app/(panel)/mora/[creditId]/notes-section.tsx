@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { useLocale, useTranslations } from 'next-intl';
 import { memberName, type CreditNote, type Member, type MoraNoteKind } from '@kobrax/shared';
 import { Section } from '@/components/panel-ui';
-import { Button } from '@/components/ui';
+import { Button, TextButton } from '@/components/ui';
 import { Modal } from '@/components/modal';
 import { useToast } from '@/components/toast';
 import { errorText } from '@/lib/api-error';
@@ -108,9 +108,9 @@ export function NotesSection({
       collapsible={{ count: notes.length }}
       action={
         canWrite && initial !== null ? (
-          <button type="button" onClick={() => setDialog({})} className="text-[13px] font-medium text-k-periwinkle hover:underline">
+          <TextButton type="button" onClick={() => setDialog({})} tone="periwinkle">
             {t('add')}
-          </button>
+          </TextButton>
         ) : undefined
       }
     >

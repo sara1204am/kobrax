@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import type { AccountRequestInfo } from '@kobrax/shared';
-import { Button, ErrorBanner, Field, Input } from '@/components/ui';
+import { Button, ErrorBanner, Field, Input, Textarea } from '@/components/ui';
 import { Section } from '@/components/panel-ui';
 import { Modal } from '@/components/modal';
 import { useToast } from '@/components/toast';
@@ -103,12 +103,12 @@ export function ClosureRequest({
             <Input value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />
           </Field>
           <Field label={t('note')} hint={t('noteHint')}>
-            <textarea
+            <Textarea
               value={note}
               maxLength={500}
               rows={3}
               onChange={(e) => setNote(e.target.value)}
-              className="w-full rounded-xl border border-k-border bg-white px-3 py-2 text-[14px] text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus"
+              className="!border !border-k-border !px-3 !py-2 !text-[14px]"
             />
           </Field>
         </div>

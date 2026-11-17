@@ -20,7 +20,8 @@ import { STOP_STATUS_TONE } from '@/lib/routes';
 import { PlanLocationDialog } from '../planificar/plan-location-dialog';
 import { planFilterDefs, PLAN_FILTER_KEYS } from '../planificar/plan-filters';
 import { RecordVisitDialog } from './record-visit-dialog';
-import { WhatsAppButton } from './whatsapp-button';
+import { WhatsAppButton } from './whatsapp-button';
+import { Button } from '@/components/ui';
 
 /**
  * La ruta armada: **el mapa, sus paradas y —cuando se enciende— la edición**.
@@ -483,13 +484,13 @@ export function RouteEditor({
               /* Sin ninguna pendiente no hay nada que editar: la jornada ya pasó entera. */
               pendientes > 0 &&
               canEditMode && (
-                <button
+                <Button
                   type="button"
                   onClick={() => go({ editar: '1' })}
-                  className="h-8 rounded-lg border border-k-border bg-white px-3 text-[13px] font-medium text-k-text-2 hover:bg-k-bg"
+                  variant="ghost" size="sm" fullWidth={false} className="!font-medium !h-8"
                 >
                   {direct ? t('edit.start') : t('edit.startRequest')}
-                </button>
+                </Button>
               )
             )}
           </>

@@ -1,7 +1,8 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useTranslations } from 'next-intl';
+import { TextButton } from '@/components/ui';
 
 /** Cuántas fotos admite una ubicación (el tope que valida la API). */
 export const MAX_LOCATION_PHOTOS = 20;
@@ -109,14 +110,14 @@ export function LocationPhotos({
             onChange={(e) => void subir(e.target.files)}
             data-testid="location-photos-input"
           />
-          <button
+          <TextButton
             type="button"
             onClick={() => input.current?.click()}
             disabled={disabled || busy}
-            className="mt-2 text-[13px] font-medium text-k-periwinkle hover:underline disabled:opacity-50"
+            tone="periwinkle" className="mt-2"
           >
             {busy ? t('uploading') : t(value.length === 0 ? 'add' : 'addMore')}
-          </button>
+          </TextButton>
         </>
       )}
     </div>

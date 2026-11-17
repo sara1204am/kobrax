@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { AgendaItemType, AgendaTimeSlot, renderTemplate, ScheduleTimeMode, type AgendaAssignee, type AgendaListItem } from '@kobrax/shared';
 import type { CatalogOption } from '@/components/client-form';
-import { Button, ErrorBanner, Field, Input, Select } from '@/components/ui';
+import { Button, ErrorBanner, Field, Input, Select, TextButton, Textarea } from '@/components/ui';
 import { useAccountBrand } from '@/components/account-brand';
 import { Modal } from '@/components/modal';
 import { TONES, type Tone } from '@/components/tone-tile';
@@ -382,9 +382,9 @@ export function NewTaskModal({
           <div className="flex items-center justify-between gap-3 rounded-xl border border-k-border bg-k-bg px-3 py-2.5">
             <span className="text-[14px] font-medium text-k-text">{ctx.client.displayName}</span>
             {!editing && (
-              <button type="button" onClick={() => setCtx(null)} className="text-[13px] font-medium text-k-periwinkle hover:underline">
+              <TextButton type="button" onClick={() => setCtx(null)} tone="periwinkle">
                 {t('create.changeClient')}
-              </button>
+              </TextButton>
             )}
           </div>
 
@@ -501,14 +501,14 @@ export function NewTaskModal({
                     ))}
                   </div>
                 )}
-                <textarea
+                <Textarea
                   value={mensaje}
                   onChange={(e) => setMensaje(e.target.value)}
                   disabled={saving}
                   maxLength={1000}
                   rows={4}
                   placeholder={t('create.messageHint')}
-                  className="w-full rounded-xl border-[1.5px] border-k-border bg-white px-3 py-2.5 text-[14px] text-k-text outline-none focus:border-k-periwinkle"
+                  className="!border-k-border !px-3 !text-[14px] focus:!shadow-none"
                 />
               </div>
             </Field>
@@ -532,13 +532,13 @@ export function NewTaskModal({
 
           {tipo === AgendaItemType.REMINDER && (
             <Field label={t('create.description')}>
-              <textarea
+              <Textarea
                 value={descripcion}
                 onChange={(e) => setDescripcion(e.target.value)}
                 disabled={saving}
                 maxLength={500}
                 rows={3}
-                className="w-full rounded-xl border-[1.5px] border-k-border bg-white px-3 py-2.5 text-[14px] text-k-text outline-none focus:border-k-periwinkle disabled:opacity-60"
+                className="!border-k-border !px-3 !text-[14px] focus:!shadow-none"
               />
             </Field>
           )}
@@ -617,13 +617,13 @@ export function NewTaskModal({
           <ScheduleNotice date={scheduledDate} time={timeMode === ScheduleTimeMode.FIXED ? hora : undefined} />
 
           <Field label={t('create.observations')}>
-            <textarea
+            <Textarea
                 value={observations}
                 onChange={(e) => setObservations(e.target.value)}
                 disabled={saving}
                 maxLength={500}
                 rows={3}
-                className="w-full rounded-xl border-[1.5px] border-k-border bg-white px-3 py-2.5 text-[14px] text-k-text outline-none focus:border-k-periwinkle disabled:opacity-60"
+                className="!border-k-border !px-3 !text-[14px] focus:!shadow-none"
               />
           </Field>
         </div>

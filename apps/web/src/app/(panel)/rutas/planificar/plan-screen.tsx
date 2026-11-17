@@ -344,16 +344,16 @@ export function PlanScreen({
           <p className="text-[14px] font-medium text-k-navy">
             {t('context.planningFor', { name: actual ? memberName(actual) : '', date: dayDate(day, locale) })}
           </p>
-          <button
+          <Button
             type="button"
             onClick={() => {
               reopened.current = true;
               setStep('date');
             }}
-            className="h-9 rounded-lg border border-k-border bg-white px-3 text-[13px] font-medium text-k-text-2 hover:bg-k-bg"
+            variant="ghost" size="sm" fullWidth={false} className="!font-medium"
           >
             {t('context.change')}
-          </button>
+          </Button>
         </div>
       )}
 

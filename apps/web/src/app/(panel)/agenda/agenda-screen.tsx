@@ -11,7 +11,8 @@ import { MiniCalendar } from './mini-calendar';
 import { MonthCalendar } from './month-calendar';
 import { OverduePanel } from './overdue-panel';
 import { WeekPanel } from './week-panel';
-import { FiltersCard, SummaryCard } from './side-cards';
+import { FiltersCard, SummaryCard } from './side-cards';
+import { Button } from '@/components/ui';
 
 /**
  * Lo que la pantalla **pide** que pase. No lo hace ella.
@@ -129,13 +130,13 @@ export function AgendaScreen({
         </div>
         <div className="flex flex-wrap items-center gap-2 md:justify-self-end">
           <TeamSelect supervises={supervises} members={members} gestor={gestor} onChange={(v) => go({ gestor: v })} />
-          <button
+          <Button
             type="button"
             onClick={crear}
-            className="h-10 shrink-0 rounded-lg bg-k-navy px-4 text-[13px] font-medium text-white hover:bg-k-slate active:scale-[.98]"
+            variant="primary" size="sm" fullWidth={false} className="!font-medium !h-10 !px-4 shrink-0"
           >
             {t('createCta')}
-          </button>
+          </Button>
         </div>
       </div>
 

@@ -13,7 +13,8 @@ import { date, time } from '@/lib/format';
 import { daysAgo, isKnownRole, memberActions } from '@/lib/team';
 import { officeLabelOf, officeOptions, type OfficeRow } from '@/lib/offices';
 import { useMemberDialogs } from './member-dialogs';
-import { Avatar, IconAction } from './team-ui';
+import { Avatar, IconAction } from './team-ui';
+import { Select } from '@/components/ui';
 
 const TONE = { active: 'success', pending: 'warning', inactive: 'danger' } as const;
 
@@ -273,18 +274,18 @@ function RoleCell({
   }
 
   return (
-    <select
+    <Select
       value={member.roleId}
       disabled={busy}
       onChange={(e) => onPick(e.target.value)}
       aria-label={label(member.roleName)}
-      className="h-10 min-w-[8.5rem] rounded-lg border border-k-border bg-white px-2.5 text-[14px] text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus disabled:opacity-60"
+      className="!h-10 !w-auto !min-w-[8.5rem] !rounded-lg !border !border-k-border !px-2.5 !text-[14px]"
     >
       {roles.map((r) => (
         <option key={r.id} value={r.id}>
           {label(r.name)}
         </option>
       ))}
-    </select>
+    </Select>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import { AgendaItemStatus, AgendaItemType, memberName, type Member } from '@kobrax/shared';
-import { Input, Select } from '@/components/ui';
+import { Input, Select, TextButton } from '@/components/ui';
 import { daySummary } from '@/lib/agenda';
 
 export interface FilterValues {
@@ -39,9 +39,9 @@ export function FiltersCard({
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-[15px] font-semibold text-k-navy">{t('filters.title')}</h2>
         {dirty && (
-          <button type="button" onClick={onClear} className="text-[13px] font-medium text-k-periwinkle hover:underline">
+          <TextButton type="button" onClick={onClear} tone="periwinkle">
             {t('filters.clear')}
-          </button>
+          </TextButton>
         )}
       </div>
       <div className="space-y-2">

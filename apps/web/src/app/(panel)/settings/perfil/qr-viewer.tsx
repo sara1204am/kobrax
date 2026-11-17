@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useTranslations } from 'next-intl';
+import { TextButton } from '@/components/ui';
 
 /**
  * «Ver en grande»: el mismo visor que `MiQrCobro` del móvil, para el cobro desde el escritorio.
@@ -24,13 +25,13 @@ export function QrViewer({ url }: { url: string }) {
 
   return (
     <>
-      <button
+      <TextButton
         type="button"
         onClick={() => setOpen(true)}
-        className="text-[13px] font-medium text-k-purple hover:underline"
+        tone="purple"
       >
         {t('viewQr')}
-      </button>
+      </TextButton>
 
       {open && (
         <dialog
