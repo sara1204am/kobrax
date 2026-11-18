@@ -125,6 +125,14 @@ if [ "$VERIFICACIONES_FALLARON" -ne 0 ]; then
   exit 1
 fi
 
+echo "==> 8c. Documentos legales (términos, privacidad, cookies, DPA...)"
+# Publica lo que falte de docs/legal/documentos/. Es idempotente: no hace nada si todo está
+# publicado. Sin esto, una base nueva o reseteada deja /terminos en «todavía no está publicado»
+# y el registro no deja crear cuentas. Si un texto cambió SIN subir `version`, el script falla
+# a propósito (una versión publicada es evidencia y no se edita): el despliegue se detiene
+# antes de reiniciar, igual que una verificación.
+pnpm db:seed:legal
+
 echo "==> 9. Reiniciando servicios"
 systemctl restart kobrax-api
 systemctl restart kobrax-web
