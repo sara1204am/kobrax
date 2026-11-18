@@ -12,7 +12,7 @@ import type { Assignee } from '@kobrax/shared';
  */
 
 const SELECT =
-  'h-9 max-w-[220px] rounded-lg border border-k-border bg-white px-2 text-[13px] text-k-text focus:outline-none focus:ring-2 focus:ring-k-periwinkle disabled:opacity-50';
+  'h-9 max-w-[220px] rounded-lg border border-k-border bg-white px-2 text-k-sm text-k-text focus:outline-none focus:ring-2 focus:ring-k-periwinkle disabled:opacity-50';
 
 /** Cómo se lee un responsable: «Yo (Ana)», el nombre, o «Sin asignar». */
 export type NameOf = (userId: string | null | undefined) => string;
@@ -80,7 +80,7 @@ export function AssignBar({
   const me = assignees.find((a) => a.isMe);
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <span className="text-[13px] font-medium text-k-text">{t('selected', { n: count })} →</span>
+      <span className="text-k-sm font-medium text-k-text">{t('selected', { n: count })} →</span>
       <select
         aria-label={verb}
         value=""
@@ -98,7 +98,7 @@ export function AssignBar({
         <button
           type="button"
           onClick={() => onAssign(me.userId)}
-          className="inline-flex h-9 items-center rounded-lg bg-k-highlight px-3 text-[13px] font-medium text-k-periwinkle hover:bg-k-light-bg"
+          className="inline-flex h-9 items-center rounded-lg bg-k-highlight px-3 text-k-sm font-medium text-k-periwinkle hover:bg-k-light-bg"
         >
           {t('assignToMe')}
         </button>
@@ -130,13 +130,13 @@ export function AssignToolbar({
   return (
     <div className="space-y-3 rounded-2xl border border-k-border bg-white p-4">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <span className={`text-[14px] font-semibold ${stats.unassigned > 0 ? 'text-k-danger' : 'text-k-navy'}`}>
+        <span className={`text-k-base font-semibold ${stats.unassigned > 0 ? 'text-k-danger' : 'text-k-navy'}`}>
           {t('stats', { assigned: stats.assigned, unassigned: stats.unassigned })}
         </span>
         {/* El reparto en vivo: «Juan 30 · María 40 · Pedro 30». Es lo que se mira antes de confirmar. */}
         <span className="flex flex-wrap gap-2">
           {stats.byUser.map((u) => (
-            <span key={u.userId} className="rounded-full bg-k-bg px-2.5 py-1 text-[12px] text-k-text-2">
+            <span key={u.userId} className="rounded-full bg-k-bg px-2.5 py-1 text-k-xs text-k-text-2">
               {nameOf(u.userId)} <span className="font-semibold tabular-nums text-k-text">{u.count}</span>
             </span>
           ))}
@@ -158,7 +158,7 @@ export function AssignToolbar({
             ))}
           </select>
         )}
-        <label className="flex items-center gap-2 text-[13px] text-k-text-2">
+        <label className="flex items-center gap-2 text-k-sm text-k-text-2">
           <input
             type="checkbox"
             checked={onlyUnassigned}

@@ -51,8 +51,8 @@ export default async function PanelLayout({ children }: { children: ReactNode })
     return (
       <main className="flex min-h-screen items-center justify-center bg-k-bg px-6">
         <div className="max-w-md text-center">
-          <h1 className="text-[20px] font-semibold text-k-navy">{t('title')}</h1>
-          <p className="mt-2 text-[14px] text-k-text-2">{t('text')}</p>
+          <h1 className="text-k-2xl font-semibold text-k-navy">{t('title')}</h1>
+          <p className="mt-2 text-k-base text-k-text-2">{t('text')}</p>
         </div>
       </main>
     );

@@ -48,14 +48,14 @@ export function SecurityOptions({ mfaEnabled }: { mfaEnabled?: boolean }) {
             <>
               <span className="min-w-0">
                 <span className="flex flex-wrap items-center gap-2">
-                  <span className="text-[15px] font-medium text-k-text">{t(o.key)}</span>
+                  <span className="text-k-md font-medium text-k-text">{t(o.key)}</span>
                   {o.key === 'mfa' && mfaEnabled !== undefined && (
                     <Badge tone={mfaEnabled ? 'success' : 'warning'} dot>
                       {mfaEnabled ? t('mfaOn') : t('mfaOff')}
                     </Badge>
                   )}
                 </span>
-                <span className="block text-[13px] text-k-text-2">
+                <span className="block text-k-sm text-k-text-2">
                   {o.key === 'mfa' && mfaEnabled === false ? t('mfaOffHint') : t(`${o.key}Desc`)}
                 </span>
               </span>

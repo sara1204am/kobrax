@@ -17,6 +17,9 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const SRC = join(ROOT, 'src');
 const BASELINE = join(ROOT, 'scripts', 'raw-elements-baseline.json');
 const TAGS = ['button', 'select', 'textarea'];
+/** Tamaños de letra a mano (`text-[13px]`): la escala vive en `tailwind.config.ts` (`text-k-sm`…). Sólo puede bajar. */
+const FONT_PX = 'fontPx';
+const KEYS = [...TAGS, FONT_PX];
 /** Donde SÍ viven los elementos crudos: son los componentes que los envuelven. */
 const ALLOWED = new Set(['components/ui.tsx', 'components/panel-ui.tsx', 'components/form-kit.tsx', 'components/modal.tsx', 'components/data-table.tsx']);
 
@@ -29,11 +32,12 @@ function walk(dir) {
 }
 
 export function count() {
-  const totals = Object.fromEntries(TAGS.map((t) => [t, 0]));
+  const totals = Object.fromEntries(KEYS.map((t) => [t, 0]));
   for (const file of walk(SRC)) {
     const rel = relative(SRC, file).split(sep).join('/');
     if (ALLOWED.has(rel)) continue;
     const text = readFileSync(file, 'utf8');
+    totals[FONT_PX] += (text.match(/\btext-\[\d+(?:\.\d+)?px\]/g) ?? []).length;
     for (const tag of TAGS) totals[tag] += (text.match(new RegExp(`<${tag}(?=[\\s>])`, 'g')) ?? []).length;
   }
   return totals;
@@ -54,14 +58,18 @@ if (!existsSync(BASELINE)) {
 
 const base = JSON.parse(readFileSync(BASELINE, 'utf8'));
 let failed = false;
-for (const tag of TAGS) {
+for (const tag of KEYS) {
   if (current[tag] > base[tag]) {
     failed = true;
-    console.error(`✗ <${tag}> crudo: ${current[tag]} (baseline ${base[tag]}). Usa el componente del sistema (Button / Select / Textarea / Tabs).`);
+    console.error(
+      tag === FONT_PX
+        ? `✗ text-[Npx]: ${current[tag]} (baseline ${base[tag]}). Usa la escala text-k-* de tailwind.config.ts.`
+        : `✗ <${tag}> crudo: ${current[tag]} (baseline ${base[tag]}). Usa el componente del sistema (Button / Select / Textarea / Tabs).`,
+    );
   } else if (current[tag] < base[tag]) {
-    console.log(`✓ <${tag}> crudo bajó: ${current[tag]} (baseline ${base[tag]}). Corre --update para fijar la mejora.`);
+    console.log(`✓ ${tag === FONT_PX ? "text-[Npx]" : `<${tag}>`} crudo bajó: ${current[tag]} (baseline ${base[tag]}). Corre --update para fijar la mejora.`);
   } else {
-    console.log(`✓ <${tag}> crudo: ${current[tag]}`);
+    console.log(`✓ ${tag === FONT_PX ? "text-[Npx]" : `<${tag}>`} crudo: ${current[tag]}`);
   }
 }
 process.exit(failed ? 1 : 0);

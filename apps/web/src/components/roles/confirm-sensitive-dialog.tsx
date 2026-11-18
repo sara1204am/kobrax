@@ -7,6 +7,7 @@ import { Modal } from '@/components/modal';
 import { sendJson } from '@/lib/client';
 import { errorText, type ApiError } from '@/lib/api-error';
 import { permissionKey, type ChangeSummary } from '@/lib/roles';
+import { Button, Textarea } from '@/components/ui';
 
 export interface RoleSaveFailure {
   message: string;
@@ -94,27 +95,27 @@ export function ConfirmSensitiveDialog({
       title={mode === 'restore' ? t('detail.restoreTitle', { name: roleName }) : t('confirm.title', { name: roleName })}
       actions={
         <>
-          <button
+          <Button
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="h-10 rounded-xl border border-k-border bg-white px-4 text-[14px] font-medium text-k-text-2 hover:bg-k-bg disabled:opacity-50"
+            variant="ghost" fullWidth={false} className="!h-10 !px-4 !text-k-base !font-medium"
           >
             {t('confirm.cancel')}
-          </button>
+          </Button>
           {conflict ? (
-            <button type="button" onClick={() => window.location.reload()} className="h-10 rounded-xl bg-k-navy px-5 text-[14px] font-semibold text-white hover:bg-k-slate">
+            <Button type="button" onClick={() => window.location.reload()} variant="primary" fullWidth={false} className="!h-10 !px-5 !text-k-base">
               {t('errors.reload')}
-            </button>
+            </Button>
           ) : (
-            <button
+            <Button
               type="button"
               onClick={() => void confirm()}
               disabled={busy || !valid}
-              className="h-10 rounded-xl bg-k-navy px-5 text-[14px] font-semibold text-white hover:bg-k-slate disabled:opacity-50"
+              variant="primary" fullWidth={false} className="!h-10 !px-5 !text-k-base"
             >
               {mode === 'restore' ? t('detail.restoreConfirm') : t('confirm.confirm')}
-            </button>
+            </Button>
           )}
         </>
       }
@@ -122,39 +123,39 @@ export function ConfirmSensitiveDialog({
       <p className="mb-3">{members > 0 ? t('confirm.affects', { n: members }) : t('confirm.affectsNone')}</p>
 
       {summary.highRiskAdded.length > 0 && (
-        <p role="note" className="mb-3 rounded-lg border border-k-warning bg-k-warning-bg px-3 py-2 text-[13px] text-k-warning-text">
+        <p role="note" className="mb-3 rounded-lg border border-k-warning bg-k-warning-bg px-3 py-2 text-k-sm text-k-warning-text">
           ⚠ {t('confirm.highRisk', { list: summary.highRiskAdded.map(name).join(', ') })}
         </p>
       )}
 
       <div className="mb-4 grid gap-3 sm:grid-cols-2">
         <div>
-          <p className="text-[12px] font-semibold uppercase tracking-wide text-k-muted">{t('confirm.added')}</p>
-          <ul className="mt-1 list-disc pl-5 text-[13px] text-k-text">{summary.added.length ? summary.added.map((c) => <li key={c}>{name(c)}</li>) : <li className="list-none text-k-muted">—</li>}</ul>
+          <p className="text-k-xs font-semibold uppercase tracking-wide text-k-muted">{t('confirm.added')}</p>
+          <ul className="mt-1 list-disc pl-5 text-k-sm text-k-text">{summary.added.length ? summary.added.map((c) => <li key={c}>{name(c)}</li>) : <li className="list-none text-k-muted">—</li>}</ul>
         </div>
         <div>
-          <p className="text-[12px] font-semibold uppercase tracking-wide text-k-muted">{t('confirm.removed')}</p>
-          <ul className="mt-1 list-disc pl-5 text-[13px] text-k-text">{summary.removed.length ? summary.removed.map((c) => <li key={c}>{name(c)}</li>) : <li className="list-none text-k-muted">—</li>}</ul>
+          <p className="text-k-xs font-semibold uppercase tracking-wide text-k-muted">{t('confirm.removed')}</p>
+          <ul className="mt-1 list-disc pl-5 text-k-sm text-k-text">{summary.removed.length ? summary.removed.map((c) => <li key={c}>{name(c)}</li>) : <li className="list-none text-k-muted">—</li>}</ul>
         </div>
       </div>
 
-      <label htmlFor="role-reason" className="mb-1.5 block text-[13px] font-medium text-k-text">
+      <label htmlFor="role-reason" className="mb-1.5 block text-k-sm font-medium text-k-text">
         {t('confirm.reasonLabel')}
       </label>
-      <textarea
+      <Textarea
         id="role-reason"
         value={reason}
         onChange={(e) => setReason(e.target.value)}
         maxLength={500}
         rows={3}
         placeholder={t('confirm.reasonPlaceholder')}
-        className="w-full rounded-xl border border-k-border bg-white px-3 py-2.5 text-[14px] text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus"
+        className="!border !border-k-border !px-3 !text-k-base"
       />
-      <p className="mt-1 text-[12px] text-k-muted">{t('confirm.reasonHint', { n: ROLE_REASON_MIN_LENGTH })}</p>
-      <p className="mt-2 text-[12px] text-k-muted">{t('confirm.safe')}</p>
+      <p className="mt-1 text-k-xs text-k-muted">{t('confirm.reasonHint', { n: ROLE_REASON_MIN_LENGTH })}</p>
+      <p className="mt-2 text-k-xs text-k-muted">{t('confirm.safe')}</p>
 
       {error && (
-        <p role="alert" className="mt-3 rounded-lg border border-k-danger bg-k-danger-bg px-3 py-2 text-[13px] text-k-text">
+        <p role="alert" className="mt-3 rounded-lg border border-k-danger bg-k-danger-bg px-3 py-2 text-k-sm text-k-text">
           {error}
         </p>
       )}

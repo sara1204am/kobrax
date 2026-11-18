@@ -105,7 +105,7 @@ function StaleDays({ value, busy, onSave }: { value: number | undefined; busy: b
         />
       </Field>
       {invalid && (
-        <p role="alert" className="mt-2 text-[12px] text-k-danger">
+        <p role="alert" className="mt-2 text-k-xs text-k-danger">
           {t('staleError', { min: REPORT_STALE_AFTER_DAYS_MIN, max: REPORT_STALE_AFTER_DAYS_MAX })}
         </p>
       )}
@@ -144,16 +144,16 @@ function StatusMapEditor({
 
   return (
     <div>
-      <p className="text-[14px] font-medium text-k-text">{t('statusMap')}</p>
-      <p className="mt-1 text-[13px] text-k-text-2">{t('statusMapHint')}</p>
+      <p className="text-k-base font-medium text-k-text">{t('statusMap')}</p>
+      <p className="mt-1 text-k-sm text-k-text-2">{t('statusMapHint')}</p>
 
       {entries.length === 0 ? (
-        <p className="mt-3 text-[13px] text-k-muted">{t('statusMapEmpty')}</p>
+        <p className="mt-3 text-k-sm text-k-muted">{t('statusMapEmpty')}</p>
       ) : (
         <ul className="mt-3 space-y-2">
           {entries.map(([key, value]) => (
             <li key={key} className="flex flex-wrap items-center gap-3">
-              <span className="min-w-[8rem] flex-1 truncate rounded-lg bg-k-bg px-3 py-2 text-[13px] font-medium text-k-text">{key}</span>
+              <span className="min-w-[8rem] flex-1 truncate rounded-lg bg-k-bg px-3 py-2 text-k-sm font-medium text-k-text">{key}</span>
               <span aria-hidden className="text-k-muted">
                 →
               </span>
@@ -178,7 +178,7 @@ function StatusMapEditor({
                 disabled={busy}
                 aria-label={t('remove', { label: key })}
                 onClick={() => onSave(removeStatusMapEntry(map, key))}
-                className="rounded-lg px-2 py-1 text-[13px] font-medium text-k-danger hover:underline disabled:opacity-60"
+                className="rounded-lg px-2 py-1 text-k-sm font-medium text-k-danger hover:underline disabled:opacity-60"
               >
                 {t('removeCta')}
               </button>
@@ -216,7 +216,7 @@ function StatusMapEditor({
         </Button>
       </div>
       {error && (
-        <p role="alert" className="mt-2 text-[12px] text-k-danger">
+        <p role="alert" className="mt-2 text-k-xs text-k-danger">
           {error}
         </p>
       )}

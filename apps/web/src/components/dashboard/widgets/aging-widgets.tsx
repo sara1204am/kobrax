@@ -28,7 +28,7 @@ export async function AgingDonut({ rows, currency }: { rows: AgingBucketRow[]; c
   const slices = await slicesOf(rows, currency, 'amount');
   const total = slices.reduce((s, x) => s + x.value, 0);
 
-  if (total <= 0) return <p className="text-[13px] text-k-text-2">{t('noOverdue')}</p>;
+  if (total <= 0) return <p className="text-k-sm text-k-text-2">{t('noOverdue')}</p>;
 
   return (
     <div className="flex flex-wrap items-center gap-5">
@@ -42,12 +42,12 @@ export async function AgingBars({ rows }: { rows: AgingBucketRow[] }) {
   const t = await getTranslations('panel.dashboard');
   const slices = await slicesOf(rows, 'BOB', 'credits');
 
-  if (slices.every((s) => s.value === 0)) return <p className="text-[13px] text-k-text-2">{t('noOverdue')}</p>;
+  if (slices.every((s) => s.value === 0)) return <p className="text-k-sm text-k-text-2">{t('noOverdue')}</p>;
 
   return (
     <>
       <Bars slices={slices} />
-      <p className="mt-2 text-[11px] text-k-muted">{t('creditsInBucket')}</p>
+      <p className="mt-2 text-k-2xs text-k-muted">{t('creditsInBucket')}</p>
     </>
   );
 }

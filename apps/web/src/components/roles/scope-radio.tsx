@@ -17,15 +17,15 @@ export function ScopeRadio({ value, onChange, disabled }: { value: string | null
   const tp = useTranslations('permissions');
   return (
     <fieldset className="rounded-lg border border-k-border bg-white p-4" disabled={disabled}>
-      <legend className="px-1 text-[13px] font-semibold text-k-navy">{t('editor.scopeTitle')}</legend>
-      <p className="mb-3 text-[13px] text-k-text-2">{t('editor.scopeHelp')}</p>
+      <legend className="px-1 text-k-sm font-semibold text-k-navy">{t('editor.scopeTitle')}</legend>
+      <p className="mb-3 text-k-sm text-k-text-2">{t('editor.scopeHelp')}</p>
       <div className="grid gap-2 sm:grid-cols-2">
         {OPTIONS.map((o) => (
-          <label key={o.label} className={`flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 text-[14px] ${value === o.value ? 'border-k-periwinkle bg-k-highlight' : 'border-k-border'}`}>
+          <label key={o.label} className={`flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 text-k-base ${value === o.value ? 'border-k-periwinkle bg-k-highlight' : 'border-k-border'}`}>
             <input type="radio" name="scope" checked={value === o.value} onChange={() => onChange(o.value)} className="mt-1 accent-k-purple" />
             <span>
               <span className="block font-medium text-k-text">{t(`scope.${o.label}`)}</span>
-              {o.code && <span className="block text-[12px] text-k-text-2">{tp(`${permissionKey(o.code)}.description`)}</span>}
+              {o.code && <span className="block text-k-xs text-k-text-2">{tp(`${permissionKey(o.code)}.description`)}</span>}
             </span>
           </label>
         ))}

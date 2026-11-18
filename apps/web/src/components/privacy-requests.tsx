@@ -22,7 +22,7 @@ const TONE: Record<Status, 'neutral' | 'success' | 'warning' | 'danger'> = {
 };
 
 const FIELD =
-  'block w-full rounded-lg border border-k-border bg-white px-3 py-2 text-[14px] text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus';
+  'block w-full rounded-lg border border-k-border bg-white px-3 py-2 text-k-base text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus';
 
 /**
  * Solicitudes de derechos de las personas (privacidad · B6), para los dos casos que NO se mezclan:
@@ -73,7 +73,7 @@ export function PrivacyRequests({ mode, initial }: { mode: Mode; initial: Privac
       inner="p-4"
       action={
         !open && (
-          <Button type="button" variant="primary" className="!h-10 !w-auto px-4 !text-[13px]" onClick={() => setOpen(true)}>
+          <Button type="button" variant="primary" className="!h-10 !w-auto px-4 !text-k-sm" onClick={() => setOpen(true)}>
             {t('new')}
           </Button>
         )
@@ -111,7 +111,7 @@ export function PrivacyRequests({ mode, initial }: { mode: Mode; initial: Privac
       )}
 
       {items.length === 0 ? (
-        <p className="text-[13px] text-k-text-2">{t('empty')}</p>
+        <p className="text-k-sm text-k-text-2">{t('empty')}</p>
       ) : (
         <ul className="space-y-3">
           {items.map((r) => (
@@ -124,7 +124,7 @@ export function PrivacyRequests({ mode, initial }: { mode: Mode; initial: Privac
           ))}
         </ul>
       )}
-      <p className="mt-4 text-[12px] text-k-muted">{t('limits')}</p>
+      <p className="mt-4 text-k-xs text-k-muted">{t('limits')}</p>
     </Section>
   );
 }
@@ -161,7 +161,7 @@ function RequestCard({ request: r, mode, onChange }: { request: PrivacyRequestVi
   return (
     <li className="rounded-xl border border-k-border bg-white p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[14px] font-semibold text-k-text">
+        <p className="text-k-base font-semibold text-k-text">
           {t(`types.${r.type}`)}
           {r.subjectLabel && <span className="font-normal text-k-text-2"> · {r.subjectLabel}</span>}
         </p>
@@ -169,13 +169,13 @@ function RequestCard({ request: r, mode, onChange }: { request: PrivacyRequestVi
           {t(`statuses.${r.status}`)}
         </Badge>
       </div>
-      <p className="mt-1 text-[13px] text-k-text-2">{r.description}</p>
+      <p className="mt-1 text-k-sm text-k-text-2">{r.description}</p>
       {r.status === 'REJECTED' && r.rejectionReason && (
-        <p className="mt-2 rounded-lg bg-k-danger-bg px-3 py-2 text-[13px] text-k-danger">{t('rejection', { reason: r.rejectionReason })}</p>
+        <p className="mt-2 rounded-lg bg-k-danger-bg px-3 py-2 text-k-sm text-k-danger">{t('rejection', { reason: r.rejectionReason })}</p>
       )}
 
       <div className="mt-3 border-t border-k-border pt-3">
-        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-k-muted">{t('timeline')}</p>
+        <p className="mb-1 text-k-2xs font-semibold uppercase tracking-wide text-k-muted">{t('timeline')}</p>
         <ol className="space-y-1 text-[12.5px] text-k-text-2">
           {r.events.map((e, i) => (
             <li key={i}>
@@ -196,13 +196,13 @@ function RequestCard({ request: r, mode, onChange }: { request: PrivacyRequestVi
                 <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} maxLength={1000} className={FIELD} />
               </Field>
               <div className="flex flex-wrap justify-end gap-2">
-                <Button type="button" variant="ghost" className="!h-9 !w-auto px-3 !text-[13px]" onClick={() => { setPending(null); setText(''); }} disabled={busy}>
+                <Button type="button" variant="ghost" className="!h-9 !w-auto px-3 !text-k-sm" onClick={() => { setPending(null); setText(''); }} disabled={busy}>
                   {t('actions.cancel')}
                 </Button>
                 <Button
                   type="button"
                   variant="primary"
-                  className="!h-9 !w-auto px-4 !text-[13px]"
+                  className="!h-9 !w-auto px-4 !text-k-sm"
                   loading={busy}
                   disabled={needsText(pending) && !minOk}
                   onClick={() => void move(pending, text.trim() || undefined)}
@@ -218,7 +218,7 @@ function RequestCard({ request: r, mode, onChange }: { request: PrivacyRequestVi
                   key={s}
                   type="button"
                   variant="ghost"
-                  className="!h-9 !w-auto px-3 !text-[13px]"
+                  className="!h-9 !w-auto px-3 !text-k-sm"
                   disabled={busy}
                   onClick={() => (needsText(s) ? setPending(s) : void move(s))}
                 >

@@ -86,12 +86,12 @@ export function SearchBox({
             typed.current = true;
             setValue(e.target.value);
           }}
-          className={`h-11 w-full rounded-xl border border-k-border bg-white text-[14px] text-k-text outline-none placeholder:text-k-muted focus:border-k-periwinkle focus:shadow-k-focus ${
+          className={`h-11 w-full rounded-xl border border-k-border bg-white text-k-base text-k-text outline-none placeholder:text-k-muted focus:border-k-periwinkle focus:shadow-k-focus ${
             wide ? 'pl-10 pr-4' : 'max-w-[420px] px-4'
           }`}
         />
       </label>
-      {hint && <p className="mt-1.5 text-[12px] text-k-muted">{hint}</p>}
+      {hint && <p className="mt-1.5 text-k-xs text-k-muted">{hint}</p>}
     </div>
   );
 }

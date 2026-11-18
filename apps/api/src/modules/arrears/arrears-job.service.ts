@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy, Inject, Optional } from '@nestjs/common';
 import { CreditStatus, ExternalSyncStatus, type Prisma, type PrismaClient } from '@prisma/client';
 import {
   arrearsByMethod,
@@ -11,6 +11,9 @@ import {
 import { PrismaService } from '../../database/prisma.service';
 import { computeArrears, DEFAULT_ARREAR_PARAMS, type ArrearParams } from '../credits/credit-math';
 import { ArrearsPriorityService } from './arrears-priority.service';
+import type Redis from 'ioredis';
+import { startJob } from '../../common/jobs/start-job';
+import { REDIS } from '../../redis/redis.module';
 
 /** Cada cuánto barre. Diario en la práctica; corre más seguido para que un reinicio no lo saltee. */
 export const ARREARS_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -74,11 +77,12 @@ export class ArrearsJobService implements OnApplicationBootstrap, OnModuleDestro
   constructor(
     private readonly prisma: PrismaService,
     private readonly priority: ArrearsPriorityService,
+    /** Candado entre instancias (opcional: sin Redis el job corre siempre). */
+    @Optional() @Inject(REDIS) private readonly redis?: Redis,
   ) {}
 
   onApplicationBootstrap(): void {
-    this.timer = setInterval(() => void this.run(), ARREARS_INTERVAL_MS);
-    if (typeof this.timer.unref === 'function') this.timer.unref(); // no bloquea el apagado
+    this.timer = startJob({ name: 'arrears', intervalMs: ARREARS_INTERVAL_MS, run: () => this.run(), redis: this.redis, logger: this.logger });
   }
 
   onModuleDestroy(): void {

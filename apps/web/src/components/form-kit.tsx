@@ -75,7 +75,7 @@ export function Tabs<T extends string>({
             disabled={t.disabled}
             onClick={() => onChange(t.value)}
             onKeyDown={(e) => move(e, t.value)}
-            className={`-mb-px h-10 border-b-2 px-4 text-[14px] font-medium outline-none transition-colors focus-visible:shadow-k-focus disabled:opacity-50 ${
+            className={`-mb-px h-10 border-b-2 px-4 text-k-base font-medium outline-none transition-colors focus-visible:shadow-k-focus disabled:opacity-50 ${
               active ? 'border-k-navy text-k-navy' : 'border-transparent text-k-text-2 hover:text-k-text'
             }`}
           >
@@ -96,7 +96,7 @@ export function Checkbox({
   ...props
 }: Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> & { label: ReactNode }) {
   return (
-    <label className={`flex cursor-pointer items-start gap-2.5 text-[14px] text-k-text ${props.disabled ? 'opacity-60' : ''} ${className}`}>
+    <label className={`flex cursor-pointer items-start gap-2.5 text-k-base text-k-text ${props.disabled ? 'opacity-60' : ''} ${className}`}>
       <input
         type="checkbox"
         {...props}
@@ -162,8 +162,8 @@ export function ConfirmDialog({
 export function FormSection({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
   return (
     <fieldset className="space-y-4 border-0 p-0">
-      <legend className="mb-1 text-[15px] font-semibold text-k-text">{title}</legend>
-      {description && <p className="-mt-1 text-[13px] text-k-muted">{description}</p>}
+      <legend className="mb-1 text-k-md font-semibold text-k-text">{title}</legend>
+      {description && <p className="-mt-1 text-k-sm text-k-muted">{description}</p>}
       {children}
     </fieldset>
   );

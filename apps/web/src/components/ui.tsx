@@ -25,9 +25,9 @@ export type ButtonSize = 'sm' | 'md' | 'lg';
 
 /** Alturas y tipografía por tamaño. `md` es el que siempre tuvo el botón (h-12, 15px); `cta` conserva su 52px. */
 const BUTTON_SIZES: Record<ButtonSize, string> = {
-  sm: 'h-9 rounded-lg px-3 text-[13px]',
-  md: 'h-12 rounded-xl text-[15px]',
-  lg: 'h-[52px] rounded-xl text-[15px]',
+  sm: 'h-9 rounded-lg px-3 text-k-sm',
+  md: 'h-12 rounded-xl text-k-md',
+  lg: 'h-[52px] rounded-xl text-k-md',
 };
 
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
@@ -96,6 +96,35 @@ export function IconButton({
   );
 }
 
+export type TextButtonTone = 'periwinkle' | 'danger' | 'purple' | 'success' | 'muted';
+
+const TEXT_BUTTON_TONES: Record<TextButtonTone, string> = {
+  periwinkle: 'text-k-periwinkle',
+  danger: 'text-k-danger',
+  purple: 'text-k-purple',
+  success: 'text-k-success',
+  muted: 'text-k-text-2',
+};
+
+/**
+ * Acción de texto dentro de una fila o tarjeta («Cambiar», «Quitar», «Ver más»): 13px, medium, se subraya al pasar el mouse.
+ * `tone` elige el color; el resto de la caja (márgenes, `shrink-0`…) llega por `className`. Si la acción necesita fondo, borde o altura, no es esta: es `Button`.
+ */
+export function TextButton({
+  tone = 'periwinkle',
+  className = '',
+  type = 'button',
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & { tone?: TextButtonTone }) {
+  return (
+    <button
+      type={type}
+      {...props}
+      className={`text-k-sm font-medium hover:underline disabled:opacity-50 ${TEXT_BUTTON_TONES[tone]} ${className}`}
+    />
+  );
+}
+
 function IconArrow({ className = '' }: { className?: string }) {
   return (
     <svg
@@ -154,7 +183,7 @@ export const Input = forwardRef<
         ref={ref}
         type={reveal && shown ? 'text' : type}
         {...props}
-        className={`h-[52px] w-full rounded-xl border-[1.5px] bg-white text-[15px] text-k-text outline-none transition-all duration-150 placeholder:text-k-muted ${
+        className={`h-[52px] w-full rounded-xl border-[1.5px] bg-white text-k-md text-k-text outline-none transition-all duration-150 placeholder:text-k-muted ${
           icon ? 'pl-11' : 'pl-3.5'
         } ${reveal ? 'pr-11' : 'pr-3.5'} ${
           error
@@ -208,7 +237,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
       <select
         ref={ref}
         {...props}
-        className={`h-[52px] w-full rounded-xl border-[1.5px] border-k-light-bg bg-white px-3.5 text-[15px] text-k-text outline-none transition-all focus:border-k-periwinkle focus:shadow-k-focus disabled:opacity-60 ${className}`}
+        className={`h-[52px] w-full rounded-xl border-[1.5px] border-k-light-bg bg-white px-3.5 text-k-md text-k-text outline-none transition-all focus:border-k-periwinkle focus:shadow-k-focus disabled:opacity-60 ${className}`}
       />
     );
   },
@@ -221,7 +250,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<H
       <textarea
         ref={ref}
         {...props}
-        className={`w-full rounded-xl border-[1.5px] bg-white px-3.5 py-2.5 text-[15px] text-k-text outline-none transition-all placeholder:text-k-muted disabled:opacity-60 ${
+        className={`w-full rounded-xl border-[1.5px] bg-white px-3.5 py-2.5 text-k-md text-k-text outline-none transition-all placeholder:text-k-muted disabled:opacity-60 ${
           error
             ? 'border-k-danger focus:shadow-k-focus-error'
             : 'border-k-light-bg focus:border-k-periwinkle focus:shadow-k-focus'
@@ -283,14 +312,14 @@ export function Field({
 }) {
   return (
     <label className="block space-y-2">
-      <span className="text-[14px] font-medium text-k-text">{label}</span>
+      <span className="text-k-base font-medium text-k-text">{label}</span>
       {children}
       {error ? (
-        <span role="alert" className="block text-[12px] font-normal text-k-danger">
+        <span role="alert" className="block text-k-xs font-normal text-k-danger">
           {error}
         </span>
       ) : (
-        hint && <span className="block text-[12px] font-normal text-k-muted">{hint}</span>
+        hint && <span className="block text-k-xs font-normal text-k-muted">{hint}</span>
       )}
     </label>
   );
@@ -302,7 +331,7 @@ export function ErrorBanner({ message }: { message?: string | null }) {
   return (
     <div
       role="alert"
-      className="rounded-md border-l-[3px] border-k-danger bg-k-danger-bg px-3 py-2 text-[13px] text-k-danger"
+      className="rounded-md border-l-[3px] border-k-danger bg-k-danger-bg px-3 py-2 text-k-sm text-k-danger"
     >
       {message}
     </div>

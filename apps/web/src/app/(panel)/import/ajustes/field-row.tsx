@@ -91,14 +91,14 @@ export function FieldRow({
           {ICONS[field] && (
             <span
               aria-hidden
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-k-bg text-[15px]"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-k-bg text-k-md"
             >
               {ICONS[field]}
             </span>
           )}
           <span className="min-w-0">
-            <span className="block text-[14px] font-medium text-k-text">{label}</span>
-            {locked && <span className="mt-0.5 block text-[12px] text-k-text-2">{t('columns.locked')}</span>}
+            <span className="block text-k-base font-medium text-k-text">{label}</span>
+            {locked && <span className="mt-0.5 block text-k-xs text-k-text-2">{t('columns.locked')}</span>}
           </span>
         </div>
 
@@ -107,7 +107,7 @@ export function FieldRow({
             aria-label={`${t('columns.from')} — ${label}`}
             value={rule?.from ?? ''}
             disabled={busy}
-            className="h-10 text-[14px]"
+            className="h-10 text-k-base"
             onChange={(e) =>
               onSave({
                 // `in` se limpia: las opciones son etiquetas del archivo, no columnas del cuadro, y
@@ -140,12 +140,12 @@ export function FieldRow({
           </Select>
 
           {values?.length ? (
-            <p className="mt-1.5 truncate text-[12px] text-k-text-2" title={values.join(' · ')}>
+            <p className="mt-1.5 truncate text-k-xs text-k-text-2" title={values.join(' · ')}>
               <span className="text-k-muted">{t('columns.examples')} </span>
               {values.join(' · ')}
             </p>
           ) : (
-            rule?.from && <p className="mt-1.5 text-[12px] text-k-muted">{t('columns.noExamples')}</p>
+            rule?.from && <p className="mt-1.5 text-k-xs text-k-muted">{t('columns.noExamples')}</p>
           )}
         </div>
 
@@ -161,13 +161,13 @@ export function FieldRow({
       */}
       {!locked && rule && (
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 sm:pl-[42px]">
-          <label className="flex items-center gap-2 text-[12px] text-k-text-2">
+          <label className="flex items-center gap-2 text-k-xs text-k-text-2">
             {t('columns.state')}
             <Select
               aria-label={`${t('columns.state')} — ${label}`}
               value={fieldState(rule)}
               disabled={busy}
-              className="h-8 w-auto text-[13px]"
+              className="h-8 w-auto text-k-sm"
               onChange={(e) => onSave({ fields: { [field]: applyFieldState(rule, e.target.value as FieldState) } })}
             >
               {FIELD_STATES.map((state) => (
@@ -182,7 +182,7 @@ export function FieldRow({
             type="button"
             disabled={busy}
             onClick={() => onSave({ fields: { [field]: null } })}
-            className="text-[12px] font-medium text-k-text-2 underline hover:text-k-danger disabled:opacity-50"
+            className="text-k-xs font-medium text-k-text-2 underline hover:text-k-danger disabled:opacity-50"
           >
             {t('columns.remove')}
           </button>

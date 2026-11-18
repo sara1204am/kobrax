@@ -23,6 +23,7 @@ import { dateTime, time } from '@/lib/format';
 import { FichaGestion } from '../../../../mora/[creditId]/ficha-gestion';
 import { StopRecordButton } from './stop-actions';
 import { WhatsAppButton } from '../../whatsapp-button';
+import { requirePermission } from '@/lib/authz';
 
 const TABS = ['ficha', 'visits', 'evidence'] as const;
 type Tab = (typeof TABS)[number];
@@ -48,6 +49,8 @@ export default async function ParadaPage({
   params: { id: string; sid: string };
   searchParams: { tab?: string };
 }) {
+  const blocked = await requirePermission(Permission.ROUTE_READ);
+  if (blocked) return blocked;
   const t = await getTranslations('panel.routes');
   const ts = await getTranslations('panel.routes.stopPage');
   const tl = await getTranslations('portfolio.locationType');
@@ -114,7 +117,7 @@ export default async function ParadaPage({
 
   return (
     <>
-      <Link href={`/rutas/${params.id}`} className="mb-3 inline-block text-[13px] font-medium text-k-slate hover:underline">
+      <Link href={`/rutas/${params.id}`} className="mb-3 inline-block text-k-sm font-medium text-k-slate hover:underline">
         ← {ts('back')}
       </Link>
       <PageHeader
@@ -123,7 +126,7 @@ export default async function ParadaPage({
         badge={<Badge tone={STOP_STATUS_TONE[stop.status]}>{t(`stopStatus.${stop.status}`)}</Badge>}
         actions={
           <div className="flex flex-wrap items-center justify-end gap-3">
-            <Link href={`/cartera/${stop.clientId}`} className="text-[13px] font-medium text-k-purple hover:underline">
+            <Link href={`/cartera/${stop.clientId}`} className="text-k-sm font-medium text-k-purple hover:underline">
               {t('detail.openClient')}
             </Link>
             <WhatsAppButton clientId={stop.clientId} clientName={stop.clientName} />
@@ -143,7 +146,7 @@ export default async function ParadaPage({
           <Fact label={ts('hour')} value={stop.visitedAt ? time(stop.visitedAt, locale) : (stop.scheduledTime ?? '—')} />
           <Fact label={ts('lastResult')} value={stop.lastOutcome ? t(`outcome.${stop.lastOutcome}`) : t('stop.notVisited')} />
         </dl>
-        {stop.agendaItemId && <p className="mt-4 text-[13px] text-k-text-2">{ts('fromAgenda')}</p>}
+        {stop.agendaItemId && <p className="mt-4 text-k-sm text-k-text-2">{ts('fromAgenda')}</p>}
       </Card>
       </div>
 
@@ -153,13 +156,13 @@ export default async function ParadaPage({
             key={id}
             href={href(id)}
             aria-current={tab === id ? 'page' : undefined}
-            className={`-mb-px border-b-2 px-4 py-2.5 text-[14px] font-medium ${
+            className={`-mb-px border-b-2 px-4 py-2.5 text-k-base font-medium ${
               tab === id ? 'border-k-navy text-k-navy' : 'border-transparent text-k-text-2 hover:text-k-text'
             }`}
           >
             {ts(`tabs.${id}`)}
-            {id === 'visits' && registered.length > 0 && <span className="ml-1.5 text-[12px] text-k-muted">{registered.length}</span>}
-            {id === 'evidence' && evidences.length > 0 && <span className="ml-1.5 text-[12px] text-k-muted">{evidences.length}</span>}
+            {id === 'visits' && registered.length > 0 && <span className="ml-1.5 text-k-xs text-k-muted">{registered.length}</span>}
+            {id === 'evidence' && evidences.length > 0 && <span className="ml-1.5 text-k-xs text-k-muted">{evidences.length}</span>}
           </Link>
         ))}
       </nav>
@@ -167,7 +170,7 @@ export default async function ParadaPage({
       {tab === 'ficha' &&
         (stop.creditId ? (
           <>
-            {stop.externalSource && <p className="mb-3 text-[13px] text-k-warning-text">{ts('externalHint')}</p>}
+            {stop.externalSource && <p className="mb-3 text-k-sm text-k-warning-text">{ts('externalHint')}</p>}
             {/* Sin «La persona»: teléfonos, direcciones y garantes están en «Ver ficha del cliente». */}
             <FichaGestion creditId={stop.creditId} withHeader={false} withPerson={false} />
           </>
@@ -203,7 +206,7 @@ export default async function ParadaPage({
               />
             ))
           )}
-          {registered.length > 0 && <p className="text-[13px] text-k-text-2">{t('stop.immutable')}</p>}
+          {registered.length > 0 && <p className="text-k-sm text-k-text-2">{t('stop.immutable')}</p>}
         </div>
       )}
 
@@ -252,18 +255,18 @@ async function Visit({
   return (
     <Card>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="flex flex-wrap items-center gap-2 text-[15px] font-semibold text-k-navy">
+        <p className="flex flex-wrap items-center gap-2 text-k-md font-semibold text-k-navy">
           {t(`outcome.${visit.outcome}`)}
           {visit.correctsVisitId && <Badge tone="warning">{ts('correction')}</Badge>}
         </p>
-        <p className="flex items-center gap-3 text-[13px] text-k-text-2">
+        <p className="flex items-center gap-3 text-k-sm text-k-text-2">
           {dateTime(visit.capturedAt, locale)}
           {fix}
         </p>
       </div>
 
       {(byOther || visit.source === 'WEB') && (
-        <p className="mt-2 text-[13px] text-k-text-2">
+        <p className="mt-2 text-k-sm text-k-text-2">
           {byOther ? ts('loadedBy', { name: registeredByName ?? ts('someone'), collector: collectorName }) : ts('loadedFromPanel')}
         </p>
       )}
@@ -272,17 +275,17 @@ async function Visit({
         <Fact label="GPS" value={`${visit.latitude.toFixed(5)}, ${visit.longitude.toFixed(5)}`} />
         <Fact label={t('stop.accuracy')} value={visit.accuracy != null ? `± ${visit.accuracy} m` : '—'} />
       </dl>
-      {estimated && <p className="mt-2 text-[13px] text-k-warning-text">{t('stop.gpsEstimated')}</p>}
+      {estimated && <p className="mt-2 text-k-sm text-k-warning-text">{t('stop.gpsEstimated')}</p>}
 
       {visit.notes && (
         <div className="mt-5">
-          <p className="text-[12px] font-semibold uppercase tracking-wide text-k-text-2">{t('stop.notes')}</p>
-          <p className="mt-1 text-[15px] text-k-text">{visit.notes}</p>
+          <p className="text-k-xs font-semibold uppercase tracking-wide text-k-text-2">{t('stop.notes')}</p>
+          <p className="mt-1 text-k-md text-k-text">{visit.notes}</p>
         </div>
       )}
 
       {visit.evidences.length > 0 && (
-        <p className="mt-4 text-[13px] text-k-text-2">{ts('withEvidence', { n: visit.evidences.length })}</p>
+        <p className="mt-4 text-k-sm text-k-text-2">{ts('withEvidence', { n: visit.evidences.length })}</p>
       )}
     </Card>
   );
@@ -296,8 +299,8 @@ async function Evidence({ evidence, locale }: { evidence: EvidenceItem; locale: 
   return (
     <li className="rounded-2xl border border-k-border bg-white p-4">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[14px] font-medium text-k-text">{t(`evidenceType.${evidence.type}`)}</span>
-        <span className="text-[13px] text-k-text-2">{dateTime(evidence.capturedAt, locale)}</span>
+        <span className="text-k-base font-medium text-k-text">{t(`evidenceType.${evidence.type}`)}</span>
+        <span className="text-k-sm text-k-text-2">{dateTime(evidence.capturedAt, locale)}</span>
       </div>
 
       {/*
@@ -325,17 +328,17 @@ async function Evidence({ evidence, locale }: { evidence: EvidenceItem; locale: 
             href={evidence.fileUrl}
             rel="noreferrer"
             target="_blank"
-            className="mt-3 block break-all text-[13px] text-k-purple hover:underline"
+            className="mt-3 block break-all text-k-sm text-k-purple hover:underline"
           >
             {evidence.fileUrl}
           </a>
         ))}
 
-      <p className="mt-3 text-[12px] font-semibold uppercase tracking-wide text-k-text-2">{t('stop.hash')}</p>
+      <p className="mt-3 text-k-xs font-semibold uppercase tracking-wide text-k-text-2">{t('stop.hash')}</p>
       {/* Entero y en monoespaciada: sus 64 caracteres son lo que prueba que el archivo no cambió,
           y recortarlo lo volvería decorativo. */}
-      <p className="mt-1 break-all font-mono text-[12px] text-k-text">{evidence.fileHash}</p>
-      <p className="mt-1 text-[12px] text-k-muted">{t('stop.hashHint')}</p>
+      <p className="mt-1 break-all font-mono text-k-xs text-k-text">{evidence.fileHash}</p>
+      <p className="mt-1 text-k-xs text-k-muted">{t('stop.hashHint')}</p>
     </li>
   );
 }

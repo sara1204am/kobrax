@@ -7,6 +7,8 @@ import { apiCall, pageMeta } from '@/lib/bff';
 import { paymentLimit, requestQuery, requestStatus, type RequestParams } from '@/lib/payments';
 import { EmptyState, PageHeader } from '@/components/panel-ui';
 import { RequestsTable } from './requests-table';
+import { requirePermission } from '@/lib/authz';
+import { Permission } from '@kobrax/shared';
 
 /**
  * Los cobros pedidos. Abre en lo que falta confirmar.
@@ -15,6 +17,8 @@ import { RequestsTable } from './requests-table';
  * lista: antes `/pagos/solicitudes` redirigía al ledger porque la API sólo leía una por id.
  */
 export default async function SolicitudesPage({ searchParams }: { searchParams: RequestParams }) {
+  const blocked = await requirePermission(Permission.PAYMENT_READ);
+  if (blocked) return blocked;
   if (!PAYMENT_REQUESTS_ENABLED) notFound(); // apagado en la primera versión: ver `lib/features.ts`
   const t = await getTranslations('panel.payments');
 
@@ -31,7 +35,7 @@ export default async function SolicitudesPage({ searchParams }: { searchParams: 
   return (
     <>
       <PageHeader title={t('requests.listTitle')} subtitle={t('requests.listSubtitle')} />
-      <Link href="/pagos" className="mb-4 block text-[14px] font-medium text-k-purple hover:underline">
+      <Link href="/pagos" className="mb-4 block text-k-base font-medium text-k-purple hover:underline">
         {t('allPayments')}
       </Link>
       <RequestsTable

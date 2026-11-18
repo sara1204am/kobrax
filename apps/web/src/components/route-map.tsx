@@ -87,7 +87,7 @@ export function RouteMap({
       const pin = document.createElement('div');
       const bg = stop.tone === 'done' ? 'bg-k-success' : stop.tone === 'pending' ? 'bg-k-muted' : 'bg-k-navy';
       // Sin orden, el pin es un punto: más chico y sin número, para no prometer un recorrido.
-      const size = stop.sequenceOrder ? 'h-7 w-7 text-[12px]' : 'h-4 w-4';
+      const size = stop.sequenceOrder ? 'h-7 w-7 text-k-xs' : 'h-4 w-4';
       pin.className = `flex ${size} items-center justify-center rounded-full border-2 border-white ${bg} font-semibold text-white shadow`;
       if (stop.sequenceOrder) pin.textContent = String(stop.sequenceOrder);
       if (stop.photoUrl) {
@@ -105,10 +105,10 @@ export function RouteMap({
       if (stop.title || (stop.lines && stop.lines.length > 0)) {
         // Se arma con nodos de texto y no con HTML: el nombre de un cliente nunca se interpreta como marcado.
         const box = document.createElement('div');
-        box.className = 'min-w-[160px] text-[12px] leading-5 text-k-text';
+        box.className = 'min-w-[160px] text-k-xs leading-5 text-k-text';
         if (stop.title) {
           const title = document.createElement('div');
-          title.className = 'text-[13px] font-semibold text-k-navy';
+          title.className = 'text-k-sm font-semibold text-k-navy';
           title.textContent = stop.title;
           box.appendChild(title);
         }

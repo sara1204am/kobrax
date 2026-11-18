@@ -144,10 +144,10 @@ export function CatalogEditor({ catalog: initial, lists }: { catalog: EditableCa
       inner="p-6"
       action={
         <span className="flex shrink-0 flex-wrap items-center justify-end gap-3">
-          <span className="text-[13px] text-k-text-2">{t('count', { count: EDITABLE_CATALOGS.length })}</span>
+          <span className="text-k-sm text-k-text-2">{t('count', { count: EDITABLE_CATALOGS.length })}</span>
           <Link
             href="/cuenta/general"
-            className="rounded-xl border border-k-border bg-white px-3 py-2 text-[13px] font-medium text-k-slate hover:bg-k-bg"
+            className="rounded-xl border border-k-border bg-white px-3 py-2 text-k-sm font-medium text-k-slate hover:bg-k-bg"
           >
             {t('settings')}
           </Link>
@@ -163,7 +163,7 @@ export function CatalogEditor({ catalog: initial, lists }: { catalog: EditableCa
             onChange={(e) => setCatalogQuery(e.target.value)}
             placeholder={t('searchCatalog')}
             aria-label={t('searchCatalog')}
-            className="!h-11 !text-[14px]"
+            className="!h-11 !text-k-base"
           />
           <ul className="list-none space-y-1">
             {catalogs.map((c) => {
@@ -181,8 +181,8 @@ export function CatalogEditor({ catalog: initial, lists }: { catalog: EditableCa
                   >
                     <Icon name={ICON_OF[c]} className="h-5 w-5 shrink-0 text-k-slate" />
                     <span className="min-w-0 flex-1">
-                      <span className="block text-[14px] font-medium text-k-text">{t(`names.${c}`)}</span>
-                      <span className="block text-[12px] text-k-text-2">{t('options', { count })}</span>
+                      <span className="block text-k-base font-medium text-k-text">{t(`names.${c}`)}</span>
+                      <span className="block text-k-xs text-k-text-2">{t('options', { count })}</span>
                     </span>
                     <Icon name="chevron" className="h-4 w-4 shrink-0 -rotate-90 text-k-muted" />
                   </button>
@@ -190,7 +190,7 @@ export function CatalogEditor({ catalog: initial, lists }: { catalog: EditableCa
               );
             })}
           </ul>
-          {catalogs.length === 0 && <p className="px-2 py-3 text-[13px] text-k-text-2">{t('catalogsEmpty')}</p>}
+          {catalogs.length === 0 && <p className="px-2 py-3 text-k-sm text-k-text-2">{t('catalogsEmpty')}</p>}
         </nav>
 
         {/* ── Las opciones del catálogo abierto ── */}
@@ -201,8 +201,8 @@ export function CatalogEditor({ catalog: initial, lists }: { catalog: EditableCa
                 <Icon name={ICON_OF[catalog]} className="h-6 w-6" />
               </span>
               <div className="min-w-0">
-                <h3 className="text-[20px] font-semibold text-k-navy">{t(`names.${catalog}`)}</h3>
-                <p className="text-[13px] text-k-text-2">{t('panelSubtitle')}</p>
+                <h3 className="text-k-2xl font-semibold text-k-navy">{t(`names.${catalog}`)}</h3>
+                <p className="text-k-sm text-k-text-2">{t('panelSubtitle')}</p>
               </div>
             </div>
             {editable && (
@@ -225,7 +225,7 @@ export function CatalogEditor({ catalog: initial, lists }: { catalog: EditableCa
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={t('searchOption')}
                 aria-label={t('searchOption')}
-                className="!h-11 !text-[14px]"
+                className="!h-11 !text-k-base"
               />
             </span>
             <span className="w-full sm:w-44">
@@ -233,7 +233,7 @@ export function CatalogEditor({ catalog: initial, lists }: { catalog: EditableCa
                 value={filter}
                 onChange={(e) => setFilter(e.target.value as Filter)}
                 aria-label={t('filterLabel')}
-                className="!h-11 !text-[14px]"
+                className="!h-11 !text-k-base"
               >
                 <option value="all">{t('filter.all')}</option>
                 <option value="active">{t('filter.active')}</option>
@@ -245,14 +245,14 @@ export function CatalogEditor({ catalog: initial, lists }: { catalog: EditableCa
           <ErrorBanner message={error} />
 
           {rows.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-k-border px-4 py-6 text-center text-[13px] text-k-text-2">{t('empty')}</p>
+            <p className="rounded-xl border border-dashed border-k-border px-4 py-6 text-center text-k-sm text-k-text-2">{t('empty')}</p>
           ) : visible.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-k-border px-4 py-6 text-center text-[13px] text-k-text-2">{t('emptyFiltered')}</p>
+            <p className="rounded-xl border border-dashed border-k-border px-4 py-6 text-center text-k-sm text-k-text-2">{t('emptyFiltered')}</p>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-k-border">
               <table className="w-full min-w-[560px] border-collapse text-left">
                 <thead>
-                  <tr className="bg-k-bg text-[12px] font-semibold text-k-text-2">
+                  <tr className="bg-k-bg text-k-xs font-semibold text-k-text-2">
                     <th scope="col" className="w-16 px-3 py-3 text-center">
                       {t('columns.order')}
                     </th>
@@ -308,17 +308,17 @@ export function CatalogEditor({ catalog: initial, lists }: { catalog: EditableCa
                               <Icon name="grip" className="h-5 w-5" />
                             </button>
                           ) : (
-                            <span className="text-[13px] text-k-muted">{index + 1}</span>
+                            <span className="text-k-sm text-k-muted">{index + 1}</span>
                           )}
                         </td>
                         <td className="px-3 py-3">
-                          <p className={`text-[14px] font-medium ${row.isActive ? 'text-k-text' : 'text-k-text-2'}`}>{row.label}</p>
-                          {description && <p className="mt-0.5 text-[13px] text-k-text-2">{description}</p>}
+                          <p className={`text-k-base font-medium ${row.isActive ? 'text-k-text' : 'text-k-text-2'}`}>{row.label}</p>
+                          {description && <p className="mt-0.5 text-k-sm text-k-text-2">{description}</p>}
                           {catalog === 'PAYMENT_METHOD' &&
                             (ledger ? (
-                              <p className="mt-0.5 text-[12px] text-k-muted">{t('ledgerShort', { method: tMethod(ledger) })}</p>
+                              <p className="mt-0.5 text-k-xs text-k-muted">{t('ledgerShort', { method: tMethod(ledger) })}</p>
                             ) : (
-                              <p className="mt-0.5 text-[12px] text-k-warning-text">{t('noLedger')}</p>
+                              <p className="mt-0.5 text-k-xs text-k-warning-text">{t('noLedger')}</p>
                             ))}
                         </td>
                         <td className="hidden px-3 py-3 md:table-cell">
@@ -327,7 +327,7 @@ export function CatalogEditor({ catalog: initial, lists }: { catalog: EditableCa
                           </span>
                         </td>
                         <td className="px-3 py-3">
-                          <span className="flex items-center gap-2 text-[13px] text-k-text-2">
+                          <span className="flex items-center gap-2 text-k-sm text-k-text-2">
                             <Switch
                               checked={row.isActive}
                               disabled={!editable || busy}
@@ -371,13 +371,13 @@ export function CatalogEditor({ catalog: initial, lists }: { catalog: EditableCa
           {editable ? (
             canReorder &&
             rows.length > 1 && (
-              <p className="flex items-center gap-2 rounded-xl border border-k-border bg-k-bg px-4 py-3 text-[13px] text-k-slate">
+              <p className="flex items-center gap-2 rounded-xl border border-k-border bg-k-bg px-4 py-3 text-k-sm text-k-slate">
                 <Icon name="info" className="h-4 w-4 shrink-0" />
                 {t('dragHint')}
               </p>
             )
           ) : (
-            <p className="text-[13px] text-k-text-2">{t('readOnly')}</p>
+            <p className="text-k-sm text-k-text-2">{t('readOnly')}</p>
           )}
         </div>
       </div>
@@ -408,7 +408,7 @@ function MenuItem({ onPick, children }: { onPick: () => void; children: React.Re
         if (menu) menu.open = false;
         onPick();
       }}
-      className="block w-full px-3 py-2 text-left text-[13px] text-k-text hover:bg-k-bg focus:bg-k-bg focus:outline-none"
+      className="block w-full px-3 py-2 text-left text-k-sm text-k-text hover:bg-k-bg focus:bg-k-bg focus:outline-none"
     >
       {children}
     </button>

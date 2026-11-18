@@ -214,7 +214,7 @@ export function RegisterActivityButton({
 
           {promises && (
             <fieldset className="space-y-4 rounded-xl border border-k-border bg-k-bg p-3">
-              <legend className="px-1 text-[12px] font-semibold uppercase tracking-wide text-k-text-2">{tf('promise')}</legend>
+              <legend className="px-1 text-k-xs font-semibold uppercase tracking-wide text-k-text-2">{tf('promise')}</legend>
               <Field label={tf('amount')}>
                 <Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} disabled={busy} />
               </Field>
@@ -249,8 +249,8 @@ export function RegisterActivityButton({
           {/* F4/13 · E4. Opcional: dejarlo en blanco no es un error, y una nota no lo lleva. */}
           {withContext && (
             <fieldset className="space-y-4 rounded-xl border border-k-border bg-k-bg p-3">
-              <legend className="px-1 text-[12px] font-semibold uppercase tracking-wide text-k-text-2">{tf('context')}</legend>
-              <p className="text-[12px] text-k-muted">{tf('contextHint')}</p>
+              <legend className="px-1 text-k-xs font-semibold uppercase tracking-wide text-k-text-2">{tf('context')}</legend>
+              <p className="text-k-xs text-k-muted">{tf('contextHint')}</p>
               <Field label={tf('reason')}>
                 <Select value={reasonCode} onChange={(e) => setReasonCode(e.target.value)} disabled={busy}>
                   <option value="">{tf('reasonPlaceholder')}</option>
@@ -262,7 +262,7 @@ export function RegisterActivityButton({
                 </Select>
               </Field>
               {typeof selectedReason?.metadata?.suggestion === 'string' && (
-                <p className="text-[12px] text-k-text-2">{selectedReason.metadata.suggestion}</p>
+                <p className="text-k-xs text-k-text-2">{selectedReason.metadata.suggestion}</p>
               )}
               {asksIncomeDate && (
                 <Field label={tf('expectedIncome')}>

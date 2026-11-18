@@ -426,7 +426,7 @@ function ReasonField({
           ))}
         </Select>
       ) : (
-        <p className="text-[13px] text-k-text-2">{t('noReasons')}</p>
+        <p className="text-k-sm text-k-text-2">{t('noReasons')}</p>
       )}
     </Field>
   );

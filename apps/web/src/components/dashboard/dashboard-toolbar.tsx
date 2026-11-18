@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { DashboardDefinition, DashboardWidget } from '@kobrax/shared';
 import { Button, ErrorBanner, Field, Input } from '@/components/ui';
+import { ConfirmDialog } from '@/components/form-kit';
 import { Modal } from '@/components/modal';
 import { WidgetPreview } from './widget-preview';
 import { useToast } from '@/components/toast';
@@ -41,6 +42,7 @@ export function DashboardToolbar({
 
   const [adding, setAdding] = useState(false);
   const [renaming, setRenaming] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [name, setName] = useState(current?.name ?? '');
   const [search, setSearch] = useState('');
   const [busy, setBusy] = useState(false);
@@ -121,7 +123,7 @@ export function DashboardToolbar({
               setName(current.name);
               setRenaming(true);
             }}
-            className="h-10 rounded-xl px-3 text-[13px] font-medium text-k-purple hover:bg-k-bg"
+            className="h-10 rounded-xl px-3 text-k-sm font-medium text-k-purple hover:bg-k-bg"
           >
             {t('rename')}
           </button>
@@ -152,19 +154,32 @@ export function DashboardToolbar({
             {/* Borrar pregunta antes: para quien mira, el tablero desaparece. */}
             <Button
               variant="ghost"
-              onClick={async () => {
-                if (!window.confirm(t('deleteConfirm', { name: current.name }))) return;
+              onClick={() => setConfirmingDelete(true)}
+              className="sm:w-auto sm:px-4"
+            >
+              {t('delete')}
+            </Button>
+            <ConfirmDialog
+              open={confirmingDelete}
+              title={t('delete')}
+              description={<p className="text-k-base text-k-text">{t('deleteConfirm', { name: current.name })}</p>}
+              confirmLabel={t('delete')}
+              cancelLabel={t('cancel')}
+              danger
+              loading={busy}
+              onClose={() => setConfirmingDelete(false)}
+              onConfirm={async () => {
+                setBusy(true);
                 const res = await sendJson(`/api/dashboards/${current.id}`, {}, 'DELETE');
+                setBusy(false);
+                setConfirmingDelete(false);
                 if (res.ok) {
                   toast(t('deleted'));
                   go({ view: null, edit: null });
                   router.refresh();
                 } else toast(t('saveError'), 'danger');
               }}
-              className="sm:w-auto sm:px-4"
-            >
-              {t('delete')}
-            </Button>
+            />
           </>
         )}
         <Button onClick={() => go({ edit: editable ? null : '1' })} className="sm:w-auto sm:px-5">
@@ -189,16 +204,16 @@ export function DashboardToolbar({
                   className="h-full w-full rounded-xl border border-k-border px-3 py-2.5 text-left hover:bg-k-bg disabled:opacity-50"
                 >
                   <WidgetPreview type={item.type} strip={item.id === 'kpiStrip'} />
-                  <span className="mt-2 block text-[14px] font-semibold text-k-text">{t(`catalogItems.${item.id}.name`)}</span>
-                  <span className="mt-0.5 block text-[12px] leading-snug text-k-text-2">
+                  <span className="mt-2 block text-k-base font-semibold text-k-text">{t(`catalogItems.${item.id}.name`)}</span>
+                  <span className="mt-0.5 block text-k-xs leading-snug text-k-text-2">
                     {t(`catalogItems.${item.id}.description`)}
                   </span>
-                  {def && <span className="mt-1.5 block text-[11px] text-k-muted">{t(`catalog.${def.labelKey}`)}</span>}
+                  {def && <span className="mt-1.5 block text-k-2xs text-k-muted">{t(`catalog.${def.labelKey}`)}</span>}
                 </button>
               </li>
             );
           })}
-          {filtered.length === 0 && <li className="col-span-full py-6 text-center text-[13px] text-k-muted">{t('noWidgetMatch')}</li>}
+          {filtered.length === 0 && <li className="col-span-full py-6 text-center text-k-sm text-k-muted">{t('noWidgetMatch')}</li>}
         </ul>
       </Modal>
 

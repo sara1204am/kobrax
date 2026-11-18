@@ -63,12 +63,12 @@ export function AdvisorLinks({
 
   return (
     <section className="mt-8 rounded-2xl border border-k-border bg-white p-6">
-      <h2 className="text-[18px] font-semibold text-k-navy">{t('title')}</h2>
-      <p className="mt-1 text-[14px] text-k-text-2">{t('subtitle')}</p>
+      <h2 className="text-k-xl font-semibold text-k-navy">{t('title')}</h2>
+      <p className="mt-1 text-k-base text-k-text-2">{t('subtitle')}</p>
       <ErrorBanner message={error} />
 
       {unlinked.length > 0 && (
-        <p className="mt-3 rounded-xl bg-k-warning-bg px-4 py-3 text-[13px] text-k-warning-text">
+        <p className="mt-3 rounded-xl bg-k-warning-bg px-4 py-3 text-k-sm text-k-warning-text">
           {t('unlinked', { codes: unlinked.join(', ') })}
         </p>
       )}
@@ -76,13 +76,13 @@ export function AdvisorLinks({
       {links.length > 0 ? (
         <ul className="mt-4 divide-y divide-k-border">
           {links.map((l) => (
-            <li key={l.advisorCode} className="flex items-center justify-between py-2 text-[14px]">
+            <li key={l.advisorCode} className="flex items-center justify-between py-2 text-k-base">
               <span>
                 <span className="font-semibold text-k-navy">{l.advisorCode}</span> → {nameOf(l.userId)}
               </span>
               <button
                 type="button"
-                className="text-[13px] font-semibold text-k-danger hover:underline disabled:opacity-50"
+                className="text-k-sm font-semibold text-k-danger hover:underline disabled:opacity-50"
                 onClick={() => void remove(l.advisorCode)}
                 disabled={busy}
               >
@@ -92,7 +92,7 @@ export function AdvisorLinks({
           ))}
         </ul>
       ) : (
-        <p className="mt-4 text-[13px] text-k-text-2">{t('none')}</p>
+        <p className="mt-4 text-k-sm text-k-text-2">{t('none')}</p>
       )}
 
       <form onSubmit={(e) => void save(e)} className="mt-4 grid gap-3 sm:grid-cols-[1fr_2fr_auto] sm:items-end">

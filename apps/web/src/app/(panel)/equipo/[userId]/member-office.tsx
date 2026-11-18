@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Button, ErrorBanner } from '@/components/ui';
+import { Button, ErrorBanner, TextButton } from '@/components/ui';
 import { OfficeSelect } from '@/components/office-select';
 import { usePermissions } from '@/components/permissions';
 import { useToast } from '@/components/toast';
@@ -47,7 +47,7 @@ export function MemberOffice({ userId, branchId, offices }: { userId: string; br
       {can('office:write') && (
         <div className="space-y-2">
           <ErrorBanner message={error} />
-          <label className="block text-[12px] font-medium text-k-text-2" htmlFor={`office-of-${userId}`}>
+          <label className="block text-k-xs font-medium text-k-text-2" htmlFor={`office-of-${userId}`}>
             {t('changeOffice')}
           </label>
           <div className="flex flex-wrap items-center gap-2">
@@ -66,17 +66,17 @@ export function MemberOffice({ userId, branchId, offices }: { userId: string; br
               </Button>
             </span>
             {branchId && (
-              <button
+              <TextButton
                 type="button"
                 disabled={busy}
                 onClick={() => void call(() => sendJson(`/api/branches/${branchId}/members/${userId}`, null, 'DELETE'), t('officeRemoved'))}
-                className="text-[13px] font-medium text-k-danger hover:underline disabled:opacity-50"
+                tone="danger"
               >
                 {t('officeRemove')}
-              </button>
+              </TextButton>
             )}
           </div>
-          <p className="text-[12px] text-k-muted">{t('officeOne')}</p>
+          <p className="text-k-xs text-k-muted">{t('officeOne')}</p>
         </div>
       )}
     </div>

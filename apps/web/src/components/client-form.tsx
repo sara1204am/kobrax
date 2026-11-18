@@ -24,7 +24,7 @@ import {
   type LocationRow,
   type RelationRow,
 } from '@kobrax/shared';
-import { Field, Input, Select } from '@/components/ui';
+import { Field, Input, Select, TextButton } from '@/components/ui';
 import { useWorkspace } from '@/components/workspace';
 
 /**
@@ -236,7 +236,7 @@ export function ContactRows({
   disabled?: boolean;
 }) {
   const t = useTranslations('portfolio');
-  if (rows.length === 0) return <p className="text-[14px] text-k-muted">{t('noContacts')}</p>;
+  if (rows.length === 0) return <p className="text-k-base text-k-muted">{t('noContacts')}</p>;
 
   return (
     /*
@@ -346,7 +346,7 @@ export function LocationRows({
   modalities?: CatalogOption[];
 }) {
   const t = useTranslations('portfolio');
-  if (rows.length === 0) return <p className="text-[14px] text-k-muted">{t('noLocations')}</p>;
+  if (rows.length === 0) return <p className="text-k-base text-k-muted">{t('noLocations')}</p>;
 
   return (
     // Ídem los teléfonos: cada dirección en su tarjeta y con etiquetas. Son seis campos —tipo,
@@ -499,7 +499,7 @@ function CoordFields({
   return (
     <div className="mt-4 space-y-3">
       <div>
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-k-text-2">
+        <p className="mb-2 text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">
           {t('form.coordMode')}
         </p>
         <div
@@ -518,7 +518,7 @@ function CoordFields({
                 setGeoError(null);
                 onChange({ coordMode: m.value });
               }}
-              className={`rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors disabled:opacity-50 ${
+              className={`rounded-lg px-3 py-1.5 text-k-sm font-medium transition-colors disabled:opacity-50 ${
                 row.coordMode === m.value
                   ? 'bg-k-highlight text-k-periwinkle'
                   : 'text-k-text-2 hover:text-k-text'
@@ -563,7 +563,7 @@ function CoordFields({
             type="button"
             onClick={capturar}
             disabled={disabled || ubicando}
-            className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg bg-k-highlight px-3 text-[13px] font-medium text-k-periwinkle hover:bg-k-light-bg disabled:opacity-50"
+            className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg bg-k-highlight px-3 text-k-sm font-medium text-k-periwinkle hover:bg-k-light-bg disabled:opacity-50"
           >
             {ubicando
               ? t('form.locating')
@@ -571,7 +571,7 @@ function CoordFields({
                 ? t('form.recaptureLocation')
                 : t('form.captureLocation')}
           </button>
-          {punto && <span className="text-[12px] text-k-text-2">{punto}</span>}
+          {punto && <span className="text-k-xs text-k-text-2">{punto}</span>}
         </div>
       )}
 
@@ -589,11 +589,11 @@ function CoordFields({
             height={240}
             label={t('form.mapPick')}
           />
-          <p className="text-[12px] text-k-text-2">{punto ?? t('form.pinHint')}</p>
+          <p className="text-k-xs text-k-text-2">{punto ?? t('form.pinHint')}</p>
         </>
       )}
 
-      {geoError && <p className="text-[12px] text-k-danger">{geoError}</p>}
+      {geoError && <p className="text-k-xs text-k-danger">{geoError}</p>}
     </div>
   );
 }
@@ -610,7 +610,7 @@ export function GuarantorRows({
   disabled?: boolean;
 }) {
   const t = useTranslations('portfolio');
-  if (rows.length === 0) return <p className="text-[13px] text-k-muted">{t('noGuarantors')}</p>;
+  if (rows.length === 0) return <p className="text-k-sm text-k-muted">{t('noGuarantors')}</p>;
 
   return (
     <div className="space-y-4">
@@ -645,7 +645,7 @@ export function CollateralRows({
   disabled?: boolean;
 }) {
   const t = useTranslations('portfolio');
-  if (rows.length === 0) return <p className="text-[13px] text-k-muted">{t('noCollaterals')}</p>;
+  if (rows.length === 0) return <p className="text-k-sm text-k-muted">{t('noCollaterals')}</p>;
 
   return (
     <div className="space-y-4">
@@ -848,7 +848,7 @@ function CreditPicker({
   const t = useTranslations('portfolio');
   const format = useFormatter();
   if (credits.length === 0)
-    return <p className="text-[13px] text-k-muted">{t('form.noCreditsYet')}</p>;
+    return <p className="text-k-sm text-k-muted">{t('form.noCreditsYet')}</p>;
 
   const toggle = (id: string) =>
     onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
@@ -856,7 +856,7 @@ function CreditPicker({
   return (
     <div className="flex flex-wrap gap-x-5 gap-y-2">
       {credits.map((c) => (
-        <label key={c.id} className="flex items-center gap-2 text-[13px] text-k-text">
+        <label key={c.id} className="flex items-center gap-2 text-k-sm text-k-text">
           <input
             type="checkbox"
             checked={selected.includes(c.id)}
@@ -987,7 +987,7 @@ function CollateralFields({
       </div>
 
       <div className="mt-4 border-t border-k-border pt-4">
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-k-text-2">
+        <p className="mb-2 text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">
           {t('form.appliesTo')}
         </p>
         <CreditPicker
@@ -1075,7 +1075,7 @@ function RelationFields({
       {/* A qué créditos responde. Va acá arriba, junto a quién es, y no al final entre sus
           teléfonos: es lo que distingue a un garante de un contacto cualquiera. */}
       <div className="mt-3 border-t border-k-border pt-3">
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-k-text-2">
+        <p className="mb-2 text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">
           {t('form.guarantees')}
         </p>
         <CreditPicker
@@ -1162,7 +1162,7 @@ function Acordeon({
         <span aria-hidden className="text-k-muted transition-transform group-open:rotate-180">
           ⌄
         </span>
-        <span className="flex-1 text-[14px] font-semibold text-k-navy">
+        <span className="flex-1 text-k-base font-semibold text-k-navy">
           {title}
           {count != null && count > 0 && (
             <span className="ml-1.5 font-normal text-k-muted">({count})</span>
@@ -1172,13 +1172,13 @@ function Acordeon({
       <div className="border-t border-k-border p-4">
         {onAdd && (
           <div className="mb-3 flex justify-end">
-            <button
+            <TextButton
               type="button"
               onClick={onAdd}
-              className="text-[13px] font-medium text-k-periwinkle hover:underline"
+              tone="periwinkle"
             >
               + {addLabel}
-            </button>
+            </TextButton>
           </div>
         )}
         {children}
@@ -1201,15 +1201,15 @@ function Sub({
   return (
     <>
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="text-[16px] font-semibold text-k-navy">{title}</h2>
+        <h2 className="text-k-lg font-semibold text-k-navy">{title}</h2>
         {onAdd && (
-          <button
+          <TextButton
             type="button"
             onClick={onAdd}
-            className="text-[13px] font-medium text-k-purple hover:underline"
+            tone="purple"
           >
             {addLabel}
-          </button>
+          </TextButton>
         )}
       </div>
       {children}
@@ -1229,7 +1229,7 @@ function Check({
   disabled?: boolean;
 }) {
   return (
-    <label className="flex items-center gap-2 whitespace-nowrap text-[13px] text-k-text-2">
+    <label className="flex items-center gap-2 whitespace-nowrap text-k-sm text-k-text-2">
       <input
         type="checkbox"
         checked={checked}
@@ -1253,12 +1253,12 @@ function RemoveButton({
 }) {
   if (disabled) return null;
   return (
-    <button
+    <TextButton
       type="button"
       onClick={onClick}
-      className="text-[13px] font-medium text-k-danger hover:underline"
+      tone="danger"
     >
       {label}
-    </button>
+    </TextButton>
   );
 }

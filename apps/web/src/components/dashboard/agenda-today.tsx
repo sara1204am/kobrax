@@ -47,13 +47,13 @@ export async function AgendaToday({ summary }: { summary: AgendaTodaySummary }) 
       <div className="flex flex-wrap items-center gap-3">
         <dl className="flex gap-3">
           <div className={`flex min-w-[96px] flex-col-reverse items-center rounded-xl px-4 py-3 ${summary.overdue > 0 ? 'bg-k-danger-bg' : 'bg-k-bg'}`}>
-            <dt className="text-[12px] text-k-text-2">{t('overdue')}</dt>
+            <dt className="text-k-xs text-k-text-2">{t('overdue')}</dt>
             <dd className={`text-[24px] font-semibold tabular-nums ${summary.overdue > 0 ? 'text-k-danger' : 'text-k-text'}`}>
               {summary.overdue}
             </dd>
           </div>
           <div className="flex min-w-[96px] flex-col-reverse items-center rounded-xl bg-k-bg px-4 py-3">
-            <dt className="text-[12px] text-k-text-2">{t('pending')}</dt>
+            <dt className="text-k-xs text-k-text-2">{t('pending')}</dt>
             <dd className="text-[24px] font-semibold tabular-nums text-k-navy">{summary.pending}</dd>
           </div>
         </dl>
@@ -65,7 +65,7 @@ export async function AgendaToday({ summary }: { summary: AgendaTodaySummary }) 
                 <span className={`flex h-9 w-9 items-center justify-center rounded-full ${TYPE_STYLE[type].tile}`}>
                   <TypeIcon type={type} />
                 </span>
-                <span className="text-[12px] text-k-text-2 group-hover:text-k-navy">{t(`types.${type}`)}</span>
+                <span className="text-k-xs text-k-text-2 group-hover:text-k-navy">{t(`types.${type}`)}</span>
               </Link>
             </li>
           ))}
@@ -80,16 +80,16 @@ export async function AgendaToday({ summary }: { summary: AgendaTodaySummary }) 
             return (
               <li key={item.id}>
                 <Link href={`/agenda/${item.id}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-k-bg">
-                  <span className="w-12 shrink-0 text-[13px] tabular-nums text-k-text-2">{itemWhen(item, ta)}</span>
+                  <span className="w-12 shrink-0 text-k-sm tabular-nums text-k-text-2">{itemWhen(item, ta)}</span>
                   <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${known ? TYPE_STYLE[type].tile : 'bg-k-bg text-k-text-2'}`}>
                     {known && <TypeIcon type={type} />}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block text-[14px] font-semibold text-k-text">{ta(`type.${item.type}`)}</span>
-                    <span className="block truncate text-[13px] text-k-text-2">{item.clientName ?? '—'}</span>
+                    <span className="block text-k-base font-semibold text-k-text">{ta(`type.${item.type}`)}</span>
+                    <span className="block truncate text-k-sm text-k-text-2">{item.clientName ?? '—'}</span>
                   </span>
                   <span
-                    className={`rounded-full px-3 py-0.5 text-[12px] font-medium ${
+                    className={`rounded-full px-3 py-0.5 text-k-xs font-medium ${
                       item.isOverdue ? 'bg-k-danger-bg text-k-danger' : 'bg-k-info-bg text-k-slate'
                     }`}
                   >
@@ -102,15 +102,15 @@ export async function AgendaToday({ summary }: { summary: AgendaTodaySummary }) 
           })}
         </ul>
       ) : (
-        <p className="mt-4 text-[14px] text-k-text-2">{summary.overdue > 0 ? t('onlyOverdue') : t('nothing')}</p>
+        <p className="mt-4 text-k-base text-k-text-2">{summary.overdue > 0 ? t('onlyOverdue') : t('nothing')}</p>
       )}
 
       {more > 0 && (
         <Link
           href="/agenda"
-          className="mt-3 flex items-center gap-3 rounded-xl bg-k-info-bg px-4 py-2.5 text-[13px] font-medium text-k-slate hover:bg-k-light-bg"
+          className="mt-3 flex items-center gap-3 rounded-xl bg-k-info-bg px-4 py-2.5 text-k-sm font-medium text-k-slate hover:bg-k-light-bg"
         >
-          <span aria-hidden="true" className="text-[16px] leading-none">+</span>
+          <span aria-hidden="true" className="text-k-lg leading-none">+</span>
           <span className="flex-1">{t('more', { n: more })}</span>
           <span aria-hidden="true">›</span>
         </Link>
@@ -119,14 +119,14 @@ export async function AgendaToday({ summary }: { summary: AgendaTodaySummary }) 
       {/* Con `agenda:assign`: cuánto tiene cada persona del equipo, la más atrasada primero. Una tabla simple, no un tablero. */}
       {summary.load && summary.load.length > 0 && (
         <div className="mt-5 border-t border-k-border pt-4">
-          <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-k-text-2">{t('team')}</h3>
+          <h3 className="mb-2 text-k-xs font-semibold uppercase tracking-wide text-k-text-2">{t('team')}</h3>
           <ul className="divide-y divide-k-border rounded-xl border border-k-border">
             {summary.load.map((row) => (
               <li key={row.assigneeId}>
                 <Link href={`/agenda?gestor=${row.assigneeId}`} className="flex items-center gap-3 px-4 py-2 hover:bg-k-bg">
-                  <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-k-text">{row.name ?? '—'}</span>
-                  <span className="w-28 text-right text-[13px] tabular-nums text-k-text-2">{t('loadPending', { n: row.pending })}</span>
-                  <span className={`w-28 text-right text-[13px] font-medium tabular-nums ${row.overdue > 0 ? 'text-k-danger' : 'text-k-text-2'}`}>
+                  <span className="min-w-0 flex-1 truncate text-k-base font-medium text-k-text">{row.name ?? '—'}</span>
+                  <span className="w-28 text-right text-k-sm tabular-nums text-k-text-2">{t('loadPending', { n: row.pending })}</span>
+                  <span className={`w-28 text-right text-k-sm font-medium tabular-nums ${row.overdue > 0 ? 'text-k-danger' : 'text-k-text-2'}`}>
                     {t('loadOverdue', { n: row.overdue })}
                   </span>
                 </Link>

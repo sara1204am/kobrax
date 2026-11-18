@@ -116,7 +116,7 @@ export function SessionWatcher({ session }: { session: LoadedSession }) {
   return (
     <div
       role="alert"
-      className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-md border-l-[3px] border-k-warning bg-k-warning-bg px-3 py-2 text-[13px] text-k-warning-text"
+      className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-md border-l-[3px] border-k-warning bg-k-warning-bg px-3 py-2 text-k-sm text-k-warning-text"
     >
       <span>{banner === 'stale' ? t('stale') : t('reloaded')}</span>
       {banner === 'stale' ? (

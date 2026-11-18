@@ -47,7 +47,7 @@ export function ActivityFeed({ initial, timezone }: { initial: AccountActivityPa
 
   return (
     <Section title={t('title')} inner="space-y-5 p-6">
-      <p className="text-[13px] leading-relaxed text-k-text-2">{t('intro')}</p>
+      <p className="text-k-sm leading-relaxed text-k-text-2">{t('intro')}</p>
 
       <Field label={t('filter')}>
         <Select
@@ -70,26 +70,26 @@ export function ActivityFeed({ initial, timezone }: { initial: AccountActivityPa
       <ErrorBanner message={error} />
 
       {items.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-k-border px-4 py-6 text-center text-[13px] text-k-text-2">{t('empty')}</p>
+        <p className="rounded-xl border border-dashed border-k-border px-4 py-6 text-center text-k-sm text-k-text-2">{t('empty')}</p>
       ) : (
         <ol className="divide-y divide-k-border rounded-xl border border-k-border">
           {items.map((ev) => (
             <li key={ev.id} className="px-4 py-3">
               <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                <p className="text-[14px] text-k-text">
+                <p className="text-k-base text-k-text">
                   <span className="font-medium">
                     {ev.via ? t('byKobrax', { via: ev.via }) : (ev.actorName ?? t('unknownActor'))}
                   </span>
                   {' · '}
                   {actionLabel(ev.action)} {entityLabel(ev.entity)}
                 </p>
-                <time dateTime={ev.at} className="text-[12px] text-k-text-2">
+                <time dateTime={ev.at} className="text-k-xs text-k-text-2">
                   {dateTime(ev.at, locale, timezone ?? undefined)}
                   {ev.ip ? ` · ${ev.ip}` : ''}
                 </time>
               </div>
               {ev.changes.length > 0 && (
-                <ul className="mt-2 space-y-1 text-[12px] text-k-text-2">
+                <ul className="mt-2 space-y-1 text-k-xs text-k-text-2">
                   {ev.changes.map((c) => (
                     <li key={c.field}>
                       <span className="font-mono text-k-text">{c.field}</span>: {c.from ?? t('empty_value')} → {c.to ?? t('empty_value')}

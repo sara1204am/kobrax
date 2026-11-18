@@ -4,7 +4,7 @@ import { useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { memberName, type InvitedMember, type Member } from '@kobrax/shared';
-import { Button } from '@/components/ui';
+import { Button, Select } from '@/components/ui';
 import { Modal } from '@/components/modal';
 import { useToast } from '@/components/toast';
 import { postJson, sendJson } from '@/lib/client';
@@ -202,19 +202,19 @@ export function useMemberDialogs({
         {transfer && (
           <div className="space-y-4">
             <MemberHeader member={transfer.member} />
-            <p className="text-[13px] text-k-text-2">{t('transfer.text')}</p>
+            <p className="text-k-sm text-k-text-2">{t('transfer.text')}</p>
             <ul className="divide-y divide-k-border rounded-xl bg-k-bg px-4 py-1.5">
               <WorkRow icon="credit" label={t('transfer.credits')} value={transfer.work.credits} />
               <WorkRow icon="visit" label={t('transfer.agenda')} value={transfer.work.agenda} />
               <WorkRow icon="route" label={t('transfer.routes')} value={transfer.work.routes} />
             </ul>
             <label className="block">
-              <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-k-text-2">{t('transfer.target')}</span>
-              <select
+              <span className="mb-1.5 block text-k-2xs font-medium uppercase tracking-wide text-k-text-2">{t('transfer.target')}</span>
+              <Select
                 value={target}
                 onChange={(e) => setTarget(e.target.value)}
                 disabled={busy}
-                className="h-12 w-full rounded-xl border-[1.5px] border-k-border bg-white px-3 text-[14px] text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus"
+                className="!h-12 !border-k-border !px-3 !text-k-base"
               >
                 <option value="">{t('transfer.pick')}</option>
                 {candidates(transfer.member).map((m) => (
@@ -222,10 +222,10 @@ export function useMemberDialogs({
                     {memberName(m)}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
-            {candidates(transfer.member).length === 0 && <p className="text-[13px] text-k-danger">{t('transfer.nobody')}</p>}
-            <label className="flex items-start gap-2.5 text-[13px] text-k-text">
+            {candidates(transfer.member).length === 0 && <p className="text-k-sm text-k-danger">{t('transfer.nobody')}</p>}
+            <label className="flex items-start gap-2.5 text-k-sm text-k-text">
               <input
                 type="checkbox"
                 checked={confirmed}
@@ -253,7 +253,7 @@ export function useMemberDialogs({
       >
         {resent && (
           <div className="space-y-3">
-            <p className="text-[14px] text-k-warning-text">{t('resentWarning')}</p>
+            <p className="text-k-base text-k-warning-text">{t('resentWarning')}</p>
             <InvitationCode code={resent.invitationCode} email={resent.email} />
           </div>
         )}

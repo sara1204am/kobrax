@@ -4,6 +4,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { DATE_PRESETS, presetRange, type DatePreset } from '@/lib/dashboard';
 import { dayDate } from '@/lib/format';
+import { Select } from '@/components/ui';
 
 /**
  * El período que se está mirando: un atajo («los últimos 7 días») y las dos fechas.
@@ -41,13 +42,13 @@ export function PeriodPicker({ from, to }: { from: string; to: string }) {
     <div className="mb-5 flex flex-wrap items-center gap-3">
       <label>
         <span className="sr-only">{t('period.label')}</span>
-        <select
+        <Select
           value={current ?? 'custom'}
           onChange={(e) => {
             if (e.target.value === 'custom') return;
             set(presetRange(e.target.value as DatePreset));
           }}
-          className="h-10 rounded-xl border border-k-border bg-white px-3 text-[14px] font-medium text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus"
+          className="!h-10 !w-auto !border !border-k-border !px-3 !text-k-base !font-medium"
         >
           {DATE_PRESETS.map((p) => (
             <option key={p} value={p}>
@@ -57,12 +58,12 @@ export function PeriodPicker({ from, to }: { from: string; to: string }) {
           {/* Sólo aparece cuando el rango no es ninguno de los atajos: elegirlo no haría nada,
               porque las fechas se cambian en los dos campos de al lado. */}
           {!current && <option value="custom">{t('period.presets.custom')}</option>}
-        </select>
+        </Select>
       </label>
 
       {/* El rango escrito con todas las letras, al lado del atajo: sin esto «Este mes» no dice
           desde cuándo, y con datos de demo fechados en el futuro eso desorienta de verdad. */}
-      <p className="text-[14px] font-medium text-k-navy">
+      <p className="text-k-base font-medium text-k-navy">
         {dayDate(`${from}T00:00:00.000Z`, locale)} → {dayDate(`${to}T00:00:00.000Z`, locale)}
       </p>
 
@@ -84,4 +85,4 @@ export function PeriodPicker({ from, to }: { from: string; to: string }) {
 }
 
 const INPUT =
-  'h-10 rounded-xl border border-k-border bg-white px-3 text-[14px] text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus';
+  'h-10 rounded-xl border border-k-border bg-white px-3 text-k-base text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus';

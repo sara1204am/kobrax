@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { Button, Field, IconButton, Input } from './ui';
+import { Button, Field, IconButton, Input, TextButton } from './ui';
 
 describe('Input · ver contraseña', () => {
   it('alterna entre oculto y visible', async () => {
@@ -61,5 +61,27 @@ describe('Button — tamaños y ancho', () => {
   it('IconButton exige label y lo expone como nombre accesible', () => {
     render(<IconButton label="Cerrar">x</IconButton>);
     expect(screen.getByRole('button', { name: 'Cerrar' })).toBeTruthy();
+  });
+});
+
+describe('TextButton', () => {
+  it('es type=button por omisión: dentro de un formulario no lo envía', async () => {
+    let submitted = false;
+    render(
+      <form onSubmit={(e) => { e.preventDefault(); submitted = true; }}>
+        <TextButton>Cambiar</TextButton>
+      </form>,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Cambiar' }));
+    expect(submitted).toBe(false);
+  });
+
+  it('el tono elige el color y el disabled apaga el clic', async () => {
+    let clicks = 0;
+    render(<TextButton tone="danger" disabled onClick={() => { clicks++; }}>Quitar</TextButton>);
+    const b = screen.getByRole('button', { name: 'Quitar' });
+    expect(b.className).toContain('text-k-danger');
+    await userEvent.click(b);
+    expect(clicks).toBe(0);
   });
 });

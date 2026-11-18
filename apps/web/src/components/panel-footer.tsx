@@ -9,7 +9,7 @@ import { APP_VERSION } from '@/lib/app-config';
 export function PanelFooter({ collapsible = false }: { collapsible?: boolean }) {
   const t = useTranslations('panel.footer');
   return (
-    <div className="border-t border-white/10 px-3 py-3 text-center text-[11px] leading-snug text-white/60">
+    <div className="border-t border-white/10 px-3 py-3 text-center text-k-2xs leading-snug text-white/60">
       <p className={collapsible ? 'hidden xl:block' : undefined}>
         {t('rights', { year: new Date().getFullYear() })}
       </p>

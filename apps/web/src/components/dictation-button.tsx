@@ -106,7 +106,7 @@ export function DictationButton({
       // No quitar el foco al campo: el texto dictado entra donde estaba el cursor.
       onMouseDown={(e) => e.preventDefault()}
       onClick={toggle}
-      className={`flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[13px] font-medium transition-colors disabled:opacity-60 ${
+      className={`flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-k-sm font-medium transition-colors disabled:opacity-60 ${
         listening
           ? 'border-k-danger bg-k-danger-bg text-k-danger'
           : 'border-k-border bg-white text-k-text-2 hover:bg-k-bg'

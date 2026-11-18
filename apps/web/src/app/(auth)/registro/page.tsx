@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { TRIAL_DAYS, type SignupPlan } from '@kobrax/shared';
 import { AuthShell } from '@/components/auth-shell';
-import { Button, ErrorBanner, Field, Input } from '@/components/ui';
+import { Button, ErrorBanner, Field, Input, TextButton } from '@/components/ui';
 import { allPassed, PasswordChecklist } from '@/components/password-checklist';
 import { postJson, routeByStep, type AccountOption, type Step } from '@/lib/client';
 import { LegalConsents, useSignupDocuments } from '@/components/legal-consents';
@@ -108,7 +108,7 @@ export default function RegistroPage() {
       <AuthShell wide title={t('plan.title')} subtitle={t('plan.subtitle')}>
         <PlanPicker onPick={setPlan} />
         {/* Quien entró por error o ya tiene cuenta no depende del botón atrás del navegador. */}
-        <Link href="/login" className="mt-6 block text-center text-[13px] font-medium text-k-purple hover:underline">
+        <Link href="/login" className="mt-6 block text-center text-k-sm font-medium text-k-purple hover:underline">
           {t('haveAccount')}
         </Link>
       </AuthShell>
@@ -119,7 +119,7 @@ export default function RegistroPage() {
     return (
       <AuthShell title={t('doneTitle')} subtitle={t('doneSubtitle')}>
         <div className="space-y-5">
-          <dl className="rounded-xl bg-k-bg px-4 py-3 text-[13px] text-k-text-2">
+          <dl className="rounded-xl bg-k-bg px-4 py-3 text-k-sm text-k-text-2">
             <div className="flex gap-2">
               <dt>{t('yourEmail')}</dt>
               <dd className="font-medium text-k-text">{form.email.trim().toLowerCase()}</dd>
@@ -137,7 +137,7 @@ export default function RegistroPage() {
           {/* Lo que pasa a los 30 días se dice ACÁ y no en la letra chica: enterarse el día que
               vence, con la cartera adentro, es la peor forma de descubrir un vencimiento. */}
           {plan !== 'FREE' && (
-            <p className="rounded-xl bg-k-highlight px-4 py-3 text-[13px] leading-relaxed text-k-text-2">
+            <p className="rounded-xl bg-k-highlight px-4 py-3 text-k-sm leading-relaxed text-k-text-2">
               {t('plan.trialNotice', { plan: tPlans(`names.${plan}`), days: TRIAL_DAYS })}
             </p>
           )}
@@ -161,16 +161,16 @@ export default function RegistroPage() {
         {/* El plan elegido queda a la vista y se puede cambiar sin perder lo escrito: el estado
             del formulario no se toca al volver al paso 1. */}
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-k-highlight px-4 py-2.5">
-          <span className="text-[13px] text-k-text-2">
+          <span className="text-k-sm text-k-text-2">
             {t('plan.chosen', { plan: tPlans(`names.${plan}`) })}
           </span>
-          <button
+          <TextButton
             type="button"
             onClick={() => setPlan(null)}
-            className="text-[13px] font-medium text-k-purple hover:underline"
+            tone="purple"
           >
             {t('plan.change')}
-          </button>
+          </TextButton>
         </div>
 
         <ErrorBanner message={error} />
@@ -249,7 +249,7 @@ export default function RegistroPage() {
         {created ? (
           <Link
             href="/login"
-            className="flex h-12 w-full items-center justify-center rounded-xl border border-k-border bg-white text-[15px] font-semibold text-k-text-2 hover:bg-k-bg"
+            className="flex h-12 w-full items-center justify-center rounded-xl border border-k-border bg-white text-k-md font-semibold text-k-text-2 hover:bg-k-bg"
           >
             {t('goToLogin')}
           </Link>
@@ -264,7 +264,7 @@ export default function RegistroPage() {
           </Button>
         )}
 
-        <Link href="/login" className="block text-center text-[13px] font-medium text-k-purple">
+        <Link href="/login" className="block text-center text-k-sm font-medium text-k-purple">
           {t('haveAccount')}
         </Link>
       </form>

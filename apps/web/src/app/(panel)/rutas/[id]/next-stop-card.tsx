@@ -38,8 +38,8 @@ export function NextStopCard({
   if (!stop) {
     return (
       <section aria-label={t('detail.nextStop')} className="rounded-2xl border border-k-border bg-white p-5 shadow-k-card">
-        <h2 className="text-[13px] font-semibold uppercase tracking-wide text-k-text-2">{t('detail.nextStop')}</h2>
-        <p className="mt-2 text-[14px] text-k-text-2">{t('detail.nextStopDone')}</p>
+        <h2 className="text-k-sm font-semibold uppercase tracking-wide text-k-text-2">{t('detail.nextStop')}</h2>
+        <p className="mt-2 text-k-base text-k-text-2">{t('detail.nextStopDone')}</p>
       </section>
     );
   }
@@ -48,15 +48,15 @@ export function NextStopCard({
     <section aria-label={t('detail.nextStop')} className="rounded-2xl border border-k-border bg-white px-6 py-4 shadow-k-card">
       {/* Una sola fila: quién sigue, cuánto debe y qué hacer. En pantalla angosta baja a varias líneas. */}
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-        <h2 className="w-28 shrink-0 text-[13px] font-semibold text-k-navy">{t('detail.nextStop')}</h2>
+        <h2 className="w-28 shrink-0 text-k-sm font-semibold text-k-navy">{t('detail.nextStop')}</h2>
 
         <div className="flex min-w-0 flex-1 items-center gap-4">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-k-info-bg text-[14px] font-semibold tabular-nums text-k-slate">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-k-info-bg text-k-base font-semibold tabular-nums text-k-slate">
             {stop.sequenceOrder}
           </span>
           <div className="min-w-0">
-            <p className="truncate text-[15px] font-semibold text-k-text">{stop.clientName ?? '—'}</p>
-            <p className="truncate text-[13px] text-k-text-2">
+            <p className="truncate text-k-md font-semibold text-k-text">{stop.clientName ?? '—'}</p>
+            <p className="truncate text-k-sm text-k-text-2">
               {[stop.locationOwner, stop.address].filter(Boolean).join(' · ') || '—'}
               {stop.scheduledTime && <span className="ml-2 tabular-nums text-k-navy">{stop.scheduledTime}</span>}
             </p>
@@ -66,10 +66,10 @@ export function NextStopCard({
         {(stop.overdueAmount != null || stop.daysPastDue != null) && (
           <div className="flex shrink-0 items-center gap-4 border-l border-k-border pl-6">
             {stop.overdueAmount != null && (
-              <span className="text-[14px] font-semibold tabular-nums text-k-text">{money(stop.overdueAmount, stop.currency ?? 'BOB')}</span>
+              <span className="text-k-base font-semibold tabular-nums text-k-text">{money(stop.overdueAmount, stop.currency ?? 'BOB')}</span>
             )}
             {stop.daysPastDue != null && (
-              <span className="text-[13px] font-medium tabular-nums text-k-danger">{t('stopsTable.days', { n: stop.daysPastDue })}</span>
+              <span className="text-k-sm font-medium tabular-nums text-k-danger">{t('stopsTable.days', { n: stop.daysPastDue })}</span>
             )}
           </div>
         )}
@@ -80,14 +80,14 @@ export function NextStopCard({
             <button
               type="button"
               onClick={() => setOpen(true)}
-              className="h-9 rounded-lg bg-k-navy px-4 text-[13px] font-semibold text-white hover:bg-k-slate"
+              className="h-9 rounded-lg bg-k-navy px-4 text-k-sm font-semibold text-white hover:bg-k-slate"
             >
               {t('detail.register')}
             </button>
           )}
           <Link
             href={`/rutas/${routeId}/parada/${stop.id}`}
-            className="inline-flex h-9 items-center rounded-lg border border-k-border bg-white px-4 text-[13px] font-medium text-k-slate hover:bg-k-bg"
+            className="inline-flex h-9 items-center rounded-lg border border-k-border bg-white px-4 text-k-sm font-medium text-k-slate hover:bg-k-bg"
           >
             {t('detail.viewStop')}
           </Link>

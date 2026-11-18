@@ -51,14 +51,14 @@ export function SupportAccessView({ initial, timezone }: { initial: SupportSessi
   return (
     <section aria-labelledby="support-title" className="space-y-4">
       <div>
-        <h2 id="support-title" className="text-[18px] font-semibold text-k-navy">
+        <h2 id="support-title" className="text-k-xl font-semibold text-k-navy">
           {t('title')}
         </h2>
-        <p className="mt-1 max-w-3xl text-[14px] text-k-text-2">{t('intro')}</p>
+        <p className="mt-1 max-w-3xl text-k-base text-k-text-2">{t('intro')}</p>
       </div>
 
       {error && (
-        <p role="alert" className="rounded-md bg-k-danger-bg px-3 py-2 text-[13px] text-k-danger">
+        <p role="alert" className="rounded-md bg-k-danger-bg px-3 py-2 text-k-sm text-k-danger">
           {error}
         </p>
       )}
@@ -73,15 +73,15 @@ export function SupportAccessView({ initial, timezone }: { initial: SupportSessi
               <li key={r.id} className="rounded-lg border border-k-border bg-white p-4 shadow-k-card">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-[14px] font-medium text-k-text">{r.reason}</p>
-                    <p className="mt-0.5 text-[12px] text-k-muted">
+                    <p className="text-k-base font-medium text-k-text">{r.reason}</p>
+                    <p className="mt-0.5 text-k-xs text-k-muted">
                       {r.ticket ? `${t('ticket')}: ${r.ticket} · ` : ''}
                       {t('expires')}: {when(r.expiresAt, timezone)}
                     </p>
-                    <p className="mt-1 text-[13px] text-k-text-2">{r.sensitive ? t('writes') : t('readOnly')}</p>
-                    {r.status === 'AWAITING_CONSENT' && <p className="mt-1 text-[13px] text-k-warning-text">{t('consentNote')}</p>}
+                    <p className="mt-1 text-k-sm text-k-text-2">{r.sensitive ? t('writes') : t('readOnly')}</p>
+                    {r.status === 'AWAITING_CONSENT' && <p className="mt-1 text-k-sm text-k-warning-text">{t('consentNote')}</p>}
                   </div>
-                  <span className="rounded-full bg-k-light-bg px-2.5 py-1 text-[12px] font-medium text-k-slate">{t(`status.${r.status}`)}</span>
+                  <span className="rounded-full bg-k-light-bg px-2.5 py-1 text-k-xs font-medium text-k-slate">{t(`status.${r.status}`)}</span>
                 </div>
                 {open && (
                   <div className="mt-3 flex flex-wrap gap-2">

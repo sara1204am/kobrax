@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { AssignableRole, InvitedMember } from '@kobrax/shared';
-import { Button, ErrorBanner, Field, Input } from '@/components/ui';
+import { Button, ErrorBanner, Field, Input, Select } from '@/components/ui';
 import { OfficeSelect } from '@/components/office-select';
 import type { OfficeOption } from '@/lib/offices';
 import { Modal } from '@/components/modal';
@@ -140,11 +140,11 @@ export function InviteDialog({
           </Field>
 
           <Field label={t('role')}>
-            <select
+            <Select
               value={form.roleId}
               onChange={(e) => setForm({ ...form, roleId: e.target.value })}
               required
-              className="h-[52px] w-full rounded-xl border-[1.5px] border-k-light-bg bg-white px-3.5 text-[15px] text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus"
+              
             >
               <option value="" disabled>
                 {t('rolePlaceholder')}
@@ -154,7 +154,7 @@ export function InviteDialog({
                   {label(r.name)}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
 
           {canPickOffice && (

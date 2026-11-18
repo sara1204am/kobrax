@@ -46,7 +46,7 @@ export function DetailActions({
         </span>
       )}
       {error && (
-        <p role="alert" className="max-w-xs text-right text-[12px] text-k-danger">
+        <p role="alert" className="max-w-xs text-right text-k-xs text-k-danger">
           {error}
         </p>
       )}

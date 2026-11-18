@@ -7,7 +7,6 @@ import { Button } from '@/components/ui';
 import type { OfficeOption } from '@/lib/offices';
 import { usePermissions } from '@/components/permissions';
 import { InviteDialog } from './invite-dialog';
-import { TeamIcon } from './team-ui';
 
 /**
  * Invitar a alguien al equipo. Sin permiso no se dibuja, y sin roles que ofrecer tampoco: el formulario no tendría
@@ -32,12 +31,15 @@ export function InviteButton({
 
   return (
     <>
-      <span className="w-full sm:w-56">
-        <Button onClick={() => setOpen(true)} disabled={full} title={full ? t('full') : undefined}>
-          <span className="flex items-center gap-2">
-            <TeamIcon name="invite" />
-            {full ? t('full') : t('open')}
-          </span>
+      {/* Sin ícono y con ancho según el texto: «Llegaste al tope de tu plan» es más largo que «Invitar a alguien» y no cabía en un ancho fijo. */}
+      <span className="w-full sm:w-auto">
+        <Button
+          onClick={() => setOpen(true)}
+          disabled={full}
+          title={full ? t('full') : undefined}
+          className="whitespace-nowrap sm:w-auto sm:px-6"
+        >
+          {full ? t('full') : t('open')}
         </Button>
       </span>
       <InviteDialog open={open} onClose={() => setOpen(false)} roles={roles} offices={offices} />

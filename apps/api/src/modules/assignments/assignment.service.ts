@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy, Inject, Optional } from '@nestjs/common';
 import { AgendaItemStatus, CreditAssignmentKind, Prisma, type PrismaClient } from '@prisma/client';
 import { Permission, type Assignee } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
@@ -22,6 +22,9 @@ import { agencyViolations, isAssignable, notAssignable, type AssignScope, type A
 import { handoffFrom, isHandedOffBy, withHandoff, withoutHandoff } from './assignment-handoff';
 import { AuthorizationService } from '../../common/authz/authorization.service';
 import { PolicyService } from '../../common/authz/policy.service';
+import type Redis from 'ioredis';
+import { startJob } from '../../common/jobs/start-job';
+import { REDIS } from '../../redis/redis.module';
 
 /** Cada cuánto barre los vencimientos. Un reemplazo se pide por horas o días: 15 min alcanza y no pesa. */
 export const ASSIGNMENT_EXPIRY_INTERVAL_MS = 15 * 60 * 1000;
@@ -93,6 +96,8 @@ export class AssignmentService implements OnApplicationBootstrap, OnModuleDestro
     private readonly authz: AuthorizationService = new AuthorizationService(tenant),
     /** F14 · F2: `credit.assign` (jerarquía real). Lo inyecta Nest; los specs que no validan destinos no lo necesitan. */
     private readonly policy: PolicyService,
+    /** Candado entre instancias (opcional: sin Redis el job corre siempre). */
+    @Optional() @Inject(REDIS) private readonly redis?: Redis,
   ) {}
 
   /**
@@ -100,8 +105,7 @@ export class AssignmentService implements OnApplicationBootstrap, OnModuleDestro
    * del trabajo de mora: un intervalo que no bloquea el apagado y que barre los tenants vivos.
    */
   onApplicationBootstrap(): void {
-    this.timer = setInterval(() => void this.expireDue(), ASSIGNMENT_EXPIRY_INTERVAL_MS);
-    if (typeof this.timer.unref === 'function') this.timer.unref();
+    this.timer = startJob({ name: 'assignment-expiry', intervalMs: ASSIGNMENT_EXPIRY_INTERVAL_MS, run: () => this.expireDue(), redis: this.redis, logger: this.logger });
   }
 
   onModuleDestroy(): void {
@@ -404,22 +408,23 @@ export class AssignmentService implements OnApplicationBootstrap, OnModuleDestro
           data: { assigneeId: input.userId, updatedBy: actor, details: withHandoff(item.details, principal, row.id) as Prisma.InputJsonObject },
         });
       }
+      // S-11: dar acceso a un crédito no existe sin su rastro (misma transacción).
+      await this.audit.recordInTx(tx, {
+        entity: 'credit',
+        entityId: input.creditId,
+        action: 'ASSIGN_TEMPORARY',
+        after: {
+          assignmentId: row.id,
+          principalId: principal,
+          temporaryUserId: input.userId,
+          expiresAt: input.expiresAt.toISOString(),
+          reason: input.reason ?? null,
+          agendaMoved: pending.length,
+        },
+      });
       return { row, moved: pending.length, principal };
     });
 
-    await this.audit.record({
-      entity: 'credit',
-      entityId: input.creditId,
-      action: 'ASSIGN_TEMPORARY',
-      after: {
-        assignmentId: out.row.id,
-        principalId: out.principal,
-        temporaryUserId: input.userId,
-        expiresAt: input.expiresAt.toISOString(),
-        reason: input.reason ?? null,
-        agendaMoved: out.moved,
-      },
-    });
     return coverageOf(out.row, out.moved);
   }
 
@@ -446,7 +451,7 @@ export class AssignmentService implements OnApplicationBootstrap, OnModuleDestro
         select: { id: true },
       });
       if (dup) throw assignmentDuplicate('APOYO');
-      return tx.creditAssignment.create({
+      const created = await tx.creditAssignment.create({
         data: {
           accountId: this.tenant.accountId,
           creditId: credit.id,
@@ -457,14 +462,15 @@ export class AssignmentService implements OnApplicationBootstrap, OnModuleDestro
           grantedBy: actor,
         },
       });
+      await this.audit.recordInTx(tx, {
+        entity: 'credit',
+        entityId: input.creditId,
+        action: 'ASSIGN_SUPPORT',
+        after: { assignmentId: created.id, supportUserId: input.userId, expiresAt: input.expiresAt?.toISOString() ?? null },
+      });
+      return created;
     });
 
-    await this.audit.record({
-      entity: 'credit',
-      entityId: input.creditId,
-      action: 'ASSIGN_SUPPORT',
-      after: { assignmentId: row.id, supportUserId: input.userId, expiresAt: input.expiresAt?.toISOString() ?? null },
-    });
     return coverageOf(row);
   }
 
@@ -484,16 +490,16 @@ export class AssignmentService implements OnApplicationBootstrap, OnModuleDestro
       await this.assertAgency(tx, [row.creditId], []);
       await tx.creditAssignment.update({ where: { id: row.id }, data: { revokedAt: now, revokedBy: actor } });
       const returned = row.kind === CreditAssignmentKind.TEMPORAL ? await this.returnAgenda(tx, row, actor) : 0;
+      await this.audit.recordInTx(tx, {
+        entity: 'credit',
+        entityId: row.creditId,
+        action: row.kind === CreditAssignmentKind.TEMPORAL ? 'REVOKE_TEMPORARY' : 'REVOKE_SUPPORT',
+        before: { assignmentId: row.id, userId: row.userId, expiresAt: row.expiresAt?.toISOString() ?? null },
+        after: { revoked: true, agendaReturned: returned },
+      });
       return { row, returned };
     });
 
-    await this.audit.record({
-      entity: 'credit',
-      entityId: out.row.creditId,
-      action: out.row.kind === CreditAssignmentKind.TEMPORAL ? 'REVOKE_TEMPORARY' : 'REVOKE_SUPPORT',
-      before: { assignmentId: out.row.id, userId: out.row.userId, expiresAt: out.row.expiresAt?.toISOString() ?? null },
-      after: { revoked: true, agendaReturned: out.returned },
-    });
     return { id: out.row.id, revoked: true, agendaReturned: out.returned };
   }
 

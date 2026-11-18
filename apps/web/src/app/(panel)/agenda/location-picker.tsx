@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { locationTypeChoices } from '@kobrax/shared';
-import { Button, ErrorBanner, Field, Input, Select } from '@/components/ui';
+import { Button, ErrorBanner, Field, Input, Select, TextButton } from '@/components/ui';
 import { Icon } from '@/components/panel-shell';
 import { LocationPhotos } from '@/components/location-photos';
 import { postJson, sendJson } from '@/lib/client';
@@ -229,7 +229,7 @@ export function LocationPicker({
 
       {/* Qué es y de quién: una opción larga se corta en el desplegable, y esto es lo que decide a dónde se va. */}
       {elegida && (
-        <p className="text-[13px] text-k-text-2">
+        <p className="text-k-sm text-k-text-2">
           <span className="font-medium text-k-text">{t('create.locationDetail', { type: tipo(elegida), owner: quien(elegida) })}</span>
           {elegida.address ? ` — ${elegida.address}` : ''}
         </p>
@@ -252,7 +252,7 @@ export function LocationPicker({
        */}
       {elegida && !conPunto && !creando && (
         <div className="space-y-3 rounded-xl border border-k-warning bg-k-warning-bg p-4">
-          <p className="text-[13px] text-k-warning-text">{t('create.noPoint')}</p>
+          <p className="text-k-sm text-k-warning-text">{t('create.noPoint')}</p>
           <ErrorBanner message={error} />
           <MapPicker
             latitude={punto?.latitude}
@@ -269,14 +269,14 @@ export function LocationPicker({
       )}
 
       {!creando ? (
-        <button
+        <TextButton
           type="button"
           onClick={() => setCreando(true)}
           disabled={disabled}
-          className="text-[13px] font-medium text-k-periwinkle hover:underline disabled:opacity-50"
+          tone="periwinkle"
         >
           {t('create.addLocation')}
-        </button>
+        </TextButton>
       ) : (
         <div className="space-y-4 rounded-xl border border-k-border bg-k-bg p-4">
           <ErrorBanner message={error} />
@@ -327,7 +327,7 @@ export function LocationPicker({
             center={cerca}
             hint={t('create.mapPickHint')}
           />
-          <p className="text-[12px] text-k-text-2">
+          <p className="text-k-xs text-k-text-2">
             {coord(form.latitude) != null && coord(form.longitude) != null
               ? t('create.pinAt', { lat: form.latitude, lng: form.longitude })
               : t('create.pinHint')}

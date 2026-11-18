@@ -56,7 +56,7 @@ export function WidgetFrame({
               } ${bare ? 'hidden' : ''}`
         }
       >
-        {flush ? null : tile ? <span /> : <h2 className="truncate text-[13px] font-semibold text-k-navy">{title}</h2>}
+        {flush ? null : tile ? <span /> : <h2 className="truncate text-k-sm font-semibold text-k-navy">{title}</h2>}
         {/* `aside` es un atajo del widget (p. ej. «Ver agenda»); en modo Editar el sitio es de las acciones. */}
         {editable ? actions : (aside ?? actions)}
       </header>
@@ -68,9 +68,9 @@ export function WidgetFrame({
         }`}
       >
         {error ? (
-          <p className="text-[13px] text-k-danger">{error}</p>
+          <p className="text-k-sm text-k-danger">{error}</p>
         ) : empty ? (
-          <p className="text-[13px] text-k-text-2">{empty}</p>
+          <p className="text-k-sm text-k-text-2">{empty}</p>
         ) : (
           children
         )}

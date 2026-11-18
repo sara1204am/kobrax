@@ -138,7 +138,7 @@ export default function InvitacionPage() {
           <Button type="submit" variant="cta" loading={loading} disabled={code.trim().length < CODE_MIN}>
             {t('lookup')}
           </Button>
-          <Link href="/login" className="block text-center text-[13px] font-medium text-k-purple">
+          <Link href="/login" className="block text-center text-k-sm font-medium text-k-purple">
             {t('backToLogin')}
           </Link>
         </form>
@@ -183,7 +183,7 @@ export default function InvitacionPage() {
             required
           />
         </Field>
-        {mismatch && <p className="text-[12px] text-k-danger">{t('mismatch')}</p>}
+        {mismatch && <p className="text-k-xs text-k-danger">{t('mismatch')}</p>}
 
         {!accepted && (
           <LegalConsents
@@ -203,7 +203,7 @@ export default function InvitacionPage() {
         {accepted ? (
           <Link
             href="/login"
-            className="flex h-12 w-full items-center justify-center rounded-xl border border-k-border bg-white text-[15px] font-semibold text-k-text-2 hover:bg-k-bg"
+            className="flex h-12 w-full items-center justify-center rounded-xl border border-k-border bg-white text-k-md font-semibold text-k-text-2 hover:bg-k-bg"
           >
             {t('goToLogin')}
           </Link>

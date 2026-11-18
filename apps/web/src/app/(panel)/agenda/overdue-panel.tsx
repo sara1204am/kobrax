@@ -7,6 +7,7 @@ import type { AgendaListItem } from '@kobrax/shared';
 import { dayDate as fmtDate } from '@/lib/format';
 import { AgendaRow } from './agenda-row';
 import type { AgendaEvents } from './agenda-screen';
+import { TextButton } from '@/components/ui';
 
 /** Cuántas se muestran plegado. Dos: las que se pueden mirar sin dejar de ver el día. */
 const PREVIEW = 2;
@@ -50,17 +51,17 @@ export function OverduePanel({
       className="mb-4 rounded-xl border border-k-danger bg-k-danger-bg"
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3">
-        <span aria-hidden className="text-[15px]">⚠</span>
-        <span className="text-[14px] font-semibold text-k-danger">{t('overdue.count', { n: total })}</span>
-        <span className="text-[13px] text-k-danger">{t('overdue.text')}</span>
-        <button
+        <span aria-hidden className="text-k-md">⚠</span>
+        <span className="text-k-base font-semibold text-k-danger">{t('overdue.count', { n: total })}</span>
+        <span className="text-k-sm text-k-danger">{t('overdue.text')}</span>
+        <TextButton
           type="button"
           onClick={() => setAbierto((v) => !v)}
           aria-expanded={abierto}
-          className="ml-auto text-[13px] font-medium text-k-danger underline-offset-2 hover:underline"
+          tone="danger" className="ml-auto"
         >
           {abierto ? t('overdue.collapse') : t('overdue.expand', { n: total })}
-        </button>
+        </TextButton>
       </div>
 
       {/*
@@ -79,11 +80,11 @@ export function OverduePanel({
 
       {/* Plegado sólo se ven dos: se dice cuántas quedan en vez de dejar creer que son todas. */}
       {!abierto && total > visibles.length && (
-        <p className="px-4 py-2 text-[12px] text-k-danger">{t('overdue.more', { n: total - visibles.length })}</p>
+        <p className="px-4 py-2 text-k-xs text-k-danger">{t('overdue.more', { n: total - visibles.length })}</p>
       )}
       {/* Abierta tampoco son todas si el servidor mandó solo la primera página: se dice, no se deja creer que ya se vio todo. */}
       {abierto && total > items.length && (
-        <p className="px-4 py-2 text-[12px] text-k-danger">{t('overdue.truncated', { shown: items.length, total })}</p>
+        <p className="px-4 py-2 text-k-xs text-k-danger">{t('overdue.truncated', { shown: items.length, total })}</p>
       )}
     </section>
   );

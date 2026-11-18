@@ -31,6 +31,23 @@ const config: Config = {
         'k-warning-bg': '#FFF3CD',
         'k-warning-text': '#7A5C00',
       },
+      /**
+       * Escala tipográfica del panel (P2-A). Son EXACTAMENTE los tamaños que la web ya usaba como `text-[Npx]`: sin interlineado
+       * propio (como antes) y sin cambio visual. Un tamaño nuevo se agrega aquí, no como valor arbitrario (lo vigila el `lint`).
+       */
+      fontSize: {
+        'k-3xs': '10px',
+        'k-2xs': '11px',
+        'k-xs': '12px',
+        'k-sm': '13px',
+        'k-base': '14px',
+        'k-md': '15px',
+        'k-lg': '16px',
+        'k-xl': '18px',
+        'k-2xl': '20px',
+        'k-3xl': '22px',
+        'k-4xl': '26px',
+      },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'monospace'],

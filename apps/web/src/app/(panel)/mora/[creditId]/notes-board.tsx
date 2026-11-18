@@ -91,11 +91,11 @@ export function NotesBoard({
       <div role="region" aria-label={t('boardLabel')} className="pointer-events-none fixed inset-0 z-40">
         <div className="pointer-events-auto absolute bottom-4 right-4 flex items-center gap-2 rounded-full border border-k-border bg-white px-2 py-1.5 shadow-k-card">
           {canMove && (
-            <button type="button" onClick={onNew} className="rounded-full bg-k-navy px-3.5 py-1.5 text-[13px] font-semibold text-white hover:bg-k-slate">
+            <button type="button" onClick={onNew} className="rounded-full bg-k-navy px-3.5 py-1.5 text-k-sm font-semibold text-white hover:bg-k-slate">
               + {t('newNote')}
             </button>
           )}
-          <button type="button" onClick={onClose} className="rounded-full px-3 py-1.5 text-[13px] font-medium text-k-text-2 hover:bg-k-bg">
+          <button type="button" onClick={onClose} className="rounded-full px-3 py-1.5 text-k-sm font-medium text-k-text-2 hover:bg-k-bg">
             {t('hide')}
           </button>
         </div>

@@ -101,10 +101,10 @@ src/
 ```
 
 Componentes del sistema (mira si ya existe antes de escribir uno):
-`ui.tsx` (`Button` con `size`/`fullWidth`/variantes, `IconButton`, `Input`, `Select`, `Textarea`, `Switch`, `Field`, `ErrorBanner`),
+`ui.tsx` (`Button` con `size`/`fullWidth`/variantes, `TextButton` para acciones de texto, `IconButton`, `Input`, `Select`, `Textarea`, `Switch`, `Field`, `ErrorBanner`),
 `form-kit.tsx` (`Tabs` accesibles, `Checkbox`, `ConfirmDialog`, `FormSection`, `FormActions`), `panel-ui.tsx` (`PageHeader`,
 `Section`, `Badge`, `Segmented`, `Card`, `EmptyState`…), `data-table.tsx` (`DataTable`), `modal.tsx` (`Modal`).
-**No escribas `<button>`, `<select>` ni `<textarea>` a mano:** `pnpm --filter @kobrax/web lint` (ratchet en
+**No escribas `<button>`, `<select>` ni `<textarea>` a mano** (salvo tarjetas/filas clicables, pastillas con estado, celdas de calendario e ítems de menú, que son excepciones y siguen en el baseline): `pnpm --filter @kobrax/web lint` (ratchet en
 `scripts/check-raw-elements.mjs`) falla si crece su cantidad respecto de `scripts/raw-elements-baseline.json`; al migrar una pantalla
 baja el número y se fija con `node scripts/check-raw-elements.mjs --update`.
 

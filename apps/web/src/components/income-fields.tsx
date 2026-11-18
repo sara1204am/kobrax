@@ -71,7 +71,7 @@ export function IncomeFields({
 
   return (
     <div className="space-y-4">
-      <p className="text-[12px] text-k-muted">{t('income.hint')}</p>
+      <p className="text-k-xs text-k-muted">{t('income.hint')}</p>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label={t('income.source')}>
           <Select value={value.incomeSourceCode} onChange={(e) => set({ incomeSourceCode: e.target.value })} disabled={disabled}>
@@ -148,7 +148,7 @@ export function IncomeFields({
       </div>
 
       {error === 'DAY_INVALID' && (
-        <p role="alert" className="text-[12px] text-k-danger">
+        <p role="alert" className="text-k-xs text-k-danger">
           {t('income.errors.day')}
         </p>
       )}

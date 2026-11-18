@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { memberStatus, type AssignableRole, type Member } from '@kobrax/shared';
-import { Button } from '@/components/ui';
+import { Button, Select } from '@/components/ui';
 import { usePermissions } from '@/components/permissions';
 import { isKnownRole, memberActions } from '@/lib/team';
 import { useMemberDialogs } from '../member-dialogs';
@@ -44,12 +44,12 @@ export function MemberHeaderActions({
     <>
       <div className="flex flex-wrap items-center gap-2">
         {a.changeRole && (
-          <select
+          <Select
             aria-label={t('detail.changeRole')}
             value=""
             disabled={busy}
             onChange={(e) => e.target.value && void changeRole(member, e.target.value)}
-            className="h-11 rounded-xl border border-k-border bg-white px-3 text-[14px] font-medium text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus disabled:opacity-60"
+            className="!h-11 !w-auto !border !border-k-border !px-3 !text-k-base !font-medium"
           >
             <option value="">{t('detail.changeRole')}</option>
             {roles
@@ -59,7 +59,7 @@ export function MemberHeaderActions({
                   {isKnownRole(r.name) ? tr(r.name) : r.name}
                 </option>
               ))}
-          </select>
+          </Select>
         )}
         {a.resend && (
           <span className="w-auto">

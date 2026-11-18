@@ -50,7 +50,7 @@ function makeService(opts: { credit?: unknown; idempotentExisting?: unknown; max
   };
   const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
   const tenant = { accountId: 'acc-A', userId: 'u1', can: () => true };
-  const audit = { record: async (e: { action: string }) => void calls.audit.push(e.action) };
+  const audit = { record: async (e: { action: string }) => void calls.audit.push(e.action), recordInTx: async (_t: unknown, e: { action: string }) => void calls.audit.push(e.action) };
   const events = { emit: (name: string) => void calls.events.push(name) };
   const clock = { timezone: async () => 'America/La_Paz' };
   const service = new PaymentsService(prisma as never, tenant as never, audit as never, events as never, clock as never);
@@ -716,7 +716,7 @@ describe('PaymentsService — escrituras fuera de alcance (S-2)', () => {
     };
     const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
     const tenant = { accountId: 'acc-A', userId: 'u1', can };
-    const audit = { record: async () => undefined };
+    const audit = { record: async () => undefined, recordInTx: async () => undefined };
     const service = new PaymentsService(prisma as never, tenant as never, audit as never, { emit: () => undefined } as never, { timezone: async () => 'America/La_Paz' } as never);
     return { service, writes };
   }

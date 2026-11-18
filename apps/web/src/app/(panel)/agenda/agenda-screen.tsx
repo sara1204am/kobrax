@@ -12,6 +12,7 @@ import { MonthCalendar } from './month-calendar';
 import { OverduePanel } from './overdue-panel';
 import { WeekPanel } from './week-panel';
 import { FiltersCard, SummaryCard } from './side-cards';
+import { Button } from '@/components/ui';
 
 /**
  * Lo que la pantalla **pide** que pase. No lo hace ella.
@@ -112,8 +113,8 @@ export function AgendaScreen({
     <>
       <div className="mb-5 grid items-center gap-3 md:grid-cols-[1fr_auto_1fr]">
         <div className="min-w-0">
-          <h1 className="text-[26px] font-semibold tracking-tight text-k-navy">{t('title')}</h1>
-          <p className="mt-1 text-[14px] text-k-text-2">{supervises ? t('subtitleTeam') : t('subtitle')}</p>
+          <h1 className="text-k-4xl font-semibold tracking-tight text-k-navy">{t('title')}</h1>
+          <p className="mt-1 text-k-base text-k-text-2">{supervises ? t('subtitleTeam') : t('subtitle')}</p>
         </div>
         <div className="md:justify-self-center">
           <Segmented
@@ -129,18 +130,18 @@ export function AgendaScreen({
         </div>
         <div className="flex flex-wrap items-center gap-2 md:justify-self-end">
           <TeamSelect supervises={supervises} members={members} gestor={gestor} onChange={(v) => go({ gestor: v })} />
-          <button
+          <Button
             type="button"
             onClick={crear}
-            className="h-10 shrink-0 rounded-lg bg-k-navy px-4 text-[13px] font-medium text-white hover:bg-k-slate active:scale-[.98]"
+            variant="primary" size="sm" fullWidth={false} className="!font-medium !h-10 !px-4 shrink-0"
           >
             {t('createCta')}
-          </button>
+          </Button>
         </div>
       </div>
 
       {!supervises && (
-        <p className="mb-4 rounded-xl border border-k-border bg-k-bg px-4 py-3 text-[13px] text-k-text-2">
+        <p className="mb-4 rounded-xl border border-k-border bg-k-bg px-4 py-3 text-k-sm text-k-text-2">
           {t('scopedToMine')}
         </p>
       )}
@@ -235,7 +236,7 @@ function TeamSelect({
   if (!supervises) {
     return (
       <div className={box}>
-        <span className="text-[13px] font-medium text-k-navy">{t('team.justMe')}</span>
+        <span className="text-k-sm font-medium text-k-navy">{t('team.justMe')}</span>
       </div>
     );
   }
@@ -243,10 +244,10 @@ function TeamSelect({
   const elegido = members.find((m) => m.userId === gestor);
   return (
     <label className={`${box} cursor-pointer hover:bg-k-bg`}>
-      <span className="text-[13px] font-semibold leading-tight text-k-navy">
+      <span className="text-k-sm font-semibold leading-tight text-k-navy">
         {elegido ? memberName(elegido) : t('team.mine')}
       </span>
-      <span className="text-[11px] leading-tight text-k-text-2">
+      <span className="text-k-2xs leading-tight text-k-text-2">
         {elegido ? t('team.label') : t('team.count', { n: members.length })}
       </span>
       <select

@@ -146,6 +146,7 @@ function make(opts: Opts = {}) {
   const audited: { action: string; entityId: string; before?: unknown; after?: Record<string, unknown> }[] = [];
   const audit = {
     record: async (e: (typeof audited)[number]) => void audited.push(e),
+    recordInTx: async (_t: unknown, e: (typeof audited)[number]) => void audited.push(e),
     recordMany: async (es: typeof audited) => void audited.push(...es),
   };
   const service = new AssignmentService(prisma as never, tenant as never, audit as never, new OfficeScopeService(tenant as never), undefined, fakePolicy().service);

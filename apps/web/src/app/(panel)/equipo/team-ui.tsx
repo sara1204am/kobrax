@@ -22,7 +22,7 @@ export function Avatar({
     <span
       aria-hidden
       className={`flex shrink-0 items-center justify-center rounded-full font-semibold ${
-        size === 'xl' ? 'h-20 w-20 text-[26px]' : size === 'lg' ? 'h-11 w-11 text-[14px]' : 'h-10 w-10 text-[13px]'
+        size === 'xl' ? 'h-20 w-20 text-k-4xl' : size === 'lg' ? 'h-11 w-11 text-k-base' : 'h-10 w-10 text-k-sm'
       } ${muted ? 'bg-k-bg text-k-muted' : 'bg-k-light-bg text-k-slate'}`}
     >
       {initials(member)}
@@ -36,8 +36,8 @@ export function MemberHeader({ member }: { member: Member }) {
     <div className="flex items-center gap-3">
       <Avatar member={member} size="lg" muted={!member.isActive} />
       <div className="min-w-0">
-        <p className="truncate text-[15px] font-semibold text-k-text">{memberName(member)}</p>
-        <p className="truncate text-[13px] text-k-text-2">{member.email}</p>
+        <p className="truncate text-k-md font-semibold text-k-text">{memberName(member)}</p>
+        <p className="truncate text-k-sm text-k-text-2">{member.email}</p>
       </div>
     </div>
   );
@@ -136,7 +136,7 @@ export function SeatsBar({ used, max, level }: { used: number; max: number; leve
 /** Fila de «cuánto trabajo tiene»: icono, rótulo y cifra. */
 export function WorkRow({ icon, label, value }: { icon: TeamIconName; label: string; value: ReactNode }) {
   return (
-    <li className="flex items-center justify-between gap-3 py-1.5 text-[13px]">
+    <li className="flex items-center justify-between gap-3 py-1.5 text-k-sm">
       <span className="flex items-center gap-2 text-k-text-2">
         <TeamIcon name={icon} className="h-4 w-4" />
         {label}

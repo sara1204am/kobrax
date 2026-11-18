@@ -77,7 +77,7 @@ export function CollectorWorkTable({
   return (
     <>
       {truncated && (
-        <p className="mb-3 rounded-xl border border-k-warning bg-k-warning-bg px-4 py-3 text-[13px] text-k-warning-text">
+        <p className="mb-3 rounded-xl border border-k-warning bg-k-warning-bg px-4 py-3 text-k-sm text-k-warning-text">
           {t('work.truncated')}
         </p>
       )}
@@ -129,7 +129,7 @@ function DaysOfCollector({
   return (
     <ul className="divide-y divide-k-border rounded-xl border border-k-border bg-white">
       {ordenadas.map((r) => (
-        <li key={r.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5 text-[13px]">
+        <li key={r.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5 text-k-sm">
           <a href={`/rutas/${r.id}`} className="min-w-[110px] font-medium text-k-text hover:underline">
             {dayDate(r.plannedDate, locale)}
           </a>

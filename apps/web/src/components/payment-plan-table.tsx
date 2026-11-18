@@ -39,9 +39,9 @@ export function PaymentPlanTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-[14px]">
+      <table className="w-full border-collapse text-k-base">
         <thead>
-          <tr className="border-b border-k-border text-left text-[12px] font-semibold uppercase tracking-wide text-k-text-2">
+          <tr className="border-b border-k-border text-left text-k-xs font-semibold uppercase tracking-wide text-k-text-2">
             <th scope="col" className="py-2 pr-4">{t('number')}</th>
             <th scope="col" className="py-2 pr-4">{t('dueDate')}</th>
             <th scope="col" className="py-2 pr-4 text-right">{t('principal')}</th>

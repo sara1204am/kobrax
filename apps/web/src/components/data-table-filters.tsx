@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
+import { TextButton } from '@/components/ui';
 
 /**
  * Los controles de filtro del `DataTable`, **uno por tipo**.
@@ -60,7 +61,7 @@ export interface FilterControlProps {
 }
 
 const INPUT =
-  'h-10 w-full rounded-lg border border-k-border bg-white px-3 text-[13px] text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus disabled:opacity-50';
+  'h-10 w-full rounded-lg border border-k-border bg-white px-3 text-k-sm text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus disabled:opacity-50';
 
 function TextFilter({ value, onChange, def }: FilterControlProps) {
   const key = def.keys[0]!;
@@ -138,7 +139,7 @@ function MultiSelectFilter({ value, onChange, def }: FilterControlProps) {
         {options.map((o) => (
           <label key={o.value} className="flex cursor-pointer items-center gap-2">
             <input type="checkbox" className="h-4 w-4 accent-k-periwinkle" checked={selected.includes(o.value)} onChange={() => toggle(o.value)} />
-            <span className="text-[13px] text-k-text">{o.label}</span>
+            <span className="text-k-sm text-k-text">{o.label}</span>
           </label>
         ))}
       </div>
@@ -156,7 +157,7 @@ function MultiSelectFilter({ value, onChange, def }: FilterControlProps) {
       {selected.length > 0 && (
         <ul className="flex flex-wrap gap-1.5" aria-label={def.label}>
           {selected.map((v) => (
-            <li key={v} className="flex items-center gap-1 rounded-full bg-k-highlight py-0.5 pl-2.5 pr-1 text-[12px] font-medium text-k-navy">
+            <li key={v} className="flex items-center gap-1 rounded-full bg-k-highlight py-0.5 pl-2.5 pr-1 text-k-xs font-medium text-k-navy">
               {labelOf(v)}
               <button
                 type="button"
@@ -171,7 +172,7 @@ function MultiSelectFilter({ value, onChange, def }: FilterControlProps) {
         </ul>
       )}
       <input type="search" className={INPUT} aria-label={`${def.label} — ${t('searchOptions')}`} placeholder={t('searchOptions')} value={q} onChange={(e) => setQ(e.target.value)} />
-      <div className="flex items-center justify-between text-[12px]">
+      <div className="flex items-center justify-between text-k-xs">
         {/* «Todos» agrega los que se ven: con una búsqueda puesta, son los que coinciden. */}
         <button type="button" className="font-medium text-k-periwinkle hover:underline disabled:opacity-50" disabled={shown.length === 0} onClick={() => set([...new Set([...selected, ...shown.map((o) => o.value)])])}>
           {t('optionsSelectAll')}
@@ -181,11 +182,11 @@ function MultiSelectFilter({ value, onChange, def }: FilterControlProps) {
         </button>
       </div>
       <div className="max-h-44 space-y-1.5 overflow-y-auto pr-1">
-        {shown.length === 0 && <p className="text-[12px] text-k-text-2">{t('noOptions')}</p>}
+        {shown.length === 0 && <p className="text-k-xs text-k-text-2">{t('noOptions')}</p>}
         {shown.map((o) => (
           <label key={o.value} className="flex cursor-pointer items-center gap-2">
             <input type="checkbox" className="h-4 w-4 accent-k-periwinkle" checked={selected.includes(o.value)} onChange={() => toggle(o.value)} />
-            <span className="text-[13px] text-k-text">{o.label}</span>
+            <span className="text-k-sm text-k-text">{o.label}</span>
           </label>
         ))}
       </div>
@@ -211,7 +212,7 @@ function RadioFilter({ value, onChange, def }: FilterControlProps) {
       {options.map((o) => (
         <label key={o.value || 'all'} className="flex cursor-pointer items-center gap-2">
           <input type="checkbox" className="h-4 w-4 accent-k-periwinkle" checked={current === o.value} onChange={() => onChange({ [key]: o.value })} />
-          <span className="text-[13px] text-k-text">{o.label}</span>
+          <span className="text-k-sm text-k-text">{o.label}</span>
         </label>
       ))}
     </div>
@@ -297,7 +298,7 @@ export function Filter({
     const marcados = def.keys.reduce((n, k) => n + (urlValue[k] ? urlValue[k]!.split(',').filter(Boolean).length : 0), 0);
     return (
       <details open={puestos > 0}>
-        <summary className="mb-1.5 flex cursor-pointer list-none items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-k-text-2 hover:text-k-text [&::-webkit-details-marker]:hidden">
+        <summary className="mb-1.5 flex cursor-pointer list-none items-center gap-1.5 text-k-2xs font-semibold uppercase tracking-wide text-k-text-2 hover:text-k-text [&::-webkit-details-marker]:hidden">
           <span aria-hidden className="text-[9px] transition-transform">
             ▸
           </span>
@@ -312,7 +313,7 @@ export function Filter({
 
   return (
     <div>
-      <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{def.label}</span>
+      <span className="mb-1.5 block text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">{def.label}</span>
       {control}
     </div>
   );
@@ -343,11 +344,11 @@ export function FilterPanel({
   return (
     <aside className="w-full shrink-0 rounded-2xl border border-k-border bg-white p-4 lg:w-[240px]" aria-label={t('filters')}>
       <div className="mb-4 flex items-center justify-between">
-        <span className="text-[13px] font-semibold uppercase tracking-wide text-k-text">{t('filters')}</span>
+        <span className="text-k-sm font-semibold uppercase tracking-wide text-k-text">{t('filters')}</span>
         <div className="flex items-center gap-3">
-          <button type="button" onClick={onClear} className="text-[13px] font-medium text-k-periwinkle hover:underline">
+          <TextButton type="button" onClick={onClear} tone="periwinkle">
             {t('clear')}
-          </button>
+          </TextButton>
           <button type="button" onClick={onClose} aria-label={t('closeFilters')} className="text-k-muted hover:text-k-text">
             ✕
           </button>

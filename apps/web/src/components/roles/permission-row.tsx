@@ -53,15 +53,15 @@ export function PermissionRow({
           aria-describedby={`${id}-desc`}
         />
         <div className="min-w-0 flex-1">
-          <label htmlFor={id} className="block text-[14px] font-medium text-k-text">
+          <label htmlFor={id} className="block text-k-base font-medium text-k-text">
             {tp(`${key}.name`)}
           </label>
-          <p id={`${id}-desc`} className="mt-0.5 text-[13px] text-k-text-2">
+          <p id={`${id}-desc`} className="mt-0.5 text-k-sm text-k-text-2">
             {tp(`${key}.description`)}
           </p>
-          <p className="mt-0.5 font-mono text-[11px] text-k-muted">{entry.code}</p>
-          {requires && <p className="mt-1 text-[12px] text-k-muted">{t('requires', { list: requires })}</p>}
-          {locked && <p className="mt-1 text-[12px] font-medium text-k-text-2">🔒 {t('locked')}</p>}
+          <p className="mt-0.5 font-mono text-k-2xs text-k-muted">{entry.code}</p>
+          {requires && <p className="mt-1 text-k-xs text-k-muted">{t('requires', { list: requires })}</p>}
+          {locked && <p className="mt-1 text-k-xs font-medium text-k-text-2">🔒 {t('locked')}</p>}
         </div>
         <div className="flex flex-wrap items-center justify-end gap-1.5">
           <RiskBadge risk={entry.risk} />

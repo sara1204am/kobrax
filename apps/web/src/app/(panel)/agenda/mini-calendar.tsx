@@ -35,14 +35,14 @@ export function MiniCalendar({
     <section aria-label={t('miniCalendar')} className="rounded-2xl border border-k-border bg-white p-4 shadow-k-card">
       <div className="mb-3 flex items-center justify-between">
         <Arrow dir="prev" label={t('previousMonth')} onClick={() => onPickMonth(shiftMonth(day, -1))} />
-        <span className="text-[15px] font-semibold capitalize text-k-navy">
+        <span className="text-k-md font-semibold capitalize text-k-navy">
           {fmt({ month: 'long', year: 'numeric' }, day)}
         </span>
         <Arrow dir="next" label={t('nextMonth')} onClick={() => onPickMonth(shiftMonth(day, 1))} />
       </div>
       <div className="grid grid-cols-7 gap-y-1 text-center">
         {grid.slice(0, 7).map((iso) => (
-          <span key={`h${iso}`} className="pb-1 text-[11px] capitalize text-k-muted">
+          <span key={`h${iso}`} className="pb-1 text-k-2xs capitalize text-k-muted">
             {fmt({ weekday: 'short' }, iso).replace('.', '')}
           </span>
         ))}
@@ -60,7 +60,7 @@ export function MiniCalendar({
               aria-current={esHoy ? 'date' : undefined}
               aria-pressed={selected}
               title={libre ? t('nonWorkingDay') : undefined}
-              className={`relative mx-auto flex h-9 w-9 items-center justify-center rounded-lg text-[13px] tabular-nums transition-colors ${
+              className={`relative mx-auto flex h-9 w-9 items-center justify-center rounded-lg text-k-sm tabular-nums transition-colors ${
                 selected
                   ? 'bg-k-navy font-semibold text-white'
                   : `${delMes ? (libre ? 'text-k-text-2' : 'text-k-text') : 'text-k-muted'} hover:bg-k-info-bg ${esHoy ? 'font-semibold ring-1 ring-inset ring-k-periwinkle' : ''}`

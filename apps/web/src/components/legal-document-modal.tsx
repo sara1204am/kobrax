@@ -106,11 +106,11 @@ export function LegalDocumentModal({
 
       {state === 'ready' && doc && (
         <div className="space-y-4">
-          <p className="text-[12px] text-k-muted">
+          <p className="text-k-xs text-k-muted">
             {t('version', { version: doc.version })} · {t('effective', { date: date(doc.effectiveAt) })}
           </p>
           <LegalText content={doc.content} />
-          <div className="border-t border-k-border pt-3 text-[11px] text-k-muted">
+          <div className="border-t border-k-border pt-3 text-k-2xs text-k-muted">
             <p className="break-all font-mono">{t('fingerprint', { hash: doc.contentSha256 })}</p>
             <a href={pageHref} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block font-medium text-k-purple hover:underline">
               {t('openPage')}

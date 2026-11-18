@@ -55,7 +55,7 @@ export function OtpInput({
           aria-label={`Dígito ${i + 1}`}
           onChange={(e) => setDigit(i, e.target.value)}
           onKeyDown={(e) => onKey(i, e)}
-          className={`h-[52px] w-11 rounded-[8px] border-[1.5px] text-center font-mono text-[20px] font-semibold text-k-text outline-none transition-all ${
+          className={`h-[52px] w-11 rounded-[8px] border-[1.5px] text-center font-mono text-k-2xl font-semibold text-k-text outline-none transition-all ${
             error
               ? 'border-k-danger bg-k-danger-bg'
               : d

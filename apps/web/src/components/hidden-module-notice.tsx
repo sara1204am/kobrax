@@ -25,7 +25,7 @@ function Notice({ canManage }: { canManage: boolean }) {
   return (
     <div
       role="status"
-      className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-k-border bg-k-highlight/40 px-4 py-3 text-[14px] text-k-text"
+      className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-k-border bg-k-highlight/40 px-4 py-3 text-k-base text-k-text"
     >
       <p>
         <span className="font-semibold">{t('title', { module: tNav(key) })}</span>{' '}

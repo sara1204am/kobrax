@@ -100,12 +100,12 @@ export function ConnectionsTable({
           render: (c) => (
             <span className="text-k-text">
               {[c.os, c.browser].filter(Boolean).join(' · ') || t('unknownDevice')}
-              {c.deviceType === 'mobile' && <span className="ml-2 text-[12px] text-k-muted">{t('mobile')}</span>}
+              {c.deviceType === 'mobile' && <span className="ml-2 text-k-xs text-k-muted">{t('mobile')}</span>}
             </span>
           ),
         },
         { key: 'place', header: t('cols.place'), render: (c) => <span className="text-k-text-2">{place(c)}</span> },
-        { key: 'ip', header: t('cols.ip'), render: (c) => <span className="font-mono text-[13px] text-k-text-2">{c.ip ?? '—'}</span> },
+        { key: 'ip', header: t('cols.ip'), render: (c) => <span className="font-mono text-k-sm text-k-text-2">{c.ip ?? '—'}</span> },
         {
           key: 'result',
           header: t('cols.result'),

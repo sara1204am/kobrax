@@ -83,15 +83,15 @@ export default async function EquipoPage({ searchParams }: { searchParams: TeamP
               <span className="flex items-center gap-3">
                 <TeamIcon name="users" className="h-6 w-6 text-k-slate" />
                 <span>
-                  <span className="block text-[12px] text-k-text-2">{t('planCard.plan')}</span>
-                  <span className="block text-[15px] font-semibold text-k-navy">
+                  <span className="block text-k-xs text-k-text-2">{t('planCard.plan')}</span>
+                  <span className="block text-k-md font-semibold text-k-navy">
                     {plan ? tPlans(`names.${plan.code}`) : seats.planCode}
                   </span>
                 </span>
               </span>
               <span className="block w-44">
-                <span className="mb-1.5 block text-[13px] text-k-text-2">
-                  <strong className="text-[15px] text-k-navy">
+                <span className="mb-1.5 block text-k-sm text-k-text-2">
+                  <strong className="text-k-md text-k-navy">
                     {seats.usage.users} / {max}
                   </strong>{' '}
                   {t('planCard.active')}
@@ -100,8 +100,8 @@ export default async function EquipoPage({ searchParams }: { searchParams: TeamP
               </span>
               {next && (
                 <span className="border-l border-k-border pl-5">
-                  <span className="block text-[12px] text-k-text-2">{t('planCard.more')}</span>
-                  <Link href="/cuenta" className="text-[13px] font-medium text-k-periwinkle hover:underline">
+                  <span className="block text-k-xs text-k-text-2">{t('planCard.more')}</span>
+                  <Link href="/cuenta" className="text-k-sm font-medium text-k-periwinkle hover:underline">
                     {t('planCard.link')} →
                   </Link>
                 </span>
@@ -115,7 +115,7 @@ export default async function EquipoPage({ searchParams }: { searchParams: TeamP
           administrador sin saber qué hacer; acá se nombra el plan, el número y dónde mirarlo. */}
       {seats && max !== null && level === 'full' && (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 rounded-2xl bg-k-warning-bg px-4 py-3">
-          <p className="text-[13px] leading-relaxed text-k-warning-text">
+          <p className="text-k-sm leading-relaxed text-k-warning-text">
             {t('atCapacity.text', {
               plan: plan ? tPlans(`names.${plan.code}`) : seats.planCode,
               max,
@@ -128,7 +128,7 @@ export default async function EquipoPage({ searchParams }: { searchParams: TeamP
           </p>
           <Link
             href="/cuenta"
-            className="shrink-0 text-[13px] font-medium text-k-purple hover:underline"
+            className="shrink-0 text-k-sm font-medium text-k-purple hover:underline"
           >
             {t('atCapacity.link')}
           </Link>
