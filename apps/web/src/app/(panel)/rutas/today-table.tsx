@@ -198,6 +198,7 @@ export function TodayTable({
       // Una página: son tantas filas como cobradores y llegan todas.
       meta={{ total: rows.length, page: 1, limit: Math.max(1, rows.length), pages: 1 }}
       filters={filters}
+      filtersOpen={false}
       filtered={filtered}
       entityLabel={t('todayBoard.entity')}
       empty={<EmptyState title={t('todayBoard.empty')} />}
