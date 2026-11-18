@@ -127,7 +127,8 @@ export class PasswordService {
     await this.prisma.withTenant(accountId, async (tx) => {
       await tx.user.update({
         where: { id: record.userId },
-        data: { passwordHash, status: 'ACTIVE', requiresPasswordChange: false },
+        // Quien acepta una invitación ya probó que el correo es suyo (el código le llegó ahí): nace confirmado.
+        data: { passwordHash, status: 'ACTIVE', requiresPasswordChange: false, emailVerifiedAt: new Date() },
       });
       // Privacidad: la persona invitada también acepta los Términos y reconoce la Política antes de entrar. Dentro de la misma
       // transacción: si falta una aceptación, la invitación NO se consume y el usuario sigue PENDING.

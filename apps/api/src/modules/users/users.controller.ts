@@ -19,6 +19,7 @@ import { GuidesService } from './guides.service';
 import { MemberDetailService, decodeCursor } from './member-detail.service';
 import { InviteMemberDto, UpdateMemberDto, UpdateProfileDto } from './dto/user.dto';
 import { Authenticated } from '../auth/decorators/authz.decorator';
+import { RequireVerifiedEmail } from '../auth/decorators/require-verified-email.decorator';
 
 @Controller('users')
 export class UsersController {
@@ -111,6 +112,7 @@ export class UsersController {
 
   // `invite` va antes que `:id` por claridad; no colisionan (POST vs PATCH/DELETE).
   @Post('invite')
+  @RequireVerifiedEmail()
   @Roles(Permission.USER_INVITE)
   invite(@Body() dto: InviteMemberDto) {
     return this.users.invite(dto);

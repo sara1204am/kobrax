@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuditModule } from '../../common/audit/audit.module';
 import { AuthModule } from '../auth/auth.module';
+import { PlatformAccountsService } from './platform-accounts.service';
 import { PlatformAuthController } from './platform-auth.controller';
 import { PlatformAuthService } from './platform-auth.service';
 import { PlatformController } from './platform.controller';
@@ -11,6 +12,6 @@ import { SupportSessionsService } from './support-sessions.service';
 @Module({
   imports: [AuthModule, AuditModule],
   controllers: [PlatformAuthController, PlatformController, SupportAccessController],
-  providers: [PlatformAuthService, SupportSessionsService],
+  providers: [PlatformAuthService, SupportSessionsService, PlatformAccountsService],
 })
 export class PlatformModule {}

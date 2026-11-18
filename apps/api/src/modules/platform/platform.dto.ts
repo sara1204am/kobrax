@@ -1,4 +1,4 @@
-import { ArrayMaxSize, IsArray, IsEmail, IsInt, IsOptional, IsString, IsUUID, Length, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsEmail, IsIn, IsInt, IsOptional, IsString, IsUUID, Length, Max, MaxLength, Min, MinLength } from 'class-validator';
 import { SUPPORT_MAX_TTL_MINUTES } from '@kobrax/shared';
 
 export class PlatformLoginDto {
@@ -15,6 +15,12 @@ export class PlatformMfaConfirmDto {
   @IsString() @MinLength(1) @MaxLength(200) password!: string;
   @IsString() @Length(6, 8) code!: string;
   @IsOptional() @IsString() @MaxLength(200) enrollmentKey?: string;
+}
+
+export class SetAccountStatusDto {
+  /** Solo suspender o levantar la suspensión: la consola de plataforma no cambia la cuenta a ningún otro estado. */
+  @IsIn(['SUSPENDED', 'ACTIVE']) status!: 'SUSPENDED' | 'ACTIVE';
+  @IsString() @Length(10, 500) reason!: string;
 }
 
 export class OpenSupportSessionDto {

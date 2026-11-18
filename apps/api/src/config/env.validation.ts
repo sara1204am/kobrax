@@ -38,6 +38,8 @@ const baseSchema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
   MAIL_FROM: z.string().optional(),
+  // A dónde llega el aviso de cada reporte o solicitud pública (formulario `/reportar` y `/eliminar-cuenta`).
+  REPORTS_NOTIFY_EMAIL: z.string().email().default('kobraxikigai@gmail.com'),
   // Push remoto (FCM HTTP v1, Android). Opcionales: sin credenciales el envío queda apagado y todo lo demás sigue igual.
   // Una de las dos: el JSON de la cuenta de servicio en base64 (un .env no soporta multilínea) o la ruta a un archivo FUERA
   // del repo. Nunca se registran en logs.

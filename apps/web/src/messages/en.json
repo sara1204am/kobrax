@@ -4455,6 +4455,13 @@
     "symbol": "At least one symbol"
   },
   "shell": {
+    "legalLinks": {
+      "terms": "Terms",
+      "privacy": "Privacy",
+      "report": "Report a problem",
+      "deleteAccount": "Delete my account",
+      "label": "Legal information and help"
+    },
     "chipTitle": "Secure platform",
     "chipText": "Encrypted connection and data",
     "headline": "Collections in the field,<br></br>results in <accent>real time</accent>",
@@ -5059,6 +5066,159 @@
     },
     "loadError": "Your privacy information could not be loaded."
   },
+  "platform": {
+    "login": {
+      "title": "Platform console",
+      "subtitle": "Restricted access. The session lasts 15 minutes and does not renew itself.",
+      "email": "Email",
+      "password": "Password",
+      "code": "MFA code",
+      "codeHint": "The 6-digit code from your authenticator app.",
+      "submit": "Sign in",
+      "error": "Could not sign in",
+      "expired": "Your platform session expired. Sign in again.",
+      "disabled": "Platform access is disabled on the server."
+    },
+    "console": {
+      "brand": "PLATFORM",
+        "loadError": "The console could not be loaded: the server did not respond. Try again in a few minutes.",
+        "verified": "Email confirmed",
+        "unverified": "Email NOT confirmed: it cannot be approved yet",
+      "logout": "Sign out",
+      "tabs": {
+        "reports": "Reports and requests",
+        "accounts": "Accounts"
+      },
+      "reportsCount": "{count, plural, =0 {Nothing pending} one {# case} other {# cases}}",
+      "showAll": "Show all",
+      "showOpen": "Show open only",
+      "noReports": "There are no reports or requests in this view.",
+      "types": {
+        "ABUSE_REPORT": "Abuse report",
+        "ACCESS": "Data access",
+        "RECTIFICATION": "Data correction",
+        "ERASURE": "Data deletion",
+        "RESTRICTION": "Restrict use",
+        "OBJECTION": "Objection",
+        "PORTABILITY": "Portability",
+        "WITHDRAW_CONSENT": "Consent withdrawal",
+        "ACCOUNT_DELETION": "Delete account",
+        "OTHER": "Other inquiry"
+      },
+      "status": {
+        "RECEIVED": "Received",
+        "IN_REVIEW": "In review",
+        "NEEDS_INFO": "Needs information",
+        "APPROVED": "Approved",
+        "REJECTED": "Rejected",
+        "COMPLETED": "Completed"
+      },
+      "actions": {
+        "IN_REVIEW": "Move to review",
+        "NEEDS_INFO": "Ask for information",
+        "APPROVED": "Approve",
+        "REJECTED": "Reject",
+        "COMPLETED": "Mark completed"
+      },
+      "fromThirdParty": "Person without an account (public form)",
+      "fromUser": "Kobrax user",
+      "about": "About: {subject}",
+      "rejectedBecause": "Rejected: {reason}",
+      "reason": "Reason for rejection",
+      "whatIsMissing": "What information is missing?",
+      "noteOptional": "Note (optional)",
+      "reasonRequired": "Write the reason (at least 5 characters).",
+      "noteRequired": "Say what information is missing (at least 5 characters).",
+      "searchAccounts": "Search account",
+      "searchPlaceholder": "Company name",
+      "noAccounts": "No accounts found.",
+      "accountStatus": {
+        "ACTIVE": "Active",
+        "TRIAL": "Trial",
+        "SUSPENDED": "Suspended",
+        "INACTIVE": "Inactive",
+        "CANCELLED": "Cancelled"
+      },
+      "suspend": "Suspend",
+      "reactivate": "Reactivate",
+      "suspendWarning": "Sign-in is cut off for the WHOLE account. Anyone with an open session keeps it for up to 15 minutes.",
+      "reactivateInfo": "The account can sign in again.",
+      "accountReason": "Reason",
+      "accountReasonHint": "It is saved in the account's audit log with your identifier. At least 10 characters.",
+      "accountReasonRequired": "Write the reason (at least 10 characters).",
+      "cancel": "Cancel",
+      "confirm": "Confirm",
+      "error": "The action could not be completed"
+    }
+  },
+  "emailVerify": {
+    "banner": {
+      "title": "Confirm your email.",
+      "text": "We sent a link to {email}. Until you confirm it you cannot invite people or export data.",
+      "resend": "Resend email",
+      "sent": "We sent you another link at {email}.",
+      "wait": "We just sent you a link. Check your email (and your spam folder) or wait a minute.",
+      "error": "The email could not be resent. Please try again."
+    },
+    "page": {
+      "title": "Confirm your email",
+      "body": "Confirm that this email is yours to finish activating your account. If you did not create the account, close this page: nothing will be done.",
+      "confirm": "Confirm",
+      "error": "It could not be confirmed. Please try again.",
+      "invalid": "The link is not valid. Ask for a new one from the notice in the panel.",
+      "doneTitle": "Email confirmed",
+      "doneBody": "Done, your email is confirmed. You can now invite people and export data.",
+      "goPanel": "Go to the panel"
+    }
+  },
+  "report": {
+    "title": "Report a problem or exercise your rights",
+    "intro": "If you think you are being harassed, that your data was loaded into Kobrax without the right to do so, or you want to ask for access, correction or deletion of your data, write to us here. You do not need an account.",
+    "type": "What do you need?",
+    "types": {
+      "ABUSE_REPORT": "Report harassment or misuse",
+      "ACCESS": "Know what data about me is in Kobrax",
+      "RECTIFICATION": "Correct my data",
+      "ERASURE": "Delete my data",
+      "OBJECTION": "Object to the use of my data",
+      "OTHER": "Other inquiry"
+    },
+    "email": "Your email",
+    "emailHint": "We only use it to reply to you.",
+    "name": "Your name (optional)",
+    "subject": "Who or which organization is this about? (optional)",
+    "subjectHint": "The collector's name, the company or the account, if you know it.",
+    "description": "Tell us what happened",
+    "descriptionHint": "Write what is needed to locate the case (at least 10 characters). Do not include passwords or bank details.",
+    "leaveEmpty": "Leave this empty",
+    "privacyNote": "We will use this information only to handle your request. More details in the privacy policy.",
+    "submit": "Send",
+    "error": "It could not be sent. Please try again in a few minutes.",
+    "sentTitle": "We received your message",
+    "sentBody": "We will review it and reply to the email you gave. If your request acts on your data or account, we sent you an email to confirm it is yours: check it (and your spam folder). If the case requires it, we may suspend the access of the account concerned.",
+    "reference": "Tracking code: {code}",
+    "deletionTitle": "Delete my Kobrax account",
+    "deletionIntro": "Request here the deletion of your account and your user data, without opening the app. We will verify the request is yours before carrying it out.",
+    "deletionSubject": "Organization or company of your account (optional)",
+    "deletionSubjectHint": "It helps us find your account.",
+    "deletionDescription": "Comments (optional)",
+    "deletionDescriptionHint": "You can leave it empty. Portfolio data managed by your organization may be kept as required by law and by its contract.",
+    "deletionDefault": "I request the deletion of my Kobrax account and my user data.",
+    "submitDeletion": "Request deletion",
+    "goReport": "Want to report a problem?",
+    "goDeletion": "Want to delete your account?",
+    "verify": {
+      "title": "Confirm your request",
+      "body": "Confirm that this email is yours so we can handle your request. If you did not make it, close this page: nothing will be done.",
+      "confirm": "Confirm",
+      "error": "It could not be confirmed. Please try again.",
+      "invalid": "The link is not valid. Ask for a new one by sending the request again.",
+      "doneTitle": "Done, thank you",
+      "doneBody": "We confirmed your email. We will handle your request and reply to this address.",
+      "reference": "Tracking code: {code}"
+    },
+    "privacyLink": "Privacy policy"
+  },
   "legal": {
     "document": {
       "version": "Version {version}",
@@ -5071,6 +5231,7 @@
       "acceptTerms": "I have read and accept",
       "acknowledgePrivacy": "I have read and understand the policy",
       "acceptHint": "When you accept, you will go back to the form with the box checked.",
+      "reportLink": "Report a problem or exercise my rights",
       "openPage": "Open on a separate page",
       "history": "Previous versions",
       "current": "current",

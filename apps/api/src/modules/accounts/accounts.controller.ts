@@ -13,6 +13,7 @@ import { CreateAccountRequestDto } from './dto/account-request.dto';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { TransferOwnershipDto } from './dto/transfer-ownership.dto';
 import { Public } from '../auth/decorators/authz.decorator';
+import { EmailVerificationService } from '../auth/email-verification.service';
 import { legalRequestMeta } from '../legal/legal-request';
 
 /**
@@ -27,6 +28,7 @@ export class AccountsController {
     private readonly requests: AccountRequestsService,
     private readonly ownership: OwnershipService,
     private readonly retention: RetentionService,
+    private readonly emailVerification: EmailVerificationService,
   ) {}
 
   /**
@@ -40,8 +42,11 @@ export class AccountsController {
   @Post()
   @Public()
   @RateLimit({ limit: 10, windowSec: 3600, by: 'ip' })
-  create(@Body() dto: CreateAccountDto, @Req() req: Request) {
-    return this.accounts.create(dto, legalRequestMeta(req, 'signup'));
+  async create(@Body() dto: CreateAccountDto, @Req() req: Request) {
+    const created = await this.accounts.create(dto, legalRequestMeta(req, 'signup'));
+    // Confirmar que el correo es de quien se registró. Si el envío falla no se rompe el alta: la persona pide otro desde el aviso del panel.
+    await this.emailVerification.sendForEmail(created.email);
+    return created;
   }
 
   @Get('me')

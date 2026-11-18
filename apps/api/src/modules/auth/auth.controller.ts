@@ -12,6 +12,8 @@ import {
 import type { Request } from 'express';
 import { AuthService, type SessionMeta } from './auth.service';
 import { PasswordService } from './password.service';
+import { EmailVerificationService } from './email-verification.service';
+import { EmailVerifyDto } from './dto/email-verify.dto';
 import { SessionService } from './session.service';
 import type { AuthenticatedUser } from './guards/jwt-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
@@ -38,6 +40,7 @@ export class AuthController {
     private readonly auth: AuthService,
     private readonly passwords: PasswordService,
     private readonly sessions: SessionService,
+    private readonly emailVerification: EmailVerificationService,
   ) {}
 
   private meta(req: Request): SessionMeta {
@@ -46,6 +49,28 @@ export class AuthController {
       userAgent: req.headers['user-agent'],
       deviceType: (req.headers['x-client-type'] as string) ?? 'api',
     };
+  }
+
+  // ── Confirmar el correo de la cuenta ─────────────────────────────────────
+
+  /** La persona abrió el enlace del correo y pulsó «Confirmar». Sin sesión: el enlace es la prueba. */
+  @Post('email/verify')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @RateLimit({ limit: 20, windowSec: 3600, by: 'ip' })
+  async verifyEmail(@Body() dto: EmailVerifyDto) {
+    await this.emailVerification.confirm(dto.token);
+    return { verified: true };
+  }
+
+  /** Pide otro enlace (el aviso del panel). Con sesión; como mucho uno por minuto. */
+  @Post('email/resend')
+  @Authenticated()
+  @HttpCode(HttpStatus.OK)
+  @RateLimit({ limit: 10, windowSec: 3600, by: 'ip' })
+  async resendVerification(@CurrentUser() user: AuthenticatedUser) {
+    const sent = await this.emailVerification.send(user.userId, { respectCooldown: true });
+    return { sent };
   }
 
   // ── Login (máquina de estados) ───────────────────────────────────────────

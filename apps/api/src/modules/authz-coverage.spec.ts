@@ -101,7 +101,8 @@ describe('F14·F3 — cobertura del contrato de acceso', () => {
     // (cuenta + archivo + vencimiento de 5 minutos), con límite de peticiones; ver `FilesController.raw`.
     // Privacidad (B1): los documentos legales tienen que poder leerse ANTES de crear la cuenta. Solo `GET /legal/...` (lectura); la evidencia
     // de aceptación (escritura) nunca es pública.
-    for (const r of publics) assert.match(r, /\/(auth|accounts|health)\b|^GET \/files\/:id\/raw$|^GET \/legal\//, `ruta pública fuera de auth/accounts/health/legal: ${r}`);
+    // Reportes: `POST /public/reports` es el formulario público de personas sin cuenta (límite 5/hora por IP, trampa anti-robot, tope por correo).
+    for (const r of publics) assert.match(r, /\/(auth|accounts|health)\b|^GET \/files\/:id\/raw$|^GET \/legal\/|^POST \/public\/reports(\/confirm)?$/, `ruta pública fuera de auth/accounts/health/legal/reports: ${r}`);
   });
 
   it('ninguna ruta crea, edita o promueve a un usuario de plataforma (H-11)', async () => {

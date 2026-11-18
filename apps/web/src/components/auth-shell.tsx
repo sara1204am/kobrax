@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { LocaleSwitch } from './locale-switch';
 
@@ -18,6 +19,7 @@ export function AuthShell({
   title,
   subtitle,
   wide,
+  hideLegalLinks,
   children,
 }: {
   /** Línea corta arriba del título («Bienvenido de vuelta»). Sólo la usa el login. */
@@ -30,8 +32,11 @@ export function AuthShell({
    * tercera. Los ocho pasos de auth siguen en la medida de siempre.
    */
   wide?: boolean;
+  /** Sin el pie de enlaces (términos, privacidad, reportar…). Lo usa la consola de plataforma, que no se anuncia públicamente. */
+  hideLegalLinks?: boolean;
   children: ReactNode;
 }) {
+  const t = useTranslations('shell.legalLinks');
   const ancho = wide ? 'max-w-[880px]' : 'max-w-[440px]';
 
   return (
@@ -59,6 +64,24 @@ export function AuthShell({
             {subtitle && <p className="mt-3 text-k-base leading-relaxed text-k-text-2">{subtitle}</p>}
             <div className="mt-6">{children}</div>
           </div>
+
+          {/* Los canales públicos se ven desde la primera pantalla: una persona sin cuenta (un deudor, un tercero) tiene que poder encontrarlos aquí. */}
+          {!hideLegalLinks && (
+            <nav aria-label={t('label')} className={`mt-5 flex w-full ${ancho} flex-wrap justify-center gap-x-4 gap-y-1 text-k-sm text-k-text-2`}>
+              <Link href="/terminos" className="hover:text-k-navy hover:underline">
+                {t('terms')}
+              </Link>
+              <Link href="/privacidad" className="hover:text-k-navy hover:underline">
+                {t('privacy')}
+              </Link>
+              <Link href="/reportar" className="hover:text-k-navy hover:underline">
+                {t('report')}
+              </Link>
+              <Link href="/eliminar-cuenta" className="hover:text-k-navy hover:underline">
+                {t('deleteAccount')}
+              </Link>
+            </nav>
+          )}
         </section>
       </div>
 

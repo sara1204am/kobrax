@@ -819,6 +819,15 @@
     "any": []
   },
   {
+    "route": "GET /platform/accounts",
+    "handler": "PlatformController.listAccounts",
+    "kind": "permissions",
+    "all": [
+      "platform:accounts:read"
+    ],
+    "any": []
+  },
+  {
     "route": "GET /platform/privacy-requests",
     "handler": "PrivacyPlatformController.list",
     "kind": "permissions",
@@ -1387,6 +1396,20 @@
     "any": []
   },
   {
+    "route": "POST /auth/email/resend",
+    "handler": "AuthController.resendVerification",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /auth/email/verify",
+    "handler": "AuthController.verifyEmail",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
     "route": "POST /auth/forgot-password",
     "handler": "AuthController.forgotPassword",
     "kind": "public",
@@ -1816,6 +1839,15 @@
     "any": []
   },
   {
+    "route": "POST /platform/accounts/:accountId/status",
+    "handler": "PlatformController.setAccountStatus",
+    "kind": "permissions",
+    "all": [
+      "platform:accounts:suspend"
+    ],
+    "any": []
+  },
+  {
     "route": "POST /platform/accounts/:accountId/support-sessions/:id/token",
     "handler": "PlatformController.token",
     "kind": "permissions",
@@ -1860,6 +1892,20 @@
     "route": "POST /privacy/requests",
     "handler": "PrivacyRequestsController.create",
     "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /public/reports/confirm",
+    "handler": "PublicReportsController.confirm",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /public/reports",
+    "handler": "PublicReportsController.create",
+    "kind": "public",
     "all": [],
     "any": []
   },

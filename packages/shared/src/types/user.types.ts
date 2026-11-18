@@ -41,6 +41,8 @@ export interface MeInfo {
   permissions: string[];
   mfaEnabled?: boolean;
   requiresPasswordChange?: boolean;
+  /** ¿Ya confirmó que el correo es suyo? `false` = el panel muestra el aviso «Confirma tu correo». */
+  emailVerified?: boolean;
   /** La marca del negocio activo, para que el panel la pinte sin pedir `account:read`. `null` si no se pudo leer. */
   account?: AccountBrand | null;
   /** F14 · F5: clave del rol de la cuenta (`MANAGER`…). */
