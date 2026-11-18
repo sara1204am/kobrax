@@ -23,7 +23,7 @@ const RouteMap = dynamic(() => import('@/components/route-map').then((m) => m.Ro
 
 export function VisitMapWidget({ points, day }: { points: VisitMapPoint[]; day: string }) {
   const t = useTranslations('panel.dashboard');
-  if (points.length === 0) return <p className="text-[13px] text-k-text-2">{t('noVisits', { day })}</p>;
+  if (points.length === 0) return <p className="text-k-sm text-k-text-2">{t('noVisits', { day })}</p>;
 
   const done = points.filter((p) => p.status === 'VISITED').length;
 
@@ -47,7 +47,7 @@ export function VisitMapWidget({ points, day }: { points: VisitMapPoint[]; day: 
           ].filter((l): l is string => !!l),
         }))}
       />
-      <div className="mt-3 flex flex-wrap items-center gap-4 text-[12px] text-k-text-2">
+      <div className="mt-3 flex flex-wrap items-center gap-4 text-k-xs text-k-text-2">
         <span className="flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-full bg-k-success" aria-hidden />
           {t('map.done', { n: done })}

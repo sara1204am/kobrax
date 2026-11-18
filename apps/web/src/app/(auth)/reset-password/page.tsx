@@ -45,7 +45,7 @@ export default function ResetPasswordPage() {
   if (done) {
     return (
       <AuthShell title={t('doneTitle')} subtitle={t('doneSubtitle')}>
-        <Link href="/login" className="text-[13px] font-medium text-k-purple">
+        <Link href="/login" className="text-k-sm font-medium text-k-purple">
           {t('doneLink')}
         </Link>
       </AuthShell>
@@ -80,7 +80,7 @@ export default function ResetPasswordPage() {
             required
           />
         </Field>
-        {mismatch && <p className="text-[12px] text-k-danger">{t('mismatch')}</p>}
+        {mismatch && <p className="text-k-xs text-k-danger">{t('mismatch')}</p>}
         <Button type="submit" loading={loading} disabled={!canSubmit}>
           {t('submit')}
         </Button>

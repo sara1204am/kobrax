@@ -46,7 +46,7 @@ export function WidgetActions({
             { ...widget, id: `${widget.id}-copia`, layout: { ...widget.layout, y: widget.layout.y + widget.layout.h } },
           ])
         }
-        className="rounded-md px-1.5 text-[14px] leading-none text-k-muted hover:bg-k-bg hover:text-k-text-2"
+        className="rounded-md px-1.5 text-k-base leading-none text-k-muted hover:bg-k-bg hover:text-k-text-2"
       >
         ⧉
       </button>
@@ -55,7 +55,7 @@ export function WidgetActions({
         aria-label={t('removeWidget')}
         title={t('removeWidget')}
         onClick={() => void save(widgets.filter((w) => w.id !== widget.id))}
-        className="rounded-md px-1.5 text-[16px] leading-none text-k-muted hover:bg-k-danger-bg hover:text-k-danger"
+        className="rounded-md px-1.5 text-k-lg leading-none text-k-muted hover:bg-k-danger-bg hover:text-k-danger"
       >
         ×
       </button>

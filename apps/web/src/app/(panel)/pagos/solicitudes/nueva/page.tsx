@@ -6,6 +6,8 @@ import { apiCall } from '@/lib/bff';
 import { EmptyState, PageHeader } from '@/components/panel-ui';
 import { isUuid } from '@/lib/payments';
 import { RequestForm } from './request-form';
+import { requirePermission } from '@/lib/authz';
+import { Permission } from '@kobrax/shared';
 
 /**
  * Pedir un cobro: el QR y el link que se le mandan al deudor que no va a recibir a nadie.
@@ -19,6 +21,8 @@ export default async function NuevaSolicitudPage({
 }: {
   searchParams: { creditId?: string };
 }) {
+  const blocked = await requirePermission(Permission.PAYMENT_WRITE);
+  if (blocked) return blocked;
   if (!PAYMENT_REQUESTS_ENABLED) notFound(); // apagado en la primera versión: ver `lib/features.ts`
   const t = await getTranslations('panel.payments');
   const creditId = searchParams.creditId;

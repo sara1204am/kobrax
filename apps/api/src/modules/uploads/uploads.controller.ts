@@ -1,6 +1,7 @@
 import { Controller, Get, Param, Post, StreamableFile, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ResponseDto } from '@kobrax/shared';
+import { UploadConcurrencyInterceptor } from '../../common/interceptors/upload-concurrency.interceptor';
 import { RolesAny } from '../auth/decorators/roles.decorator';
 import { Permission } from '@kobrax/shared';
 import { UploadAccessService } from './upload-access.service';
@@ -24,7 +25,7 @@ export class UploadsController {
 
   @Post()
   @RolesAny(Permission.CLIENT_WRITE, Permission.COLLECTION_WRITE, Permission.PAYMENT_WRITE, Permission.ROUTE_EXECUTE)
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_UPLOAD_BYTES } }))
+  @UseInterceptors(UploadConcurrencyInterceptor, FileInterceptor('file', { limits: { fileSize: MAX_UPLOAD_BYTES } }))
   async upload(@UploadedFile() file: UploadedFileLike) {
     // F14 · F4: queda registrado como PENDING hasta que algo lo ate (los triggers lo pasan a ATTACHED). El registro va ANTES de escribir los bytes
     // (ver `UploadsService.store`). `fileId` es aditivo: el móvil lo ignora.

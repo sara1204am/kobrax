@@ -51,11 +51,11 @@ export async function TimelineSection({
   return (
     <section aria-label={t('sections.timeline')}>
       <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{t('sections.timeline')}</h2>
+        <h2 className="text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">{t('sections.timeline')}</h2>
         {/* Sin esto, la bitácora corta en 8 y no hay forma de ver el resto — que es justo lo que se
             necesita para saber TODO lo que se hizo con una persona. */}
         {seeAllHref && entries.length > 0 && (
-          <Link href={seeAllHref} className="text-[13px] font-medium text-k-periwinkle hover:underline">
+          <Link href={seeAllHref} className="text-k-sm font-medium text-k-periwinkle hover:underline">
             {t('seeAll')}
           </Link>
         )}
@@ -63,17 +63,17 @@ export async function TimelineSection({
 
       <div className="rounded-2xl border border-k-border bg-white p-4">
         {denied || entries.length === 0 ? (
-          <p className="text-[13px] text-k-muted">{t('noTimeline')}</p>
+          <p className="text-k-sm text-k-muted">{t('noTimeline')}</p>
         ) : (
           <ol className="space-y-4">
             {entries.map((e) => (
               <li key={`${e.kind}-${e.id}`} className="relative pl-5">
                 <span aria-hidden className={`absolute left-0 top-1.5 h-2 w-2 rounded-full ${DOT[e.kind]}`} />
-                <p className="text-[14px] font-medium text-k-text">{title(t, e)}</p>
+                <p className="text-k-base font-medium text-k-text">{title(t, e)}</p>
                 {detail(t, e, byId, named) && (
-                  <p className="mt-0.5 text-[13px] text-k-text-2">{detail(t, e, byId, named)}</p>
+                  <p className="mt-0.5 text-k-sm text-k-text-2">{detail(t, e, byId, named)}</p>
                 )}
-                <p className="mt-0.5 text-[12px] text-k-muted">{relativeDate(e.at, locale)}</p>
+                <p className="mt-0.5 text-k-xs text-k-muted">{relativeDate(e.at, locale)}</p>
               </li>
             ))}
           </ol>

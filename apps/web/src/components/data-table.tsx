@@ -248,7 +248,7 @@ export function DataTable<T>({
                 type="button"
                 onClick={() => setPanelOpen((v) => !v)}
                 aria-expanded={panelOpen}
-                className={`flex h-9 items-center gap-1.5 rounded-lg border px-3 text-[13px] font-medium ${
+                className={`flex h-9 items-center gap-1.5 rounded-lg border px-3 text-k-sm font-medium ${
                   filtered ? 'border-k-periwinkle bg-k-highlight text-k-periwinkle' : 'border-k-border bg-white text-k-text-2 hover:bg-k-bg'
                 }`}
               >
@@ -271,14 +271,14 @@ export function DataTable<T>({
          */}
         {selection && pickedHere.length > 0 && (
           <div className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-k-periwinkle bg-k-highlight px-4 py-2.5">
-            <span className="text-[13px] font-medium text-k-periwinkle">
+            <span className="text-k-sm font-medium text-k-periwinkle">
               {t('selected', { count: pickedHere.length })}
             </span>
             <div className="flex flex-wrap items-center gap-2">{selection.render(pickedHere, () => setPicked([]))}</div>
             <button
               type="button"
               onClick={() => setPicked([])}
-              className="ml-auto text-[13px] font-medium text-k-text-2 hover:underline"
+              className="ml-auto text-k-sm font-medium text-k-text-2 hover:underline"
             >
               {t('clearSelection')}
             </button>
@@ -293,7 +293,7 @@ export function DataTable<T>({
             aria-busy={pending}
           >
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-[14px]">
+              <table className="w-full border-collapse text-k-base">
                 <thead>
                   <tr className="border-b border-k-border text-left">
                     {selection && (
@@ -315,7 +315,7 @@ export function DataTable<T>({
                         key={column.key}
                         scope="col"
                         aria-sort={sort === column.key ? (dir === 'asc' ? 'ascending' : 'descending') : undefined}
-                        className={`px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-k-text-2 ${
+                        className={`px-4 py-3 text-k-2xs font-semibold uppercase tracking-wide text-k-text-2 ${
                           column.numeric ? 'text-right' : column.center ? 'text-center' : ''
                         }`}
                       >
@@ -464,7 +464,7 @@ function ColumnsMenu<T>({
 
   return (
     <Dropdown
-      summaryClass="flex h-9 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-k-border bg-white px-3 text-[13px] font-medium text-k-text-2 hover:bg-k-bg [&::-webkit-details-marker]:hidden"
+      summaryClass="flex h-9 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-k-border bg-white px-3 text-k-sm font-medium text-k-text-2 hover:bg-k-bg [&::-webkit-details-marker]:hidden"
       panelClass="absolute right-0 z-20 mt-1 w-[260px] overflow-hidden rounded-xl border border-k-border bg-white py-1 shadow-k-card"
       label={
         <>
@@ -511,7 +511,7 @@ function ColumnsMenu<T>({
               ) : (
                 <span className="h-4 w-4 shrink-0" />
               )}
-              <span className={`flex-1 text-[13px] ${on ? 'text-k-text' : 'text-k-muted'}`}>{column.header}</span>
+              <span className={`flex-1 text-k-sm ${on ? 'text-k-text' : 'text-k-muted'}`}>{column.header}</span>
               <button
                 type="button"
                 onClick={() => onChange(on ? visible.filter((k) => k !== key) : [...visible, key])}
@@ -551,18 +551,18 @@ function Pagination({
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 border-t border-k-border px-4 py-3">
-      <p className="text-[13px] text-k-text-2">
+      <p className="text-k-sm text-k-text-2">
         {entityLabel ? t('showing', { from, to, total, entity: entityLabel }) : t('range', { from, to, total })}
       </p>
 
       <div className="flex items-center gap-3">
         {pageSizes && (
-          <label className="flex items-center gap-1.5 text-[13px] text-k-text-2">
+          <label className="flex items-center gap-1.5 text-k-sm text-k-text-2">
             {t('perPage')}
             <select
               value={meta.limit}
               onChange={(e) => go({ pageSize: e.target.value, page: '1' })}
-              className="h-8 rounded-lg border border-k-border bg-white px-1.5 text-[13px] text-k-text outline-none focus:border-k-periwinkle"
+              className="h-8 rounded-lg border border-k-border bg-white px-1.5 text-k-sm text-k-text outline-none focus:border-k-periwinkle"
             >
               {pageSizes.map((n) => (
                 <option key={n} value={n}>
@@ -578,7 +578,7 @@ function Pagination({
             <PageButton label={t('previous')} icon="‹" disabled={meta.page <= 1} onClick={() => go({ page: String(meta.page - 1) })} />
             {pageNumbers(meta.page, meta.pages).map((n, i) =>
               n === null ? (
-                <span key={`gap${i}`} className="px-1 text-[13px] text-k-muted">
+                <span key={`gap${i}`} className="px-1 text-k-sm text-k-muted">
                   …
                 </span>
               ) : (
@@ -587,7 +587,7 @@ function Pagination({
                   type="button"
                   onClick={() => go({ page: String(n) })}
                   aria-current={n === meta.page ? 'page' : undefined}
-                  className={`min-h-[32px] min-w-[32px] rounded-lg px-2 text-[13px] font-medium ${
+                  className={`min-h-[32px] min-w-[32px] rounded-lg px-2 text-k-sm font-medium ${
                     n === meta.page ? 'bg-k-periwinkle text-white' : 'border border-k-border text-k-text-2 hover:bg-k-bg'
                   }`}
                 >
@@ -610,7 +610,7 @@ function PageButton({ label, icon, disabled, onClick }: { label: string; icon: s
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      className="flex min-h-[32px] min-w-[32px] items-center justify-center rounded-lg border border-k-border text-[15px] text-k-text-2 hover:bg-k-bg disabled:opacity-40"
+      className="flex min-h-[32px] min-w-[32px] items-center justify-center rounded-lg border border-k-border text-k-md text-k-text-2 hover:bg-k-bg disabled:opacity-40"
     >
       <span aria-hidden>{icon}</span>
     </button>

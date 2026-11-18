@@ -17,6 +17,7 @@ import { availableQuery, hasPlanFilters, minStops, planningTargets, toAvailable,
 import { EmptyState, PageHeader } from '@/components/panel-ui';
 import { RetryState } from '@/components/retry-state';
 import { PlanScreen, type PlannedVisit } from './plan-screen';
+import { requirePermission } from '@/lib/authz';
 
 /**
  * Planificar las rutas de un día, **de a un cobrador por vez y en cuatro pasos** (F4/12): fecha y cobrador, clientes y
@@ -33,6 +34,8 @@ import { PlanScreen, type PlannedVisit } from './plan-screen';
  * Abre en MAÑANA: planificar es preparar el trabajo que viene, el de hoy ya está en la calle.
  */
 export default async function PlanificarPage({ searchParams }: { searchParams: PlanParams }) {
+  const blocked = await requirePermission(Permission.ROUTE_READ);
+  if (blocked) return blocked;
   const t = await getTranslations('panel.routes.planning');
   // «Hoy» es el de la EMPRESA: en Bolivia, desde las 20:00 el servidor ya está en mañana y «mañana» sería pasado mañana.
   const today = (await getAgendaSummary())?.date ?? todayISO();

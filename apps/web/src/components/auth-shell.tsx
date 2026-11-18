@@ -51,18 +51,17 @@ export function AuthShell({
           </div>
 
           <div className={`w-full ${ancho} rounded-2xl border border-k-border bg-white p-7 shadow-k-card sm:p-9`}>
-            {eyebrow && <p className="text-[15px] font-medium text-k-purple">{eyebrow}</p>}
+            {eyebrow && <p className="text-k-md font-medium text-k-purple">{eyebrow}</p>}
             <h1 className="mt-0.5 text-[30px] font-semibold leading-tight tracking-tight text-k-navy">
               {title}
             </h1>
             <span aria-hidden className="mt-3 block h-[3px] w-10 rounded-full bg-k-purple" />
-            {subtitle && <p className="mt-3 text-[14px] leading-relaxed text-k-text-2">{subtitle}</p>}
+            {subtitle && <p className="mt-3 text-k-base leading-relaxed text-k-text-2">{subtitle}</p>}
             <div className="mt-6">{children}</div>
           </div>
         </section>
       </div>
 
-      <TrustBar />
     </main>
   );
 }
@@ -90,7 +89,7 @@ function BrandPanel() {
         <div className="flex items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element -- 40px fijos, no necesita el optimizador */}
           <img src="/logo.png" alt="" width={40} height={40} className="h-10 w-10 object-contain" />
-          <span className="text-[22px] font-semibold tracking-[0.18em] text-white">KOBRAX</span>
+          <span className="text-k-3xl font-semibold tracking-[0.18em] text-white">KOBRAX</span>
         </div>
 
         {/*
@@ -101,8 +100,8 @@ function BrandPanel() {
         <span className="hidden items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-3 py-2 lg:inline-flex">
           <IconShield className="h-5 w-5 shrink-0 text-k-soft-periw" />
           <span className="leading-tight">
-            <span className="block text-[13px] font-medium text-white">{t('chipTitle')}</span>
-            <span className="block text-[11px] text-white/70">{t('chipText')}</span>
+            <span className="block text-k-sm font-medium text-white">{t('chipTitle')}</span>
+            <span className="block text-k-2xs text-white/70">{t('chipText')}</span>
           </span>
         </span>
       </div>
@@ -122,7 +121,7 @@ function BrandPanel() {
             accent: (chunks) => <span className="text-k-soft-periw">{chunks}</span>,
           })}
         </h2>
-        <p className="mt-5 max-w-[380px] text-[15px] leading-relaxed text-white/70">
+        <p className="mt-5 max-w-[380px] text-k-md leading-relaxed text-white/70">
           {t('tagline')}
         </p>
 
@@ -160,42 +159,8 @@ function Feature({ icon, title, text }: { icon: ReactNode; title: string; text: 
         {icon}
       </span>
       <span className="leading-snug">
-        <span className="block text-[15px] font-medium text-white">{title}</span>
-        <span className="mt-0.5 block max-w-[280px] text-[13px] text-white/70">{text}</span>
-      </span>
-    </li>
-  );
-}
-
-/**
- * Barra de confianza del pie. El diseño traía «Cumplimiento normativo · 99,9% de disponibilidad ·
- * Soporte 24/7»: los tres son promesas que hoy nadie puede sostener, y el 99,9% es la misma cifra
- * inventada que ya salió del panel. Estos cuatro son verificables contra el código.
- */
-function TrustBar() {
-  const t = useTranslations('shell.trust');
-
-  return (
-    <footer className="border-t border-k-border bg-white">
-      <ul className="mx-auto grid max-w-6xl gap-5 px-6 py-5 sm:grid-cols-2 lg:grid-cols-4">
-        <TrustItem icon={<IconLock />} title={t('tlsTitle')} text={t('tlsText')} />
-        <TrustItem icon={<IconShield />} title={t('dbTitle')} text={t('dbText')} />
-        <TrustItem icon={<IconEye />} title={t('auditTitle')} text={t('auditText')} />
-        <TrustItem icon={<IconBuilding />} title={t('tenantTitle')} text={t('tenantText')} />
-      </ul>
-    </footer>
-  );
-}
-
-function TrustItem({ icon, title, text }: { icon: ReactNode; title: string; text: string }) {
-  return (
-    <li className="flex items-center gap-3">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-k-highlight text-k-purple">
-        {icon}
-      </span>
-      <span className="leading-tight">
-        <span className="block text-[13px] font-medium text-k-text">{title}</span>
-        <span className="block text-[12px] text-k-muted">{text}</span>
+        <span className="block text-k-md font-medium text-white">{title}</span>
+        <span className="mt-0.5 block max-w-[280px] text-k-sm text-white/70">{text}</span>
       </span>
     </li>
   );
@@ -244,31 +209,6 @@ function IconChart() {
   return (
     <svg {...svg} aria-hidden>
       <path d="M5 20V11M12 20V5M19 20v-6" />
-    </svg>
-  );
-}
-function IconLock() {
-  return (
-    <svg {...svg} aria-hidden>
-      <rect x="5" y="11" width="14" height="9" rx="2" />
-      <path d="M8 11V7.5a4 4 0 0 1 8 0V11" />
-    </svg>
-  );
-}
-function IconEye() {
-  return (
-    <svg {...svg} aria-hidden>
-      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
-      <circle cx="12" cy="12" r="2.5" />
-    </svg>
-  );
-}
-function IconBuilding() {
-  return (
-    <svg {...svg} aria-hidden>
-      <rect x="4" y="4" width="8" height="16" rx="1.5" />
-      <rect x="14" y="9" width="6" height="11" rx="1.5" />
-      <path d="M7 8h2M7 12h2M7 16h2" />
     </svg>
   );
 }

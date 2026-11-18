@@ -6,6 +6,7 @@ import { isWorkingDate } from '@kobrax/shared';
 import { itemWhen, loadByDay, monthGrid, shiftMonth } from '@/lib/agenda';
 import { useWorkPreferences } from '@/lib/use-work-preferences';
 import type { AgendaEvents } from './agenda-screen';
+import { Button } from '@/components/ui';
 
 /** Cuántas gestiones se nombran en una celda antes de resumir con «+N». */
 const CHIPS = 3;
@@ -69,21 +70,21 @@ export function MonthCalendar({
     <div>
       <div className="mb-3 flex items-center gap-2">
         <Nav label={t('previousMonth')} dir="prev" onClick={() => onPickMonth(shiftMonth(month, -1))} />
-        <span className="min-w-[160px] text-[15px] font-medium capitalize text-k-navy">{nombreMes}</span>
+        <span className="min-w-[160px] text-k-md font-medium capitalize text-k-navy">{nombreMes}</span>
         <Nav label={t('nextMonth')} dir="next" onClick={() => onPickMonth(shiftMonth(month, 1))} />
-        <button
+        <Button
           type="button"
           onClick={() => onPickMonth(today)}
-          className="h-9 rounded-lg border border-k-border bg-white px-3 text-[13px] font-medium text-k-text-2 hover:bg-k-bg"
+          variant="ghost" size="sm" fullWidth={false} className="!font-medium"
         >
           {t('today')}
-        </button>
+        </Button>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-k-border bg-white">
         <div className="grid grid-cols-7 border-b border-k-border">
           {grid.slice(0, 7).map((iso) => (
-            <span key={`h${iso}`} className="px-2 py-2 text-center text-[11px] capitalize text-k-muted">
+            <span key={`h${iso}`} className="px-2 py-2 text-center text-k-2xs capitalize text-k-muted">
               {new Intl.DateTimeFormat(locale, { weekday: 'short', timeZone: 'UTC' }).format(new Date(`${iso}T00:00:00.000Z`))}
             </span>
           ))}
@@ -106,7 +107,7 @@ export function MonthCalendar({
       </div>
 
       {/* La leyenda al pie: el color es una ayuda, no la única forma de saber qué es cada cosa. */}
-      <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-k-text-2">
+      <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-k-xs text-k-text-2">
         {(['VISIT', 'CALL', 'REMINDER'] as const).map((tipo) => (
           <li key={tipo} className="flex items-center gap-1.5">
             <span aria-hidden className={`inline-block h-2.5 w-2.5 rounded-sm ${TIPO_COLOR[tipo]}`} />
@@ -154,17 +155,17 @@ function Celda({
           type="button"
           onClick={() => onPickDay(iso)}
           title={libre ? t('nonWorkingDay') : undefined}
-          className={`rounded px-1 text-[12px] tabular-nums hover:underline ${
+          className={`rounded px-1 text-k-xs tabular-nums hover:underline ${
             esHoy ? 'font-semibold text-k-periwinkle' : delMes ? (libre ? 'text-k-text-2' : 'text-k-text') : 'text-k-muted'
           }`}
         >
           {día}
         </button>
-        {carga > 0 && <span className="text-[10px] font-semibold tabular-nums text-k-danger">{t('overdueShort', { n: carga })}</span>}
+        {carga > 0 && <span className="text-k-3xs font-semibold tabular-nums text-k-danger">{t('overdueShort', { n: carga })}</span>}
       </div>
 
       {/* En pantalla chica sólo el número: tres chips en una celda de 45 px no se leen. */}
-      <span className="mt-1 block px-1 text-[11px] tabular-nums text-k-text-2 sm:hidden">
+      <span className="mt-1 block px-1 text-k-2xs tabular-nums text-k-text-2 sm:hidden">
         {items.length > 0 ? items.length : ''}
       </span>
 
@@ -174,7 +175,7 @@ function Celda({
             <button
               type="button"
               onClick={() => events.onViewRequest(item.id)}
-              className={`block w-full truncate rounded px-1 py-0.5 text-left text-[11px] ${TIPO_COLOR[item.type] ?? 'bg-k-bg text-k-text-2'}`}
+              className={`block w-full truncate rounded px-1 py-0.5 text-left text-k-2xs ${TIPO_COLOR[item.type] ?? 'bg-k-bg text-k-text-2'}`}
             >
               <span className="tabular-nums">{itemWhen(item, t)}</span> {item.clientName ?? '—'}
             </button>
@@ -185,7 +186,7 @@ function Celda({
             <button
               type="button"
               onClick={() => onPickDay(iso)}
-              className="w-full rounded px-1 py-0.5 text-left text-[11px] font-medium text-k-periwinkle hover:underline"
+              className="w-full rounded px-1 py-0.5 text-left text-k-2xs font-medium text-k-periwinkle hover:underline"
             >
               {t('more', { n: items.length - CHIPS })}
             </button>
@@ -197,7 +198,7 @@ function Celda({
             <button
               type="button"
               onClick={() => events.onCreateRequest({ date: iso })}
-              className="w-full rounded px-1 py-0.5 text-left text-[11px] text-transparent hover:text-k-periwinkle focus-visible:text-k-periwinkle"
+              className="w-full rounded px-1 py-0.5 text-left text-k-2xs text-transparent hover:text-k-periwinkle focus-visible:text-k-periwinkle"
             >
               {t('addShort')}
             </button>

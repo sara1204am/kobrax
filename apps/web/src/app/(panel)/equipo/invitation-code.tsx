@@ -38,30 +38,30 @@ export function InvitationCode({ code, email }: { code: string; email: string })
           <TeamIcon name="check" className="h-8 w-8" />
         </span>
         <div>
-          <p className="text-[15px] font-semibold text-k-text">{t('sentTitle')}</p>
-          <p className="mt-1 text-[14px] text-k-text-2">{t('sentTo', { email })}</p>
+          <p className="text-k-md font-semibold text-k-text">{t('sentTitle')}</p>
+          <p className="mt-1 text-k-base text-k-text-2">{t('sentTo', { email })}</p>
         </div>
       </div>
 
       <div className="rounded-xl border border-k-border bg-k-bg p-4">
-        <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-k-text-2">{t('codeLabel')}</p>
+        <p className="mb-2 text-k-2xs font-medium uppercase tracking-wide text-k-text-2">{t('codeLabel')}</p>
         <div className="flex items-center gap-2 rounded-xl border border-k-border bg-white p-2 pl-3">
-          <code className="flex-1 select-all break-all font-mono text-[16px] font-semibold tracking-wider text-k-navy">
+          <code className="flex-1 select-all break-all font-mono text-k-lg font-semibold tracking-wider text-k-navy">
             {code}
           </code>
           <button
             type="button"
             onClick={() => void copy()}
-            className="shrink-0 rounded-lg border border-k-border bg-white px-3 py-2 text-[13px] font-medium text-k-text-2 hover:bg-k-bg"
+            className="shrink-0 rounded-lg border border-k-border bg-white px-3 py-2 text-k-sm font-medium text-k-text-2 hover:bg-k-bg"
           >
             {copied ? t('copied') : t('copy')}
           </button>
         </div>
-        <p className="mt-2 text-[12px] text-k-text-2">{t('expires')}</p>
-        {failed && <p className="mt-1 text-[12px] text-k-text-2">{t('copyFailed')}</p>}
+        <p className="mt-2 text-k-xs text-k-text-2">{t('expires')}</p>
+        {failed && <p className="mt-1 text-k-xs text-k-text-2">{t('copyFailed')}</p>}
       </div>
 
-      <p className="text-[13px] text-k-text-2">
+      <p className="text-k-sm text-k-text-2">
         {t.rich('howTo', {
           link: (chunks) => (
             <a href="/invitacion" className="font-medium text-k-purple hover:underline">

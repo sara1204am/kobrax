@@ -131,10 +131,10 @@ export function AttachmentsSection({
             <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-k-bg text-k-muted">
               <Icon name="file" className="h-6 w-6" />
             </span>
-            <p className="text-[15px] font-medium text-k-text">{t('noAttachments')}</p>
+            <p className="text-k-md font-medium text-k-text">{t('noAttachments')}</p>
             {/* 🔴 El vacío ENSEÑA qué subir. «Sin adjuntos» a secas deja el legajo vacío para siempre:
                 nadie sabe qué se espera de esa caja. */}
-            <p className="mx-auto mt-1 max-w-[380px] text-[13px] text-k-text-2">{t('attachmentsEmptyHint')}</p>
+            <p className="mx-auto mt-1 max-w-[380px] text-k-sm text-k-text-2">{t('attachmentsEmptyHint')}</p>
           </div>
         ) : (
           <>
@@ -163,7 +163,7 @@ export function AttachmentsSection({
                         disabled={busy}
                         onChange={(e) => void reclasificar(a.id, e.target.value)}
                         onBlur={() => setEditando(null)}
-                        className="h-9 max-w-[220px] text-[13px]"
+                        className="h-9 max-w-[220px] text-k-sm"
                         aria-label={t('form.attachmentType')}
                       >
                         {ATTACHMENT_TYPES.map((v) => (
@@ -173,9 +173,9 @@ export function AttachmentsSection({
                         ))}
                       </Select>
                     ) : (
-                      <span className="block text-[14px] font-medium text-k-text">{t(`attachmentType.${a.fileType}`)}</span>
+                      <span className="block text-k-base font-medium text-k-text">{t(`attachmentType.${a.fileType}`)}</span>
                     )}
-                    <span className="block truncate text-[12px] text-k-muted">
+                    <span className="block truncate text-k-xs text-k-muted">
                       {date(a.createdAt, locale)}
                       {/* El hash es lo que prueba que el archivo no cambió. Corto: entero son 64
                           caracteres que nadie compara a ojo. */}
@@ -183,7 +183,7 @@ export function AttachmentsSection({
                     </span>
                   </span>
 
-                  <span className="flex shrink-0 items-center gap-3 text-[13px] font-medium">
+                  <span className="flex shrink-0 items-center gap-3 text-k-sm font-medium">
                     {a.fileUrl && (
                       <>
                         <button type="button" onClick={() => setViendo(a)} className="text-k-periwinkle hover:underline">
@@ -223,7 +223,7 @@ export function AttachmentsSection({
                 </li>
               ))}
             </ul>
-            <p className="mt-3 text-[12px] text-k-muted">{t('attachmentsHint')}</p>
+            <p className="mt-3 text-k-xs text-k-muted">{t('attachmentsHint')}</p>
           </>
         )}
       </Section>
@@ -279,7 +279,7 @@ export function AttachmentsSection({
 /** El `<input type="file">` nativo, escondido detrás de un label. Ninguna dependencia. */
 function SubirLabel({ busy, onFile, label }: { busy: boolean; onFile: (f: File) => void; label: string }) {
   return (
-    <label className="flex cursor-pointer items-center gap-1.5 text-[13px] font-medium text-k-periwinkle hover:underline">
+    <label className="flex cursor-pointer items-center gap-1.5 text-k-sm font-medium text-k-periwinkle hover:underline">
       <Icon name="upload" className="h-4 w-4" />
       {label}
       <input

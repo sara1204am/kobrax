@@ -56,7 +56,7 @@ export default async function CarteraPage({
     // persona venía armando. El mensaje lo pone el servidor, que es el que sabe qué falló.
     return (
       <>
-        <p className="mb-4 text-[14px] text-k-text-2">{t('subtitle')}</p>
+        <p className="mb-4 text-k-base text-k-text-2">{t('subtitle')}</p>
         <RetryState title={t('noAccess')} text={list.body.error?.message} />
       </>
     );
@@ -70,7 +70,7 @@ export default async function CarteraPage({
       {/* Sin título: la pantalla ya se llama «Cartera» en el menú de la izquierda, y repetirlo en
           26 px empuja la tabla —que es a lo que se viene— media pantalla hacia abajo. Queda la
           bajada, que sí dice algo que el menú no dice. */}
-      <p className="mb-4 text-[14px] text-k-text-2">{t('subtitle')}</p>
+      <p className="mb-4 text-k-base text-k-text-2">{t('subtitle')}</p>
       <div data-tour="screen.portfolio.clientCard">
       <PortfolioTable
         rows={list.body.data}

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import type { AccountRequestInfo } from '@kobrax/shared';
-import { Button, ErrorBanner, Field, Input } from '@/components/ui';
+import { Button, ErrorBanner, Field, Input, Textarea } from '@/components/ui';
 import { Section } from '@/components/panel-ui';
 import { Modal } from '@/components/modal';
 import { useToast } from '@/components/toast';
@@ -57,10 +57,10 @@ export function ClosureRequest({
 
   return (
     <Section title={t('title')} inner="space-y-4 p-6">
-      <p className="text-[13px] leading-relaxed text-k-text-2">{t('intro')}</p>
+      <p className="text-k-sm leading-relaxed text-k-text-2">{t('intro')}</p>
 
       {pending ? (
-        <p role="status" className="rounded-xl bg-k-highlight px-4 py-3 text-[13px] text-k-navy">
+        <p role="status" className="rounded-xl bg-k-highlight px-4 py-3 text-k-sm text-k-navy">
           {t('pending', { date: dateTime(pending.createdAt, locale, timezone ?? undefined) })}
         </p>
       ) : (
@@ -103,12 +103,12 @@ export function ClosureRequest({
             <Input value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />
           </Field>
           <Field label={t('note')} hint={t('noteHint')}>
-            <textarea
+            <Textarea
               value={note}
               maxLength={500}
               rows={3}
               onChange={(e) => setNote(e.target.value)}
-              className="w-full rounded-xl border border-k-border bg-white px-3 py-2 text-[14px] text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus"
+              className="!border !border-k-border !px-3 !py-2 !text-k-base"
             />
           </Field>
         </div>

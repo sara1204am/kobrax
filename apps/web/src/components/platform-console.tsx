@@ -134,8 +134,8 @@ export function PlatformConsole({ initialReports, initialAccounts }: { initialRe
     <div className="min-h-screen bg-k-bg">
       <header className="border-b border-k-border bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-5 py-3">
-          <span className="text-[15px] font-semibold tracking-[0.16em] text-k-navy">KOBRAX · {t('brand')}</span>
-          <Button variant="ghost" onClick={logout} className="!h-9 !w-auto px-4 text-[13px]">
+          <span className="text-k-md font-semibold tracking-[0.16em] text-k-navy">KOBRAX · {t('brand')}</span>
+          <Button variant="ghost" onClick={logout} size="sm" fullWidth={false}>
             {t('logout')}
           </Button>
         </div>
@@ -150,7 +150,7 @@ export function PlatformConsole({ initialReports, initialAccounts }: { initialRe
               aria-selected={tab === k}
               variant={tab === k ? 'primary' : 'ghost'}
               onClick={() => setTab(k)}
-              className="!h-10 !w-auto px-5 text-[14px]"
+              size="sm" fullWidth={false}
             >
               {t(`tabs.${k}`)}
             </Button>
@@ -160,37 +160,37 @@ export function PlatformConsole({ initialReports, initialAccounts }: { initialRe
         {tab === 'reports' && (
           <section aria-label={t('tabs.reports')}>
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-[13px] text-k-muted">{t('reportsCount', { count: visible.length })}</p>
-              <Button variant="ghost" onClick={() => setFilter(filter === 'open' ? 'all' : 'open')} className="!h-9 !w-auto px-4 text-[13px]">
+              <p className="text-k-sm text-k-muted">{t('reportsCount', { count: visible.length })}</p>
+              <Button variant="ghost" onClick={() => setFilter(filter === 'open' ? 'all' : 'open')} size="sm" fullWidth={false}>
                 {filter === 'open' ? t('showAll') : t('showOpen')}
               </Button>
             </div>
             {visible.length === 0 ? (
-              <p role="status" className="rounded-xl border border-k-border bg-white px-5 py-4 text-[14px] text-k-text-2">
+              <p role="status" className="rounded-xl border border-k-border bg-white px-5 py-4 text-k-base text-k-text-2">
                 {t('noReports')}
               </p>
             ) : (
               <ul className="space-y-3">
                 {visible.map((r) => (
                   <li key={r.id} className="rounded-2xl border border-k-border bg-white px-5 py-4 shadow-k-card">
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-k-muted">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-k-sm text-k-muted">
                       <span className="font-semibold text-k-navy">{t(`types.${r.type}`)}</span>
                       <span>{t(`status.${r.status}`)}</span>
                       <span>{dateFmt(r.createdAt)}</span>
                       <span className="font-mono">{r.id.slice(0, 8).toUpperCase()}</span>
                       <span>{r.subjectKind === 'THIRD_PARTY' ? t('fromThirdParty') : t('fromUser')}</span>
                     </div>
-                    <p className="mt-2 text-[14px] text-k-text">
+                    <p className="mt-2 text-k-base text-k-text">
                       {r.requester.name ? `${r.requester.name} · ` : ''}
                       {r.requester.email}
                     </p>
-                    {r.reportedSubject && <p className="mt-1 text-[13px] text-k-text-2">{t('about', { subject: r.reportedSubject })}</p>}
-                    <p className="mt-2 whitespace-pre-wrap text-[14px] text-k-text">{r.description}</p>
-                    {r.rejectionReason && <p className="mt-2 text-[13px] text-k-danger">{t('rejectedBecause', { reason: r.rejectionReason })}</p>}
+                    {r.reportedSubject && <p className="mt-1 text-k-sm text-k-text-2">{t('about', { subject: r.reportedSubject })}</p>}
+                    <p className="mt-2 whitespace-pre-wrap text-k-base text-k-text">{r.description}</p>
+                    {r.rejectionReason && <p className="mt-2 text-k-sm text-k-danger">{t('rejectedBecause', { reason: r.rejectionReason })}</p>}
                     {r.allowedNext.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-2">
                         {r.allowedNext.map((to) => (
-                          <Button key={to} variant={to === 'REJECTED' ? 'danger' : 'ghost'} onClick={() => openStep(r, to)} className="!h-9 !w-auto px-4 text-[13px]">
+                          <Button key={to} variant={to === 'REJECTED' ? 'danger' : 'ghost'} onClick={() => openStep(r, to)} size="sm" fullWidth={false}>
                             {t(`actions.${to}`)}
                           </Button>
                         ))}
@@ -211,7 +211,7 @@ export function PlatformConsole({ initialReports, initialAccounts }: { initialRe
               </Field>
             </div>
             {accounts.length === 0 ? (
-              <p role="status" className="rounded-xl border border-k-border bg-white px-5 py-4 text-[14px] text-k-text-2">
+              <p role="status" className="rounded-xl border border-k-border bg-white px-5 py-4 text-k-base text-k-text-2">
                 {t('noAccounts')}
               </p>
             ) : (
@@ -219,18 +219,18 @@ export function PlatformConsole({ initialReports, initialAccounts }: { initialRe
                 {accounts.map((a) => (
                   <li key={a.accountId} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-k-border bg-white px-5 py-4 shadow-k-card">
                     <div>
-                      <p className="text-[15px] font-semibold text-k-navy">{a.businessName}</p>
-                      <p className="text-[13px] text-k-muted">
+                      <p className="text-k-md font-semibold text-k-navy">{a.businessName}</p>
+                      <p className="text-k-sm text-k-muted">
                         {t(`accountStatus.${a.status}`)} · {a.planCode}
                         {a.ownerEmail ? ` · ${a.ownerEmail}` : ''}
                       </p>
                     </div>
                     {a.status === 'SUSPENDED' ? (
-                      <Button variant="ghost" onClick={() => { setError(null); setText(''); setTarget({ account: a, to: 'ACTIVE' }); }} className="!h-9 !w-auto px-4 text-[13px]">
+                      <Button variant="ghost" onClick={() => { setError(null); setText(''); setTarget({ account: a, to: 'ACTIVE' }); }} size="sm" fullWidth={false}>
                         {t('reactivate')}
                       </Button>
                     ) : (
-                      <Button variant="danger" onClick={() => { setError(null); setText(''); setTarget({ account: a, to: 'SUSPENDED' }); }} className="!h-9 !w-auto px-4 text-[13px]">
+                      <Button variant="danger" onClick={() => { setError(null); setText(''); setTarget({ account: a, to: 'SUSPENDED' }); }} size="sm" fullWidth={false}>
                         {t('suspend')}
                       </Button>
                     )}
@@ -250,10 +250,10 @@ export function PlatformConsole({ initialReports, initialAccounts }: { initialRe
         title={t(`actions.${step.to}`)}
         actions={
           <>
-            <Button variant="ghost" onClick={() => setStep(null)} disabled={busy} className="!w-auto px-5">
+            <Button variant="ghost" onClick={() => setStep(null)} disabled={busy} fullWidth={false}>
               {t('cancel')}
             </Button>
-            <Button variant={step.to === 'REJECTED' ? 'danger' : 'primary'} loading={busy} onClick={() => void confirmStep()} className="!w-auto px-5">
+            <Button variant={step.to === 'REJECTED' ? 'danger' : 'primary'} loading={busy} onClick={() => void confirmStep()} fullWidth={false}>
               {t('confirm')}
             </Button>
           </>
@@ -274,17 +274,17 @@ export function PlatformConsole({ initialReports, initialAccounts }: { initialRe
         title={`${target.to === 'SUSPENDED' ? t('suspend') : t('reactivate')} · ${target.account.businessName}`}
         actions={
           <>
-            <Button variant="ghost" onClick={() => setTarget(null)} disabled={busy} className="!w-auto px-5">
+            <Button variant="ghost" onClick={() => setTarget(null)} disabled={busy} fullWidth={false}>
               {t('cancel')}
             </Button>
-            <Button variant={target.to === 'SUSPENDED' ? 'danger' : 'primary'} loading={busy} onClick={() => void confirmAccount()} className="!w-auto px-5">
+            <Button variant={target.to === 'SUSPENDED' ? 'danger' : 'primary'} loading={busy} onClick={() => void confirmAccount()} fullWidth={false}>
               {t('confirm')}
             </Button>
           </>
         }
       >
         <ErrorBanner message={error} />
-        <p className="mb-3 text-[13px] text-k-text-2">{target.to === 'SUSPENDED' ? t('suspendWarning') : t('reactivateInfo')}</p>
+        <p className="mb-3 text-k-sm text-k-text-2">{target.to === 'SUSPENDED' ? t('suspendWarning') : t('reactivateInfo')}</p>
         <Field label={t('accountReason')} hint={t('accountReasonHint')}>
           <Textarea rows={4} value={text} onChange={(e) => setText(e.target.value)} maxLength={500} />
         </Field>

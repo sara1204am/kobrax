@@ -134,8 +134,8 @@ export function ImportRunner({
       <div className="space-y-6">
         <ErrorBanner message={error} />
         <div className="rounded-2xl border border-k-border bg-white p-6">
-          <p className="text-[18px] font-semibold text-k-navy">{t('run.resultTitle')}</p>
-          <p className="mt-1 text-[14px] text-k-text-2">
+          <p className="text-k-xl font-semibold text-k-navy">{t('run.resultTitle')}</p>
+          <p className="mt-1 text-k-base text-k-text-2">
             {kind === 'skipped'
               ? t('run.resultSkipped')
               : kind === 'warned'
@@ -173,15 +173,15 @@ export function ImportRunner({
       <div className="space-y-6">
         <ErrorBanner message={error} />
         <div className="rounded-2xl border border-k-border bg-white p-6">
-          <p className="text-[18px] font-semibold text-k-navy">{t('run.previewTitle')}</p>
-          <p className="mt-1 text-[14px] text-k-text-2">{t('run.previewNote')}</p>
-          <p className="mt-3 truncate text-[13px] text-k-text-2">
+          <p className="text-k-xl font-semibold text-k-navy">{t('run.previewTitle')}</p>
+          <p className="mt-1 text-k-base text-k-text-2">{t('run.previewNote')}</p>
+          <p className="mt-3 truncate text-k-sm text-k-text-2">
             {t('run.file')}: <span className="text-k-text">{file.name}</span>
           </p>
           {/* D8 · D9: de qué día y de qué asesor es el reporte. Sin fecha de corte se dice: los
               números entran igual, pero sin saber a qué día corresponden. */}
           {summary.report && (
-            <p className="mt-1 text-[13px] text-k-text-2">
+            <p className="mt-1 text-k-sm text-k-text-2">
               {summary.report.reportDate
                 ? t('run.reportDate', { date: summary.report.reportDate.split('-').reverse().join('/') })
                 : t('run.reportDateUnknown')}
@@ -197,7 +197,7 @@ export function ImportRunner({
             El botón se apaga: no se ofrece algo que va a fallar.
           */}
           {seExcede && (
-            <p className="mt-4 rounded-xl bg-k-warning-bg px-4 py-3 text-[13px] leading-relaxed text-k-warning-text">
+            <p className="mt-4 rounded-xl bg-k-warning-bg px-4 py-3 text-k-sm leading-relaxed text-k-warning-text">
               {t('run.planOver', {
                 nuevos: summary.counts.created,
                 lugar: summary.plan!.roomLeft,
@@ -207,7 +207,7 @@ export function ImportRunner({
           )}
 
           {bloqueo && (
-            <p className="mt-4 rounded-xl bg-k-warning-bg px-4 py-3 text-[13px] leading-relaxed text-k-warning-text">{bloqueo}</p>
+            <p className="mt-4 rounded-xl bg-k-warning-bg px-4 py-3 text-k-sm leading-relaxed text-k-warning-text">{bloqueo}</p>
           )}
 
           <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
@@ -257,8 +257,8 @@ export function ImportRunner({
             </>
           }
         >
-          <p className="text-[14px] text-k-text">{ta('reassignText', { n: reassigns.length })}</p>
-          <ul className="mt-3 max-h-64 space-y-1 overflow-y-auto text-[13px] text-k-text-2">
+          <p className="text-k-base text-k-text">{ta('reassignText', { n: reassigns.length })}</p>
+          <ul className="mt-3 max-h-64 space-y-1 overflow-y-auto text-k-sm text-k-text-2">
             {reassigns.map((r) => (
               <li key={r.code}>
                 <span className="font-medium text-k-text">{r.code}</span>
@@ -295,8 +295,8 @@ export function ImportRunner({
           dragging ? 'border-k-purple bg-k-highlight' : 'border-k-border'
         }`}
       >
-        <p className="text-[16px] font-medium text-k-text">{busy ? t('run.reading') : t('run.dropTitle')}</p>
-        <p className="mt-1 text-[13px] text-k-text-2">{t(`profiles.${config.profile.kind}.format`)}</p>
+        <p className="text-k-lg font-medium text-k-text">{busy ? t('run.reading') : t('run.dropTitle')}</p>
+        <p className="mt-1 text-k-sm text-k-text-2">{t(`profiles.${config.profile.kind}.format`)}</p>
         <input
           ref={filePicker}
           type="file"
@@ -330,7 +330,7 @@ function Gate({ title, text, cta }: { title: string; text: string; cta: string }
       action={
         <Link
           href="/import/ajustes"
-          className="min-h-[40px] rounded-xl bg-k-navy px-5 py-2.5 text-[14px] font-semibold text-white hover:bg-k-slate"
+          className="min-h-[40px] rounded-xl bg-k-navy px-5 py-2.5 text-k-base font-semibold text-white hover:bg-k-slate"
         >
           {cta}
         </Link>
@@ -361,8 +361,8 @@ function Counts({ summary, t }: { summary: PortfolioSummary; t: Translator }) {
     <dl className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
       {tiles.map(([key, value]) => (
         <div key={key} className="rounded-xl bg-k-bg px-4 py-3">
-          <dt className="text-[12px] font-semibold uppercase tracking-wide text-k-text-2">{t(`run.${key}`)}</dt>
-          <dd className="mt-1 text-[22px] font-semibold tabular-nums text-k-navy">{value}</dd>
+          <dt className="text-k-xs font-semibold uppercase tracking-wide text-k-text-2">{t(`run.${key}`)}</dt>
+          <dd className="mt-1 text-k-3xl font-semibold tabular-nums text-k-navy">{value}</dd>
         </div>
       ))}
     </dl>
@@ -448,7 +448,7 @@ function Buckets({
     header: t('run.colStatus'),
     sortable: false,
     // El estado como lo escribe el banco («Vencida», «Ejecución») dice más que el nuestro.
-    render: (row) => <span className="text-[13px] text-k-text-2">{get(row)?.reportedStatus ?? '—'}</span>,
+    render: (row) => <span className="text-k-sm text-k-text-2">{get(row)?.reportedStatus ?? '—'}</span>,
   });
   type Preview = PortfolioSummary['preview'];
   type CreateRow = Preview['toCreate'][number];
@@ -461,8 +461,8 @@ function Buckets({
     <>
       {warnings.length > 0 && (
         <section className="rounded-2xl border-l-[3px] border-k-warning bg-k-warning-bg px-4 py-3">
-          <h2 className="text-[14px] font-semibold text-k-warning-text">{t('run.warnings')}</h2>
-          <ul className="mt-1 space-y-1 text-[13px] text-k-warning-text">
+          <h2 className="text-k-base font-semibold text-k-warning-text">{t('run.warnings')}</h2>
+          <ul className="mt-1 space-y-1 text-k-sm text-k-warning-text">
             {/* Agrupados: `MORA_INCONSISTENTE` sale una vez por FILA, así que sin esto 700 filas
                 sospechosas dibujan 700 renglones iguales y empujan fuera de la pantalla a los dos
                 avisos accionables — justo donde se decide si confirmar. */}
@@ -522,8 +522,8 @@ function Buckets({
             render: (row) => (
               <>
                 {row.clientName}
-                {row.linkReview && <span className="ml-2 text-[12px] font-semibold text-k-warning-text">{t('run.linkReview')}</span>}
-                {row.existingClient && <span className="ml-2 text-[12px] text-k-text-2">{t('run.existingClient')}</span>}
+                {row.linkReview && <span className="ml-2 text-k-xs font-semibold text-k-warning-text">{t('run.linkReview')}</span>}
+                {row.existingClient && <span className="ml-2 text-k-xs text-k-text-2">{t('run.existingClient')}</span>}
               </>
             ),
           },
@@ -548,11 +548,11 @@ function Buckets({
                           label={`${ta('colAssignee')} · ${row.code}`}
                         />
                         {row.suggestedAssigneeId && assigning.plan.create[row.code] === row.suggestedAssigneeId && (
-                          <span className="text-[11px] text-k-muted">{ta('suggested')}</span>
+                          <span className="text-k-2xs text-k-muted">{ta('suggested')}</span>
                         )}
                       </span>
                     ) : (
-                      <span className="text-[13px] text-k-text-2">{nameOf(row.suggestedAssigneeId)}</span>
+                      <span className="text-k-sm text-k-text-2">{nameOf(row.suggestedAssigneeId)}</span>
                     ),
                 } satisfies Column<CreateRow>,
               ]
@@ -595,7 +595,7 @@ function Buckets({
                   key: 'current',
                   header: ta('colCurrent'),
                   sortable: false,
-                  render: (row: UpdateRow) => <span className="text-[13px] text-k-text-2">{nameOf(row.currentAssigneeId)}</span>,
+                  render: (row: UpdateRow) => <span className="text-k-sm text-k-text-2">{nameOf(row.currentAssigneeId)}</span>,
                 } satisfies Column<UpdateRow>,
               ]
             : []),
@@ -620,7 +620,7 @@ function Buckets({
                           highlight={changed}
                         />
                         {changed && (
-                          <span className="rounded bg-k-highlight px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-k-purple">
+                          <span className="rounded bg-k-highlight px-1.5 py-0.5 text-k-3xs font-semibold uppercase tracking-wide text-k-purple">
                             {ta('reassignBadge')}
                           </span>
                         )}
@@ -709,10 +709,10 @@ function Bucket<R>({
 
   return (
     <section className="space-y-2">
-      <h2 className="text-[16px] font-semibold text-k-navy">
+      <h2 className="text-k-lg font-semibold text-k-navy">
         {title} <span className="tabular-nums text-k-text-2">({rows.length})</span>
       </h2>
-      <p className="text-[13px] text-k-text-2">{hint}</p>
+      <p className="text-k-sm text-k-text-2">{hint}</p>
       {toolbar}
       <DataTable
         columns={columns}
@@ -723,7 +723,7 @@ function Bucket<R>({
         // páginas que pedir. Y ninguna columna ordena — ordenar navega y perdería el `File`.
         meta={{ total: rows.length, page: 1, limit: Math.max(rows.length, 1), pages: 1 }}
         empty={
-          <p className="rounded-2xl border border-dashed border-k-border bg-white px-4 py-6 text-center text-[13px] text-k-text-2">
+          <p className="rounded-2xl border border-dashed border-k-border bg-white px-4 py-6 text-center text-k-sm text-k-text-2">
             {empty}
           </p>
         }
@@ -746,19 +746,19 @@ function AssignResult({ summary, nameOf }: { summary: PortfolioSummary; nameOf: 
     <section className="space-y-3 rounded-2xl border border-k-border bg-white p-5">
       {assigned.length > 0 && (
         <div>
-          <h2 className="text-[14px] font-semibold text-k-navy">{ta('resultAssigned')}</h2>
+          <h2 className="text-k-base font-semibold text-k-navy">{ta('resultAssigned')}</h2>
           <div className="mt-2 flex flex-wrap gap-2">
             {assigned.map((a) => (
-              <span key={a.userId} className="rounded-full bg-k-bg px-2.5 py-1 text-[12px] text-k-text-2">
+              <span key={a.userId} className="rounded-full bg-k-bg px-2.5 py-1 text-k-xs text-k-text-2">
                 {nameOf(a.userId)} <span className="font-semibold tabular-nums text-k-text">{a.count}</span>
               </span>
             ))}
           </div>
         </div>
       )}
-      {!!summary.reassigned && <p className="text-[13px] text-k-text">{ta('resultReassigned', { n: summary.reassigned })}</p>}
+      {!!summary.reassigned && <p className="text-k-sm text-k-text">{ta('resultReassigned', { n: summary.reassigned })}</p>}
       {notes.length > 0 && (
-        <div className="rounded-xl bg-k-warning-bg px-4 py-3 text-[13px] text-k-warning-text">
+        <div className="rounded-xl bg-k-warning-bg px-4 py-3 text-k-sm text-k-warning-text">
           <p className="font-semibold">{ta('notesTitle')}</p>
           <ul className="mt-1 space-y-0.5">
             {notes.map((n) => (

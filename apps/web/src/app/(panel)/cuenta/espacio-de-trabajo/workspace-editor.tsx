@@ -193,9 +193,9 @@ export function WorkspaceEditor({ account }: { account: AccountInfo }) {
 
   return (
     <div className="space-y-5">
-      <p className="max-w-[720px] text-[14px] leading-relaxed text-k-text-2">{t('intro')}</p>
+      <p className="max-w-[720px] text-k-base leading-relaxed text-k-text-2">{t('intro')}</p>
 
-      <h2 className="text-[18px] font-semibold text-k-navy">{to('tools.title')}</h2>
+      <h2 className="text-k-xl font-semibold text-k-navy">{to('tools.title')}</h2>
       <Section title={to('tools.tools')} inner="px-5 py-1">
         {TOOLS.map(moduleRow)}
       </Section>
@@ -205,11 +205,11 @@ export function WorkspaceEditor({ account }: { account: AccountInfo }) {
           {hasOffices && moduleRow('organization')}
         </Section>
       )}
-      <p className="text-[13px] text-k-text-2">{to('tools.always')}</p>
+      <p className="text-k-sm text-k-text-2">{to('tools.always')}</p>
 
       <div>
-        <h2 className="text-[18px] font-semibold text-k-navy">{to('clients.title')}</h2>
-        <p className="mt-1 text-[13px] text-k-text-2">{to('clients.intro')}</p>
+        <h2 className="text-k-xl font-semibold text-k-navy">{to('clients.title')}</h2>
+        <p className="mt-1 text-k-sm text-k-text-2">{to('clients.intro')}</p>
       </div>
       <Section title={to('clients.core')} inner="px-5 py-1">
         {CLIENT_CORE.map(clientRow)}
@@ -217,11 +217,11 @@ export function WorkspaceEditor({ account }: { account: AccountInfo }) {
       <Section title={to('clients.optional')} inner="px-5 py-1">
         {CLIENT_OPTIONAL.map(clientRow)}
       </Section>
-      <p className="text-[13px] text-k-text-2">{to('clients.note')}</p>
+      <p className="text-k-sm text-k-text-2">{to('clients.note')}</p>
 
       <div>
-        <h2 className="text-[18px] font-semibold text-k-navy">{to('credits.title')}</h2>
-        <p className="mt-1 text-[13px] text-k-text-2">{to('credits.intro')}</p>
+        <h2 className="text-k-xl font-semibold text-k-navy">{to('credits.title')}</h2>
+        <p className="mt-1 text-k-sm text-k-text-2">{to('credits.intro')}</p>
       </div>
       <Section title={to('credits.definition')} inner="p-4">
         <div role="radiogroup" aria-label={to('credits.definition')} className="space-y-2">
@@ -249,15 +249,15 @@ export function WorkspaceEditor({ account }: { account: AccountInfo }) {
           onChange={(v) => setDraft(setAdvancedCredit(draft, v))}
         />
         <fieldset className="border-t border-k-border py-3">
-          <legend className="text-[14px] font-semibold text-k-text">
+          <legend className="text-k-base font-semibold text-k-text">
             {t('credit.frequencies.label')}
           </legend>
-          <p className="mt-0.5 text-[13px] text-k-text-2">{t('credit.frequencies.hint')}</p>
+          <p className="mt-0.5 text-k-sm text-k-text-2">{t('credit.frequencies.hint')}</p>
           <div className="mt-2 flex flex-wrap gap-2">
             {OFFERED_FREQUENCIES.map((f) => (
               <label
                 key={f}
-                className="inline-flex min-h-[44px] cursor-pointer items-center gap-2 rounded-lg border border-k-border px-3 text-[13px] text-k-text"
+                className="inline-flex min-h-[44px] cursor-pointer items-center gap-2 rounded-lg border border-k-border px-3 text-k-sm text-k-text"
               >
                 <input
                   type="checkbox"
@@ -273,14 +273,14 @@ export function WorkspaceEditor({ account }: { account: AccountInfo }) {
         </fieldset>
       </Section>
 
-      <p className="rounded-xl border border-k-success bg-k-success-bg px-4 py-3 text-[13px] text-k-text">
+      <p className="rounded-xl border border-k-success bg-k-success-bg px-4 py-3 text-k-sm text-k-text">
         {to('summary.guarantee')}
       </p>
 
       {error && (
         <div
           role="alert"
-          className="rounded-xl border border-k-warning bg-k-warning-bg px-4 py-3 text-[14px] text-k-warning-text"
+          className="rounded-xl border border-k-warning bg-k-warning-bg px-4 py-3 text-k-base text-k-warning-text"
         >
           {error.kind === 'conflict' && (
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -318,7 +318,7 @@ export function WorkspaceEditor({ account }: { account: AccountInfo }) {
       )}
 
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-k-border bg-white px-5 py-4">
-        <p className="min-w-[200px] flex-1 text-[14px] text-k-text-2">
+        <p className="min-w-[200px] flex-1 text-k-base text-k-text-2">
           <span className="font-semibold text-k-text">
             {t('menuPreview', { shown: shownMenu.length, total: WORKSPACE_MODULES.length })}.
           </span>{' '}

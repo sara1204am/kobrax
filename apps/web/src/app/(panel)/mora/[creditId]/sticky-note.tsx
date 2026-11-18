@@ -133,7 +133,7 @@ export function StickyNote({
         }}
         title={canMove ? t('dragHint') : undefined}
       >
-        <span aria-hidden className="mr-auto select-none text-[13px] leading-none text-black/30">
+        <span aria-hidden className="mr-auto select-none text-k-sm leading-none text-black/30">
           ⋮⋮
         </span>
         {canMove && (
@@ -182,7 +182,7 @@ export function StickyNote({
             data-sn-btn
             aria-label={t('delete')}
             title={t('delete')}
-            className="grid h-6 w-6 place-items-center rounded text-[13px] text-black/50 hover:bg-black/10"
+            className="grid h-6 w-6 place-items-center rounded text-k-sm text-black/50 hover:bg-black/10"
             onClick={onDelete}
           >
             🗑
@@ -192,7 +192,7 @@ export function StickyNote({
 
       <div
         ref={bodyRef}
-        className="min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap break-words px-3 pb-3 pt-1.5 text-[14px] leading-snug outline-none"
+        className="min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap break-words px-3 pb-3 pt-1.5 text-k-base leading-snug outline-none"
         style={{ color: C.ink, cursor: canEditText ? 'text' : 'default' }}
         contentEditable={canEditText}
         suppressContentEditableWarning
@@ -204,14 +204,14 @@ export function StickyNote({
       >
         {note.body}
       </div>
-      <div className="shrink-0 px-3 pb-2 text-[11px]" style={{ color: C.ink, opacity: 0.65 }}>
+      <div className="shrink-0 px-3 pb-2 text-k-2xs" style={{ color: C.ink, opacity: 0.65 }}>
         {authorName}
       </div>
 
       {canMove && (
         <div
           aria-hidden
-          className="absolute bottom-0.5 right-0.5 grid h-4 w-4 cursor-nwse-resize place-items-center text-[10px] text-black/30"
+          className="absolute bottom-0.5 right-0.5 grid h-4 w-4 cursor-nwse-resize place-items-center text-k-3xs text-black/30"
           style={{ touchAction: 'none' }}
           onPointerDown={(e) => gesture(e, 'resize')}
         >

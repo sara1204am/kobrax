@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { PhotoViewer } from '@/components/photo-viewer';
 
 const CLASS =
-  'inline-flex h-11 items-center gap-2 rounded-xl border border-k-periwinkle bg-white px-4 text-[14px] font-semibold text-k-navy hover:bg-k-highlight';
+  'inline-flex h-11 items-center gap-2 rounded-xl border border-k-periwinkle bg-white px-4 text-k-base font-semibold text-k-navy hover:bg-k-highlight';
 
 const ICON = (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -46,5 +46,5 @@ export function ReceiptButton({ url, title, caption }: { url: string; title: str
       </a>
     );
   }
-  return <p className="max-w-[260px] break-all text-[13px] text-k-text-2">{url}</p>;
+  return <p className="max-w-[260px] break-all text-k-sm text-k-text-2">{url}</p>;
 }

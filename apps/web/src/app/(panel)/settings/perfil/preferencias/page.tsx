@@ -15,8 +15,8 @@ export default async function PreferenciasPage() {
     <Section title={t('preferences')} description={t('preferencesHint')}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <span>
-          <span className="block text-[14px] font-medium text-k-text">{t('language')}</span>
-          <span className="block text-[13px] text-k-text-2">{t('languageHint')}</span>
+          <span className="block text-k-base font-medium text-k-text">{t('language')}</span>
+          <span className="block text-k-sm text-k-text-2">{t('languageHint')}</span>
         </span>
         <LocaleSwitch />
       </div>

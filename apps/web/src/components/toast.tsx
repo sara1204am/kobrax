@@ -53,7 +53,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toasts.map((toast) => (
           <p
             key={toast.id}
-            className={`pointer-events-auto flex items-start gap-2.5 rounded-xl border-l-[3px] px-4 py-3 text-[14px] shadow-k-card ${TONE[toast.tone].box}`}
+            className={`pointer-events-auto flex items-start gap-2.5 rounded-xl border-l-[3px] px-4 py-3 text-k-base shadow-k-card ${TONE[toast.tone].box}`}
           >
             <svg
               className="mt-0.5 h-[18px] w-[18px] shrink-0"

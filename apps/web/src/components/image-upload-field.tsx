@@ -55,7 +55,7 @@ export function ImageUploadField({
 
   return (
     <div className="space-y-2">
-      <label htmlFor={disabled ? undefined : inputId} className="block text-[14px] font-medium text-k-text">
+      <label htmlFor={disabled ? undefined : inputId} className="block text-k-base font-medium text-k-text">
         {label}
       </label>
 
@@ -90,8 +90,8 @@ export function ImageUploadField({
           <>
             {!showImage && (
               <>
-                <span className="text-[13px] font-medium text-k-text">{texts.dropTitle}</span>
-                <span className="text-[13px] font-medium text-k-text">{texts.dropOr}</span>
+                <span className="text-k-sm font-medium text-k-text">{texts.dropTitle}</span>
+                <span className="text-k-sm font-medium text-k-text">{texts.dropOr}</span>
               </>
             )}
             {/* El input cubre toda la zona: el clic abre el selector y, con teclado, es el propio input quien toma el foco. */}
@@ -111,14 +111,14 @@ export function ImageUploadField({
           </>
         )}
 
-        <span className="mt-2 max-w-[28ch] text-[12px] text-k-muted">{caption}</span>
+        <span className="mt-2 max-w-[28ch] text-k-xs text-k-muted">{caption}</span>
 
         {value && !disabled && (
           <button
             type="button"
             onClick={() => onChange('')}
             // Por encima del input transparente: si no, «Quitar» abriría el selector de archivos.
-            className="relative z-10 mt-1 text-[13px] font-medium text-k-danger hover:underline"
+            className="relative z-10 mt-1 text-k-sm font-medium text-k-danger hover:underline"
           >
             {texts.remove}
           </button>

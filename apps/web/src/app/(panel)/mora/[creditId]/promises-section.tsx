@@ -45,12 +45,12 @@ export function PromisesSection({
   return (
     <Section title={t('title')} anchor="PROMISES" collapsible={{ count: promises?.length }}>
       {promises === null ? (
-        <p className="text-[13px] text-k-muted">{t('unavailable')}</p>
+        <p className="text-k-sm text-k-muted">{t('unavailable')}</p>
       ) : promises.length === 0 ? (
-        <p className="text-[13px] text-k-muted">{t('empty')}</p>
+        <p className="text-k-sm text-k-muted">{t('empty')}</p>
       ) : (
         <>
-          <p className="mb-1 text-[13px] text-k-text-2">
+          <p className="mb-1 text-k-sm text-k-text-2">
             {t('summary', { made: summary!.made, kept: summary!.kept, broken: summary!.broken })}
             {' · '}
             <span className="font-medium text-k-text">
@@ -59,13 +59,13 @@ export function PromisesSection({
                 : t('compliance', { pct: Math.round(summary!.complianceRate * 100) })}
             </span>
           </p>
-          {summary!.unresolved > 0 && <p className="mb-3 text-[13px] text-k-warning-text">{t('unresolved', { n: summary!.unresolved })}</p>}
+          {summary!.unresolved > 0 && <p className="mb-3 text-k-sm text-k-warning-text">{t('unresolved', { n: summary!.unresolved })}</p>}
 
           <ul className="divide-y divide-k-border">
             {promises.map((p) => (
               <li key={p.id} className="py-2.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-[14px] font-medium text-k-text">
+                  <span className="text-k-base font-medium text-k-text">
                     {p.amount === undefined ? '—' : money(p.amount, currency)}
                     <span className="ml-2 font-normal text-k-text-2">{t('dueOn', { date: dayDate(p.promiseDate, locale) })}</span>
                   </span>
@@ -74,7 +74,7 @@ export function PromisesSection({
                   </span>
                 </div>
                 {(p.assigneeId || p.observations) && (
-                  <p className="mt-0.5 text-[12px] text-k-muted">
+                  <p className="mt-0.5 text-k-xs text-k-muted">
                     {p.assigneeId && (byId.get(p.assigneeId) ?? t('unknownAssignee'))}
                     {p.assigneeId && p.observations ? ' · ' : ''}
                     {p.observations}

@@ -7,6 +7,7 @@ import { longDay, shiftDay, weekOf } from '@/lib/agenda';
 import { useWorkPreferences } from '@/lib/use-work-preferences';
 import { AgendaRow } from './agenda-row';
 import type { AgendaEvents } from './agenda-screen';
+import { Button } from '@/components/ui';
 
 /**
  * La semana (lunes a domingo): cada día con sus gestiones, de corrido.
@@ -53,20 +54,20 @@ export function WeekPanel({
         <button type="button" aria-label={t('week.previous')} onClick={() => onPickDay(shiftDay(day, -7))} className={step}>
           ‹
         </button>
-        <h2 className="min-w-0 text-[18px] font-semibold text-k-navy">
+        <h2 className="min-w-0 text-k-xl font-semibold text-k-navy">
           {longDay(days[0]!, locale)} – {longDay(days[6]!, locale)}
         </h2>
         <button type="button" aria-label={t('week.next')} onClick={() => onPickDay(shiftDay(day, 7))} className={step}>
           ›
         </button>
-        <button
+        <Button
           type="button"
           onClick={() => onPickDay(today)}
           disabled={days.includes(today)}
-          className="h-9 rounded-lg border border-k-border bg-white px-4 text-[13px] font-medium text-k-periwinkle hover:bg-k-bg disabled:opacity-50"
+          variant="ghost" size="sm" fullWidth={false} className="!font-medium !px-4 !text-k-periwinkle"
         >
           {t('today')}
-        </button>
+        </Button>
       </div>
 
       <div className="space-y-3">
@@ -78,14 +79,14 @@ export function WeekPanel({
               <button
                 type="button"
                 onClick={() => onOpenDay(d)}
-                className={`flex w-full items-center gap-2 px-4 py-2 text-left text-[14px] font-semibold ${
+                className={`flex w-full items-center gap-2 px-4 py-2 text-left text-k-base font-semibold ${
                   isToday ? 'bg-k-info-bg text-k-navy' : 'bg-k-bg text-k-text'
                 } hover:brightness-95`}
               >
                 <span>{longDay(d, locale)}</span>
-                {isToday && <span className="rounded-md bg-white px-1.5 py-0.5 text-[11px] font-medium text-k-periwinkle">{t('today')}</span>}
-                {!isWorkingDate(prefs, d) && <span className="rounded-md bg-white px-1.5 py-0.5 text-[11px] font-normal text-k-text-2">{t('nonWorkingDay')}</span>}
-                <span className="ml-auto text-[12px] font-normal text-k-text-2">{t('week.count', { n: list.length })}</span>
+                {isToday && <span className="rounded-md bg-white px-1.5 py-0.5 text-k-2xs font-medium text-k-periwinkle">{t('today')}</span>}
+                {!isWorkingDate(prefs, d) && <span className="rounded-md bg-white px-1.5 py-0.5 text-k-2xs font-normal text-k-text-2">{t('nonWorkingDay')}</span>}
+                <span className="ml-auto text-k-xs font-normal text-k-text-2">{t('week.count', { n: list.length })}</span>
               </button>
               {list.length > 0 && (
                 <ul>

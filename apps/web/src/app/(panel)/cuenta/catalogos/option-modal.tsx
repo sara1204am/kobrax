@@ -137,8 +137,8 @@ export function OptionModal({
     >
       <form id={formId} onSubmit={submit} className="space-y-5">
         <div>
-          <p className="text-[13px] font-medium text-k-periwinkle">{t(`names.${catalog}`)}</p>
-          <p className="mt-0.5 text-[13px] text-k-text-2">{editing ? t('edit.subtitle') : t('add.subtitle')}</p>
+          <p className="text-k-sm font-medium text-k-periwinkle">{t(`names.${catalog}`)}</p>
+          <p className="mt-0.5 text-k-sm text-k-text-2">{editing ? t('edit.subtitle') : t('add.subtitle')}</p>
         </div>
 
         <ErrorBanner message={error} />
@@ -155,7 +155,7 @@ export function OptionModal({
               onChange={(e) => setLabel(e.target.value)}
             />
           </Field>
-          <p className="mt-1 text-right text-[12px] text-k-muted">
+          <p className="mt-1 text-right text-k-xs text-k-muted">
             {label.length}/{CATALOG_NAME_MAX}
           </p>
         </div>
@@ -191,7 +191,7 @@ export function OptionModal({
               onChange={(e) => setDescription(e.target.value)}
             />
           </Field>
-          <p className="mt-1 text-right text-[12px] text-k-muted">
+          <p className="mt-1 text-right text-k-xs text-k-muted">
             {description.length}/{CATALOG_DESCRIPTION_MAX}
           </p>
         </div>
@@ -220,11 +220,11 @@ export function OptionModal({
               aria-labelledby={stateId}
               aria-describedby={stateHintId}
             />
-            <span id={stateId} className="text-[14px] font-medium text-k-text">
+            <span id={stateId} className="text-k-base font-medium text-k-text">
               {isActive ? t('active') : t('inactive')}
             </span>
           </div>
-          <p id={stateHintId} className="text-[12px] text-k-muted">
+          <p id={stateHintId} className="text-k-xs text-k-muted">
             {t('add.stateHint')}
           </p>
         </div>

@@ -63,7 +63,7 @@ export function AvailableList({
     <div className="overflow-hidden rounded-xl border border-k-border">
       {/* Con seis datos por fila, sin rótulos hay que adivinar cuál es cuál. Los anchos son los
           mismos que abajo: si se cambia uno, se cambian los dos. */}
-      <div className="flex items-center gap-x-4 border-b border-k-border bg-k-bg px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-k-text-2">
+      <div className="flex items-center gap-x-4 border-b border-k-border bg-k-bg px-4 py-2 text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">
         <span className="w-4" aria-hidden />
         <Th className="min-w-[180px] flex-1" onClick={() => sortLocal('client')} active={localSort?.key === 'client'} dir={localSort?.dir}>
           {t('cols.client')}
@@ -120,23 +120,23 @@ export function AvailableList({
                 />
                 <span className="min-w-[180px] flex-1">
                   <span className="flex items-center gap-2">
-                    <span className="truncate text-[14px] font-medium text-k-text">{c.clientName ?? '—'}</span>
+                    <span className="truncate text-k-base font-medium text-k-text">{c.clientName ?? '—'}</span>
                     {/* Se dice cuándo la parada es AYUDA a otro: el responsable del crédito no cambia, sólo
                         esta jornada la cubre otro. */}
                     {ajeno && <Badge tone="warning">{t('help')}</Badge>}
                   </span>
-                  <span className="block truncate text-[12px] text-k-muted">{loc?.address ?? t('noAddress')}</span>
+                  <span className="block truncate text-k-xs text-k-muted">{loc?.address ?? t('noAddress')}</span>
                 </span>
-                <span className="w-28 shrink-0 text-right text-[14px] tabular-nums text-k-text">
+                <span className="w-28 shrink-0 text-right text-k-base tabular-nums text-k-text">
                   {money(c.amount, c.currency ?? 'BOB')}
                 </span>
-                <span className="w-24 shrink-0 text-right text-[13px] tabular-nums text-k-danger">
+                <span className="w-24 shrink-0 text-right text-k-sm tabular-nums text-k-danger">
                   {c.daysPastDue ? t('days', { n: c.daysPastDue }) : '—'}
                 </span>
-                <span className="w-28 shrink-0 truncate text-[13px] text-k-text-2">{c.zone ?? '—'}</span>
+                <span className="w-28 shrink-0 truncate text-k-sm text-k-text-2">{c.zone ?? '—'}</span>
                 {/* Las coordenadas van completas: son las que se copian a un GPS o se comparten por
                     mensaje, así que redondearlas a la vista las volvería inservibles. */}
-                <span className="w-40 shrink-0 text-[12px] tabular-nums text-k-muted">
+                <span className="w-40 shrink-0 text-k-xs tabular-nums text-k-muted">
                   {loc ? `${loc.latitude.toFixed(6)}, ${loc.longitude.toFixed(6)}` : t('noCoords')}
                 </span>
               </label>

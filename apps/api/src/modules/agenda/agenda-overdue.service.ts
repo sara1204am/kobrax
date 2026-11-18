@@ -1,8 +1,11 @@
-import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy, Inject, Optional } from '@nestjs/common';
 import { AgendaItemStatus, NotificationType } from '@prisma/client';
 import { civilTodayUTC, timezoneOf } from '../../common/context/tenant-clock.service';
 import { PrismaService } from '../../database/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import type Redis from 'ioredis';
+import { startJob } from '../../common/jobs/start-job';
+import { REDIS } from '../../redis/redis.module';
 
 /** Cada cuánto corre el barrido (tarea de sistema). Con la ventana de abajo, alcanza para un aviso por día. */
 export const AGENDA_OVERDUE_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -32,11 +35,12 @@ export class AgendaOverdueService implements OnApplicationBootstrap, OnModuleDes
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    /** Candado entre instancias (opcional: sin Redis el job corre siempre). */
+    @Optional() @Inject(REDIS) private readonly redis?: Redis,
   ) {}
 
   onApplicationBootstrap(): void {
-    this.timer = setInterval(() => void this.run(), AGENDA_OVERDUE_INTERVAL_MS);
-    if (typeof this.timer.unref === 'function') this.timer.unref(); // no bloquea el apagado
+    this.timer = startJob({ name: 'agenda-overdue', intervalMs: AGENDA_OVERDUE_INTERVAL_MS, run: () => this.run(), redis: this.redis, logger: this.logger });
   }
 
   onModuleDestroy(): void {

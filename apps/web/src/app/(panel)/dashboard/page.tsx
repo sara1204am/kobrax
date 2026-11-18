@@ -170,7 +170,7 @@ export default async function DashboardPage({
        * KPI trae su desglose.
        */}
       {!filters.source && external.length > 0 && (
-        <p role="note" className="mb-5 rounded-xl bg-k-warning-bg px-4 py-3 text-[13px] text-k-warning-text">
+        <p role="note" className="mb-5 rounded-xl bg-k-warning-bg px-4 py-3 text-k-sm text-k-warning-text">
           {external
             .map((s) =>
               t(s.reportedAsOf && s.reportedAsOf.from !== s.reportedAsOf.to ? 'mixedSourcesRange' : 'mixedSources', {

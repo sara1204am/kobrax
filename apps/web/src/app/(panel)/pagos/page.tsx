@@ -18,6 +18,8 @@ import { loadOfficers } from './officers';
 import { PaymentActions } from './payment-actions';
 import { PaymentSummary } from './payment-summary';
 import { PaymentsTable } from './payments-table';
+import { requirePermission } from '@/lib/authz';
+import { Permission } from '@kobrax/shared';
 
 /**
  * El ledger del período.
@@ -32,6 +34,8 @@ import { PaymentsTable } from './payments-table';
  * oficial se dibuja si quien mira tiene a quién consultar (`loadOfficers`), y un cobrador no lo tiene.
  */
 export default async function PagosPage({ searchParams }: { searchParams: PaymentParams }) {
+  const blocked = await requirePermission(Permission.PAYMENT_READ);
+  if (blocked) return blocked;
   const t = await getTranslations('panel.payments');
 
   const [list, account, me] = await Promise.all([
@@ -78,7 +82,7 @@ export default async function PagosPage({ searchParams }: { searchParams: Paymen
           <div className="flex flex-wrap items-center gap-3">
             {/* Quien confirma no es quien pidió el cobro: la bandeja es su entrada. */}
             {PAYMENT_REQUESTS_ENABLED && (
-              <Link href="/pagos/solicitudes" className="text-[14px] font-medium text-k-purple hover:underline">
+              <Link href="/pagos/solicitudes" className="text-k-base font-medium text-k-purple hover:underline">
                 {t('requests.queue')}
               </Link>
             )}
@@ -101,7 +105,7 @@ export default async function PagosPage({ searchParams }: { searchParams: Paymen
       {/* Filtrado por un crédito la lista parece vacía sin serlo: la salida tiene que estar a la
           vista, o se lee como «no hay pagos». */}
       {credit && (
-        <Link href="/pagos" className="mb-4 block text-[14px] font-medium text-k-purple hover:underline">
+        <Link href="/pagos" className="mb-4 block text-k-base font-medium text-k-purple hover:underline">
           {t('allPayments')}
         </Link>
       )}

@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto';
 import { UploadsService, MAX_UPLOAD_BYTES } from './uploads.service';
 import { rejectsWithCode } from '../auth/auth-test-utils';
 
-const jpeg = (body = 'foto'): Buffer => Buffer.from(body);
+const jpeg = (body = 'foto'): Buffer => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from(body)]);
 const file = (over: Record<string, unknown> = {}) => ({ buffer: jpeg(), mimetype: 'image/jpeg', size: 4, ...over }) as never;
 
 let dir: string;
@@ -63,6 +63,18 @@ describe('UploadsService.streamOf', () => {
     const name = url.split('/').pop()!;
     const chunks: Buffer[] = [];
     for await (const c of service.streamOf(name)) chunks.push(c as Buffer);
-    assert.equal(Buffer.concat(chunks).toString(), 'foto');
+    assert.deepEqual(Buffer.concat(chunks), jpeg());
+  });
+});
+
+describe('matchesDeclaredType (S-12 · magic bytes)', () => {
+  it('acepta firmas válidas y rechaza contenido que no corresponde al tipo declarado', async () => {
+    const { matchesDeclaredType } = await import('./uploads.service');
+    assert.equal(matchesDeclaredType('image/jpeg', jpeg()), true);
+    assert.equal(matchesDeclaredType('image/png', Buffer.from('<html><script>alert(1)</script></html>')), false);
+    assert.equal(matchesDeclaredType('image/png', Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0])), true);
+    assert.equal(matchesDeclaredType('application/pdf', Buffer.from('%PDF-1.7\n')), true);
+    assert.equal(matchesDeclaredType('application/pdf', Buffer.from('MZ\x90')), false);
+    assert.equal(matchesDeclaredType('text/csv', Buffer.from('a,b')), true, 'CSV no tiene firma');
   });
 });

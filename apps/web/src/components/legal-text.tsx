@@ -31,14 +31,14 @@ function inline(text: string): ReactNode[] {
 export const parseLegal = parseLegalShared;
 
 const H: Record<1 | 2 | 3, string> = {
-  1: 'mt-2 text-[20px] font-semibold text-k-navy',
-  2: 'mt-6 text-[16px] font-semibold text-k-navy',
-  3: 'mt-4 text-[14px] font-semibold text-k-text',
+  1: 'mt-2 text-k-2xl font-semibold text-k-navy',
+  2: 'mt-6 text-k-lg font-semibold text-k-navy',
+  3: 'mt-4 text-k-base font-semibold text-k-text',
 };
 
 export function LegalText({ content }: { content: string }) {
   return (
-    <div className="space-y-3 text-[14px] leading-relaxed text-k-text">
+    <div className="space-y-3 text-k-base leading-relaxed text-k-text">
       {parseLegal(content).map((b, i) => {
         if (b.kind === 'h') {
           const Tag = (`h${b.level + 1}` as 'h2' | 'h3' | 'h4');

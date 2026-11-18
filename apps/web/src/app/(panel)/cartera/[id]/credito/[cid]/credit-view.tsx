@@ -32,6 +32,7 @@ import { CREDIT_STATUS_TONE, CreditProgress } from '@/components/credit-progress
 import { PaymentPlanTable } from '@/components/payment-plan-table';
 import { date, dateTime, dayDate, money } from '@/lib/format';
 import { downloadText } from '@/lib/download';
+import { TextButton } from '@/components/ui';
 
 /**
  * La ficha del crédito en modo lectura (F4/06 · Fase 3): Condiciones · Estado actual · Plan · Cobranza
@@ -72,7 +73,7 @@ export function CreditView({
         title={t('sections.plan')}
         action={
           planRows.length > 0 ? (
-            <button
+            <TextButton
               type="button"
               onClick={() =>
                 downloadText(
@@ -80,10 +81,10 @@ export function CreditView({
                   paymentPlanFileName(credit.code ?? undefined, planRows[0]!.dueDate),
                 )
               }
-              className="text-[13px] font-medium text-k-periwinkle hover:underline"
+              tone="periwinkle"
             >
               {tf('exportPlan')}
-            </button>
+            </TextButton>
           ) : undefined
         }
       >
@@ -121,7 +122,7 @@ function CollectionManagement({ credit }: { credit: CreditDetail }) {
     >
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-[15px] font-semibold text-k-text">{t('title')}</h2>
+          <h2 className="text-k-md font-semibold text-k-text">{t('title')}</h2>
           <SituationBadge
             situation={credit.situation ?? 'CURRENT'}
             daysPastDue={credit.daysPastDue ?? 0}
@@ -130,11 +131,11 @@ function CollectionManagement({ credit }: { credit: CreditDetail }) {
             inline
           />
         </div>
-        <p className="mt-1 text-[13px] text-k-text-2">{t('hint')}</p>
+        <p className="mt-1 text-k-sm text-k-text-2">{t('hint')}</p>
       </div>
       <Link
         href={`/mora/${credit.id}`}
-        className="rounded-xl bg-k-navy px-4 py-2.5 text-[14px] font-medium text-white hover:opacity-90"
+        className="rounded-xl bg-k-navy px-4 py-2.5 text-k-base font-medium text-white hover:opacity-90"
       >
         {t('open')}
       </Link>
@@ -337,7 +338,7 @@ function LegacyTerms({ credit }: { credit: CreditDetail }) {
           />
         )}
       </dl>
-      {!credit.locked && <p className="mt-4 text-[12px] text-k-muted">{t('legacyTerms')}</p>}
+      {!credit.locked && <p className="mt-4 text-k-xs text-k-muted">{t('legacyTerms')}</p>}
     </>
   );
 }
@@ -378,23 +379,23 @@ function CurrentState({ credit }: { credit: CreditDetail }) {
           }
         />
         <div>
-          <dt className="text-[12px] text-k-text-2">{t('arrears')}</dt>
+          <dt className="text-k-xs text-k-text-2">{t('arrears')}</dt>
           <dd className="mt-1">
             {unknown('daysPastDue') ? (
-              <span className="text-[14px] text-k-text">{t('unknown')}</span>
+              <span className="text-k-base text-k-text">{t('unknown')}</span>
             ) : days > 0 ? (
               <>
                 <Badge tone="danger">{tp('days', { count: days })}</Badge>
                 {/* D20: desde cuándo corre, y qué cuota reclamar hoy (con el bancario pueden no coincidir). */}
                 {(credit.arrearsSince ?? credit.oldestUnpaid?.dueDate) && (
-                  <span className="ml-2 text-[12px] text-k-text-2">
+                  <span className="ml-2 text-k-xs text-k-text-2">
                     {t('arrearsSince', {
                       date: dayDate(credit.arrearsSince ?? credit.oldestUnpaid!.dueDate, locale),
                     })}
                   </span>
                 )}
                 {credit.oldestUnpaid && (
-                  <p className="mt-1 text-[12px] text-k-danger">
+                  <p className="mt-1 text-k-xs text-k-danger">
                     {credit.oldestUnpaid.number
                       ? t('oldestUnpaid', {
                           number: credit.oldestUnpaid.number,
@@ -413,15 +414,15 @@ function CurrentState({ credit }: { credit: CreditDetail }) {
         </div>
         {!credit.locked && (
           <div>
-            <dt className="text-[12px] text-k-text-2">{t('arrearsMethod')}</dt>
-            <dd className="mt-1 text-[14px] text-k-text">
+            <dt className="text-k-xs text-k-text-2">{t('arrearsMethod')}</dt>
+            <dd className="mt-1 text-k-base text-k-text">
               {tf(`arrearsMethods.${credit.arrearsMethod ?? 'oldest_unpaid'}`)}
             </dd>
           </div>
         )}
         {credit.status && (
           <div>
-            <dt className="text-[12px] text-k-text-2">{t('status')}</dt>
+            <dt className="text-k-xs text-k-text-2">{t('status')}</dt>
             <dd className="mt-1">
               <Badge tone={CREDIT_STATUS_TONE[credit.status] ?? 'neutral'} dot>
                 {tp(`creditStatus.${credit.status}`)}
@@ -443,18 +444,18 @@ function CurrentState({ credit }: { credit: CreditDetail }) {
       />
 
       {initial && (initial.paidInstallments > 0 || initial.daysPastDue > 0) && (
-        <p className="mt-4 text-[13px] text-k-text-2">
+        <p className="mt-4 text-k-sm text-k-text-2">
           {initial.paidInstallments > 0 &&
             t('registeredInProgress', { paid: initial.paidInstallments })}{' '}
           {initial.daysPastDue > 0 && t('declaredArrears', { days: initial.daysPastDue })}
         </p>
       )}
       {credit.balanceBasis === 'legacy' && (
-        <p className="mt-3 text-[12px] text-k-muted">{t('legacyBalance')}</p>
+        <p className="mt-3 text-k-xs text-k-muted">{t('legacyBalance')}</p>
       )}
       {/* D9: saldo y mora son los del corte; pasado el umbral del formato ya no se presentan como de hoy. */}
       {credit.reportedStale && credit.reportedAsOf && (
-        <p role="status" className="mt-3 rounded-md bg-k-warning-bg px-3 py-2 text-[13px] text-k-warning-text">
+        <p role="status" className="mt-3 rounded-md bg-k-warning-bg px-3 py-2 text-k-sm text-k-warning-text">
           {t('reportStale', { date: day(credit.reportedAsOf), days: credit.reportStaleAfterDays ?? 2 })}
         </p>
       )}
@@ -472,12 +473,12 @@ function TermsPlan({
 }) {
   const t = useTranslations('portfolio.creditDetail');
   if (!schedule || schedule.length === 0)
-    return <p className="text-[14px] text-k-text-2">{t('openLoanPlan')}</p>;
+    return <p className="text-k-base text-k-text-2">{t('openLoanPlan')}</p>;
   const paid = credit.initialState?.paidInstallments ?? 0;
 
   return (
     <>
-      <p className="mb-3 text-[12px] text-k-muted">
+      <p className="mb-3 text-k-xs text-k-muted">
         {t('planHint')} {paid > 0 && t('planPaidHint', { count: paid })}
       </p>
       <PaymentPlanTable rows={schedule} currency={credit.currency} />
@@ -499,13 +500,13 @@ function StoredPlan({ credit }: { credit: CreditDetail }) {
 
   // El importado no tiene cronograma porque lo lleva su fuente, no porque la cuota esté congelada.
   if (rows.length === 0 && credit.locked)
-    return <p className="text-[14px] text-k-text-2">{td('importedPlan')}</p>;
+    return <p className="text-k-base text-k-text-2">{td('importedPlan')}</p>;
 
   if (rows.length === 0) {
     return (
       <div>
-        <p className="text-[14px] text-k-text-2">{t('noSchedule')}</p>
-        <p className="mt-1 text-[12px] text-k-muted">
+        <p className="text-k-base text-k-text-2">{t('noSchedule')}</p>
+        <p className="mt-1 text-k-xs text-k-muted">
           {t('noScheduleHint', {
             amount:
               credit.installmentAmount != null
@@ -520,11 +521,11 @@ function StoredPlan({ credit }: { credit: CreditDetail }) {
 
   return (
     <>
-      <p className="mb-3 text-[12px] text-k-muted">{td('storedPlanHint')}</p>
+      <p className="mb-3 text-k-xs text-k-muted">{td('storedPlanHint')}</p>
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-[14px]">
+        <table className="w-full border-collapse text-k-base">
           <thead>
-            <tr className="border-b border-k-border text-left text-[12px] font-semibold uppercase tracking-wide text-k-text-2">
+            <tr className="border-b border-k-border text-left text-k-xs font-semibold uppercase tracking-wide text-k-text-2">
               <th scope="col" className="py-2 pr-4">
                 {t('schedule.number')}
               </th>
@@ -650,7 +651,7 @@ function Origin({ credit }: { credit: CreditDetail }) {
       </dl>
       {/* Completitud: sólo se sabe de los importados desde la Fase 4, que guardan qué no trajo el archivo. */}
       {credit.unknownFields && (
-        <p className="mt-4 text-[13px] text-k-text-2">
+        <p className="mt-4 text-k-sm text-k-text-2">
           {t('completeness', completeness)}{' '}
           {missing.length > 0 &&
             t('completenessMissing', {
@@ -670,9 +671,9 @@ function day(iso: string): string {
 function Item({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div>
-      <dt className="text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{label}</dt>
-      <dd className="mt-0.5 text-[14px] text-k-text">{value}</dd>
-      {hint && <p className="mt-0.5 text-[12px] text-k-muted">{hint}</p>}
+      <dt className="text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">{label}</dt>
+      <dd className="mt-0.5 text-k-base text-k-text">{value}</dd>
+      {hint && <p className="mt-0.5 text-k-xs text-k-muted">{hint}</p>}
     </div>
   );
 }
@@ -680,9 +681,9 @@ function Item({ label, value, hint }: { label: string; value: string; hint?: str
 function Figure({ label, value, big }: { label: string; value: string; big?: boolean }) {
   return (
     <div>
-      <dt className="text-[12px] text-k-text-2">{label}</dt>
+      <dt className="text-k-xs text-k-text-2">{label}</dt>
       <dd
-        className={`mt-0.5 font-semibold tabular-nums text-k-navy ${big ? 'text-[22px]' : 'text-[16px]'}`}
+        className={`mt-0.5 font-semibold tabular-nums text-k-navy ${big ? 'text-k-3xl' : 'text-k-lg'}`}
       >
         {value}
       </dd>

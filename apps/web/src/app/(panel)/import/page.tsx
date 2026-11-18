@@ -6,6 +6,8 @@ import { EmptyState, PageHeader } from '@/components/panel-ui';
 import { HISTORY_PAGE_SIZE, hasHistoryFilters, historyQuery } from '@/lib/import';
 import { ImportRunner } from './import-runner';
 import { ImportHistoryTable } from './history-table';
+import { requirePermission } from '@/lib/authz';
+import { Permission } from '@kobrax/shared';
 
 /**
  * El import del día. Una sola pantalla con tres estados (elegir · vista previa · resultado) y no
@@ -16,6 +18,8 @@ import { ImportHistoryTable } from './history-table';
  * Debajo, el historial: cada archivo importado con lo que cambió, y su detalle a un clic.
  */
 export default async function ImportPage({ searchParams }: { searchParams: Record<string, string | undefined> }) {
+  const blocked = await requirePermission(Permission.CLIENT_IMPORT);
+  if (blocked) return blocked;
   const t = await getTranslations('panel.import');
   const [screen, runs, me, account, assignees] = await Promise.all([
     apiCall<ConfigScreen>('/imports/portfolio/config', { method: 'GET', auth: true }),
@@ -42,7 +46,7 @@ export default async function ImportPage({ searchParams }: { searchParams: Recor
         actions={
           <Link
             href="/import/ajustes"
-            className="min-h-[40px] rounded-xl border border-k-border px-4 py-2 text-[14px] font-medium text-k-text-2 hover:bg-k-bg"
+            className="min-h-[40px] rounded-xl border border-k-border px-4 py-2 text-k-base font-medium text-k-text-2 hover:bg-k-bg"
           >
             {t('settings.link')}
           </Link>
@@ -57,8 +61,8 @@ export default async function ImportPage({ searchParams }: { searchParams: Recor
         />
 
         <section className="space-y-2">
-          <h2 className="text-[16px] font-semibold text-k-navy">{t('history.title')}</h2>
-          <p className="text-[13px] text-k-text-2">{t('history.hint')}</p>
+          <h2 className="text-k-lg font-semibold text-k-navy">{t('history.title')}</h2>
+          <p className="text-k-sm text-k-text-2">{t('history.hint')}</p>
           {runs.status === 200 && runs.body.data ? (
             <ImportHistoryTable
               rows={runs.body.data}

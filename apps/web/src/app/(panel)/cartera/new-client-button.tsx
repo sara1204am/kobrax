@@ -64,13 +64,13 @@ export function NewClientButton({
     <>
       {/* A la medida de los otros botones de la barra de la tabla (h-9, 13 px): tres controles en una
           misma fila con tres alturas distintas se leen como tres cosas sin relación entre sí. */}
-      <button
+      <Button
         type="button"
         onClick={() => setAbierto(true)}
-        className="flex h-9 items-center justify-center rounded-lg bg-k-navy px-3 text-[13px] font-medium text-white transition-all hover:bg-k-slate active:scale-[.98]"
+        variant="primary" size="sm" fullWidth={false} className="!font-medium"
       >
         {t('new')}
-      </button>
+      </Button>
 
       {abierto && (
         <NewClientModal
@@ -205,12 +205,12 @@ function NewClientModal({
           </>
         }
       >
-        <p className="mb-3 text-[13px] text-k-text-2">{t('newSubtitle')}</p>
+        <p className="mb-3 text-k-sm text-k-text-2">{t('newSubtitle')}</p>
         <ErrorBanner message={error} />
         {/* El mínimo que exige el servidor: quién es (nombre y apellido, o razón social) y un
             teléfono. Se dice, en vez de dejar el botón apagado sin explicar por qué. */}
-        {!valid && <p className="mb-3 mt-2 text-[13px] text-k-muted">{t('form.minimum')}</p>}
-        {checking && <p className="mb-3 mt-2 text-[13px] text-k-muted">{t('duplicate.checking')}</p>}
+        {!valid && <p className="mb-3 mt-2 text-k-sm text-k-muted">{t('form.minimum')}</p>}
+        {checking && <p className="mb-3 mt-2 text-k-sm text-k-muted">{t('duplicate.checking')}</p>}
 
         {/* El carnet tomado no va acá: va bajo su campo. Si además hay homónimos, se ve el carnet
             primero, que es lo que bloquea. */}

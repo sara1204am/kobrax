@@ -25,7 +25,7 @@ export function OfficeTypesCard({ types }: { types: OfficeType[] }) {
     <Section title={t('types.title')} description={t('types.intro')} inner="space-y-5 p-4 sm:p-6">
       <ErrorBanner message={error} />
       {sorted.length === 0 ? (
-        <p className="text-[13px] text-k-text-2">{t('types.empty')}</p>
+        <p className="text-k-sm text-k-text-2">{t('types.empty')}</p>
       ) : (
         <ul className="divide-y divide-k-border rounded-xl border border-k-border">
           {sorted.map((x) => (
@@ -78,7 +78,7 @@ function TypeRow({ type, busy, editable, onPatch }: { type: OfficeType; busy: bo
   const dirty = name.trim() !== type.name && name.trim().length >= 2;
   return (
     <li className="flex flex-wrap items-center gap-3 px-3 py-2">
-      <span className="w-24 font-mono text-[12px] text-k-text-2">{type.code}</span>
+      <span className="w-24 font-mono text-k-xs text-k-text-2">{type.code}</span>
       <span className="min-w-[10rem] flex-1">
         <Input aria-label={t('types.nameOf', { code: type.code })} value={name} maxLength={60} disabled={!editable} onChange={(e) => setName(e.target.value)} />
       </span>
@@ -89,7 +89,7 @@ function TypeRow({ type, busy, editable, onPatch }: { type: OfficeType; busy: bo
           </Button>
         </span>
       )}
-      <span className="flex items-center gap-2 text-[13px] text-k-text-2">
+      <span className="flex items-center gap-2 text-k-sm text-k-text-2">
         <Switch checked={type.isActive} disabled={busy || !editable} onChange={(v) => void onPatch({ isActive: v })} aria-label={t('types.activeOf', { code: type.code })} />
         {t('types.active')}
       </span>

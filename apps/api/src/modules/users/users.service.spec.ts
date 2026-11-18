@@ -203,7 +203,7 @@ function makeService(opts: Opts = {}) {
     user: tx.user,
   };
   const tenant = { accountId: 'acc-A', userId: SELF, can: () => opts.canWrite !== false };
-  const audit = { record: async (e: { action: string }) => void calls.audit.push(e.action) };
+  const audit = { record: async (e: { action: string }) => void calls.audit.push(e.action), recordInTx: async (_t: unknown, e: { action: string }) => void calls.audit.push(e.action) };
   const mail = { send: async (to: string, _s: string, text: string) => void calls.mail.push({ to, text }) };
   // El servicio de topes va DE VERDAD, no como doble: es el que decide si entra uno más, y con un
   // doble el test diría que sí sin haber contado nada.
@@ -364,7 +364,7 @@ describe('UsersService.updateMember — guardas', () => {
     });
     await service.updateMember(OTHER, { isActive: false });
     assert.equal(calls.updated!.isActive, false);
-    assert.deepEqual(calls.audit, ['SESSION_REVOKE', 'UPDATE']);
+    assert.deepEqual(calls.audit, ['UPDATE', 'SESSION_REVOKE']);
     // El conteo excluye al propio usuario que se está editando.
     assert.deepEqual(calls.countWhere!.userId, { not: OTHER });
   });

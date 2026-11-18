@@ -15,7 +15,7 @@ export function BillingAlert({ missing }: { missing: string[] }) {
   if (missing.length === 0 || pathname.startsWith('/cuenta/facturacion')) return null;
 
   return (
-    <div role="alert" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-k-warning bg-k-warning-bg px-4 py-3 text-[13px] text-k-warning-text">
+    <div role="alert" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-k-warning bg-k-warning-bg px-4 py-3 text-k-sm text-k-warning-text">
       <p>
         <span className="font-semibold">{t('title')}</span> {t('text', { fields: missing.map((k) => tField(k)).join(', ') })}
       </p>

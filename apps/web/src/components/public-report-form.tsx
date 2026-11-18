@@ -53,9 +53,9 @@ export function PublicReportForm({ mode }: { mode: 'report' | 'deletion' }) {
   if (reference) {
     return (
       <div role="status" className="rounded-2xl border border-k-border bg-white px-6 py-6 shadow-k-card">
-        <h2 className="text-[18px] font-semibold text-k-navy">{t('sentTitle')}</h2>
-        <p className="mt-2 text-[14px] text-k-text-2">{t('sentBody')}</p>
-        {reference !== 'recibido' && <p className="mt-3 text-[13px] text-k-muted">{t('reference', { code: reference })}</p>}
+        <h2 className="text-k-xl font-semibold text-k-navy">{t('sentTitle')}</h2>
+        <p className="mt-2 text-k-base text-k-text-2">{t('sentBody')}</p>
+        {reference !== 'recibido' && <p className="mt-3 text-k-sm text-k-muted">{t('reference', { code: reference })}</p>}
       </div>
     );
   }
@@ -93,7 +93,7 @@ export function PublicReportForm({ mode }: { mode: 'report' | 'deletion' }) {
           <input type="text" tabIndex={-1} autoComplete="off" value={website} onChange={(e) => setWebsite(e.target.value)} />
         </label>
       </div>
-      <p className="text-[12px] text-k-muted">{t('privacyNote')}</p>
+      <p className="text-k-xs text-k-muted">{t('privacyNote')}</p>
       <Button type="submit" loading={loading} disabled={!valid}>
         {deletion ? t('submitDeletion') : t('submit')}
       </Button>

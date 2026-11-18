@@ -10,7 +10,7 @@ export async function AgendaDonut({ summary }: { summary: AgendaSummary }) {
   const ta = await getTranslations('panel.agenda');
   const total = summary.byType.reduce((s, r) => s + r.total, 0);
 
-  if (total === 0) return <p className="text-[13px] text-k-text-2">{t('noAgenda')}</p>;
+  if (total === 0) return <p className="text-k-sm text-k-text-2">{t('noAgenda')}</p>;
 
   const slices: Slice[] = summary.byType
     .slice()
@@ -47,10 +47,10 @@ export async function IndicatorsList({ summary }: { summary: AgendaSummary }) {
       {summary.indicators.map((i) => {
         const delta = deltaOf({ value: i.value, previous: i.previous });
         return (
-          <li key={i.code} className="flex items-baseline justify-between gap-3 text-[13px]">
+          <li key={i.code} className="flex items-baseline justify-between gap-3 text-k-sm">
             <span className="min-w-0 flex-1 truncate text-k-text-2">{t(`indicators.${i.code}`)}</span>
             <span className="font-medium tabular-nums text-k-text">{i.value.toLocaleString('es-BO')}</span>
-            <span className={`w-16 text-right text-[12px] tabular-nums ${delta ? (delta.up ? 'text-k-success' : 'text-k-danger') : 'text-k-muted'}`}>
+            <span className={`w-16 text-right text-k-xs tabular-nums ${delta ? (delta.up ? 'text-k-success' : 'text-k-danger') : 'text-k-muted'}`}>
               {delta ? `${delta.up ? '↑' : '↓'} ${Math.abs(delta.pct)}%` : '—'}
             </span>
           </li>

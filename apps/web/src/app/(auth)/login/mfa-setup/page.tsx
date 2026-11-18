@@ -100,7 +100,7 @@ export default function MfaSetupPage() {
     return (
       <AuthShell title={t('backupTitle')} subtitle={t('backupSubtitle')}>
         <div className="space-y-5">
-          <ul className="grid grid-cols-2 gap-2 rounded-lg border border-k-border bg-k-bg p-3 font-mono text-[13px] text-k-text">
+          <ul className="grid grid-cols-2 gap-2 rounded-lg border border-k-border bg-k-bg p-3 font-mono text-k-sm text-k-text">
             {backupCodes.map((c) => (
               <li key={c} className="text-center">{c}</li>
             ))}
@@ -132,12 +132,12 @@ export default function MfaSetupPage() {
           />
         )}
         <div className="rounded-lg border border-k-border bg-k-bg p-3 text-center">
-          <p className="text-[11px] font-semibold uppercase text-k-text-2">{t('manualKey')}</p>
-          <p className="mt-1 select-all break-all font-mono text-[15px] font-semibold text-k-navy">
+          <p className="text-k-2xs font-semibold uppercase text-k-text-2">{t('manualKey')}</p>
+          <p className="mt-1 select-all break-all font-mono text-k-md font-semibold text-k-navy">
             {secret || '···'}
           </p>
         </div>
-        <p className="text-[13px] text-k-text-2">{t('thenEnter')}</p>
+        <p className="text-k-sm text-k-text-2">{t('thenEnter')}</p>
         <div className={error ? 'k-shake' : ''}>
           <OtpInput value={code} onChange={setCode} error={!!error} />
         </div>

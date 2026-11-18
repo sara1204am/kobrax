@@ -21,13 +21,13 @@ export async function PlanHistory({ entries, timezone }: { entries: PlanHistoryE
 
   return (
     <Section title={t('historyTitle')} inner="p-6">
-      <p className="text-[13px] leading-relaxed text-k-text-2">{t('historyIntro')}</p>
+      <p className="text-k-sm leading-relaxed text-k-text-2">{t('historyIntro')}</p>
       {entries.length === 0 ? (
-        <p className="mt-4 text-[13px] text-k-text-2">{t('historyEmpty')}</p>
+        <p className="mt-4 text-k-sm text-k-text-2">{t('historyEmpty')}</p>
       ) : (
         <ul className="mt-4 divide-y divide-k-border rounded-xl border border-k-border">
           {entries.map((e) => (
-            <li key={e.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 py-3 text-[14px]">
+            <li key={e.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 py-3 text-k-base">
               <span className="text-k-text">
                 {e.fromPlan !== e.toPlan && e.toPlan && (
                   <>
@@ -37,7 +37,7 @@ export async function PlanHistory({ entries, timezone }: { entries: PlanHistoryE
                 )}
                 {e.fromStatus !== e.toStatus && e.toStatus && t('statusChanged', { from: status(e.fromStatus), to: status(e.toStatus) })}
               </span>
-              <time dateTime={e.at} className="text-[12px] text-k-text-2">
+              <time dateTime={e.at} className="text-k-xs text-k-text-2">
                 {dateTime(e.at, locale, timezone ?? undefined)}
               </time>
             </li>

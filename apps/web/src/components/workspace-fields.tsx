@@ -28,11 +28,11 @@ export function SwitchRow({
   return (
     <div className="flex min-h-[44px] items-center gap-4 border-t border-k-border py-3 first:border-t-0">
       <div className="min-w-0 flex-1">
-        <p id={`${id}-label`} className="text-[14px] font-semibold text-k-text">
+        <p id={`${id}-label`} className="text-k-base font-semibold text-k-text">
           {label}
         </p>
         {hint && (
-          <p id={`${id}-hint`} className="mt-0.5 text-[13px] leading-snug text-k-text-2">
+          <p id={`${id}-hint`} className="mt-0.5 text-k-sm leading-snug text-k-text-2">
             {hint}
           </p>
         )}
@@ -70,9 +70,9 @@ export function ChoiceCard({
         checked ? 'border-k-periwinkle bg-k-highlight' : 'border-k-border bg-white hover:bg-k-bg'
       }`}
     >
-      <span className="block text-[14px] font-semibold text-k-text">{name}</span>
+      <span className="block text-k-base font-semibold text-k-text">{name}</span>
       {description && (
-        <span className="mt-0.5 block text-[13px] leading-snug text-k-text-2">{description}</span>
+        <span className="mt-0.5 block text-k-sm leading-snug text-k-text-2">{description}</span>
       )}
     </button>
   );

@@ -30,10 +30,10 @@ export function PageHeader({
     <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2.5">
-          <h1 className="text-[26px] font-semibold tracking-tight text-k-navy">{title}</h1>
+          <h1 className="text-k-4xl font-semibold tracking-tight text-k-navy">{title}</h1>
           {badge}
         </div>
-        {subtitle && <p className="mt-1 text-[14px] text-k-text-2">{subtitle}</p>}
+        {subtitle && <p className="mt-1 text-k-base text-k-text-2">{subtitle}</p>}
       </div>
       {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
     </div>
@@ -92,11 +92,11 @@ export function Section({
           <span aria-hidden className="text-k-periwinkle transition-transform group-open:rotate-180 group-open:text-white">
             ⌄
           </span>
-          <h2 className="flex-1 text-[14px] font-semibold">
+          <h2 className="flex-1 text-k-base font-semibold">
             {title}
             {collapsible.count != null && collapsible.count > 0 && <span className="ml-1.5 font-normal text-k-muted group-open:text-white/70">({collapsible.count})</span>}
           </h2>
-          {headerAction && <span className="text-[13px] font-medium text-k-periwinkle group-open:text-white">{headerAction}</span>}
+          {headerAction && <span className="text-k-sm font-medium text-k-periwinkle group-open:text-white">{headerAction}</span>}
         </summary>
         {/* Alto fijo (unas 3 filas) con scroll adentro: con muchos ítems la ficha no se vuelve interminable. */}
         <div className={`${collapsible.scroll === false ? '' : 'max-h-[21rem] overflow-y-auto overscroll-contain'} border-t border-k-border ${inner || 'p-4'}`}>
@@ -111,8 +111,8 @@ export function Section({
       <section aria-label={title} className="rounded-2xl border border-k-border bg-white">
         <div className="flex items-start justify-between gap-3 px-6 pt-6">
           <div>
-            <h2 className="text-[18px] font-semibold text-k-navy">{title}</h2>
-            <p className="mt-1 text-[14px] text-k-text-2">{description}</p>
+            <h2 className="text-k-xl font-semibold text-k-navy">{title}</h2>
+            <p className="mt-1 text-k-base text-k-text-2">{description}</p>
           </div>
           {action}
         </div>
@@ -123,7 +123,7 @@ export function Section({
   return (
     <section aria-label={title}>
       <div className="mb-2 flex items-center justify-between gap-3">
-        <h2 className="text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{title}</h2>
+        <h2 className="text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">{title}</h2>
         {action}
       </div>
       <div className={`rounded-2xl border border-k-border bg-white ${inner}`}>{children}</div>
@@ -162,7 +162,7 @@ export function Badge({
 }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12px] font-medium ${TONES[tone]}`}
+      className={`inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-k-xs font-medium ${TONES[tone]}`}
     >
       {dot && <span aria-hidden className={`h-1.5 w-1.5 rounded-full ${DOTS[tone]}`} />}
       {children}
@@ -199,7 +199,7 @@ export function Segmented<T extends string>({
           role="radio"
           aria-checked={value === o.value}
           onClick={() => onChange(o.value)}
-          className={`h-8 rounded-md px-3 text-[13px] font-medium transition-colors ${
+          className={`h-8 rounded-md px-3 text-k-sm font-medium transition-colors ${
             value === o.value ? 'bg-k-navy text-white' : 'text-k-text-2 hover:bg-k-bg'
           }`}
         >
@@ -226,12 +226,12 @@ export function InfoTip({ label, children }: { label: string; children: ReactNod
     <details className="relative inline-block align-middle">
       <summary
         aria-label={label}
-        className="flex h-4 w-4 cursor-pointer list-none items-center justify-center rounded-full border border-k-border text-[10px] font-semibold text-k-text-2 hover:border-k-periwinkle hover:text-k-periwinkle [&::-webkit-details-marker]:hidden"
+        className="flex h-4 w-4 cursor-pointer list-none items-center justify-center rounded-full border border-k-border text-k-3xs font-semibold text-k-text-2 hover:border-k-periwinkle hover:text-k-periwinkle [&::-webkit-details-marker]:hidden"
       >
         ?
       </summary>
       {/* Absoluto: abrirlo no puede mover de lugar lo que está al lado. */}
-      <span className="absolute left-0 top-6 z-20 block w-64 rounded-xl border border-k-border bg-white p-3 text-[12px] font-normal leading-snug text-k-text-2 shadow-k-card">
+      <span className="absolute left-0 top-6 z-20 block w-64 rounded-xl border border-k-border bg-white p-3 text-k-xs font-normal leading-snug text-k-text-2 shadow-k-card">
         {children}
       </span>
     </details>
@@ -255,15 +255,10 @@ export function Card({ children }: { children: ReactNode }) {
 export function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-[12px] font-semibold uppercase tracking-wide text-k-text-2">{label}</dt>
-      <dd className="mt-1 text-[15px] text-k-text">{value}</dd>
+      <dt className="text-k-xs font-semibold uppercase tracking-wide text-k-text-2">{label}</dt>
+      <dd className="mt-1 text-k-md text-k-text">{value}</dd>
     </div>
   );
-}
-
-/** La bajada de un control: qué significa lo que acaba de elegir. */
-export function Hint({ children }: { children: ReactNode }) {
-  return <p className="mt-2 text-[13px] text-k-text-2">{children}</p>;
 }
 
 /** Qué mostrar cuando no hay nada que mostrar. */
@@ -278,8 +273,8 @@ export function EmptyState({
 }) {
   return (
     <div className="rounded-2xl border border-dashed border-k-border bg-white px-6 py-12 text-center">
-      <p className="text-[16px] font-medium text-k-text">{title}</p>
-      {text && <p className="mx-auto mt-1.5 max-w-[420px] text-[14px] text-k-text-2">{text}</p>}
+      <p className="text-k-lg font-medium text-k-text">{title}</p>
+      {text && <p className="mx-auto mt-1.5 max-w-[420px] text-k-base text-k-text-2">{text}</p>}
       {action && <div className="mt-4 flex justify-center">{action}</div>}
     </div>
   );

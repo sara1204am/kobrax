@@ -55,7 +55,7 @@ export function DayPicker({
       <button type="button" onClick={() => go(shiftDay(day, -1))} aria-label={labels.previous} className={ARROW}>
         ‹
       </button>
-      <p className="min-w-[220px] text-[16px] font-semibold capitalize text-k-navy">{long}</p>
+      <p className="min-w-[220px] text-k-lg font-semibold capitalize text-k-navy">{long}</p>
       <button type="button" onClick={() => go(shiftDay(day, 1))} aria-label={labels.next} className={ARROW}>
         ›
       </button>
@@ -66,7 +66,7 @@ export function DayPicker({
           type="date"
           value={day}
           onChange={(e) => e.target.value && go(e.target.value)}
-          className="h-10 rounded-xl border border-k-border bg-white px-3 text-[14px] text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus"
+          className="h-10 rounded-xl border border-k-border bg-white px-3 text-k-base text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus"
         />
       </label>
 
@@ -74,7 +74,7 @@ export function DayPicker({
         <button
           type="button"
           onClick={() => go(today)}
-          className="min-h-[40px] text-[14px] font-medium text-k-purple hover:underline"
+          className="min-h-[40px] text-k-base font-medium text-k-purple hover:underline"
         >
           {labels.today}
         </button>
@@ -84,4 +84,4 @@ export function DayPicker({
 }
 
 const ARROW =
-  'flex h-10 w-10 items-center justify-center rounded-xl border border-k-border bg-white text-[20px] leading-none text-k-text-2 hover:bg-k-bg';
+  'flex h-10 w-10 items-center justify-center rounded-xl border border-k-border bg-white text-k-2xl leading-none text-k-text-2 hover:bg-k-bg';

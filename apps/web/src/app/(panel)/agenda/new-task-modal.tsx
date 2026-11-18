@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { AgendaItemType, AgendaTimeSlot, renderTemplate, ScheduleTimeMode, type AgendaAssignee, type AgendaListItem } from '@kobrax/shared';
 import type { CatalogOption } from '@/components/client-form';
-import { Button, ErrorBanner, Field, Input, Select } from '@/components/ui';
+import { Button, ErrorBanner, Field, Input, Select, TextButton, Textarea } from '@/components/ui';
 import { useAccountBrand } from '@/components/account-brand';
 import { Modal } from '@/components/modal';
 import { TONES, type Tone } from '@/components/tone-tile';
@@ -336,7 +336,7 @@ export function NewTaskModal({
       <ErrorBanner message={error} />
 
       {!ctx && editing ? (
-        <p className="text-[13px] text-k-text-2">{t('create.searching')}</p>
+        <p className="text-k-sm text-k-text-2">{t('create.searching')}</p>
       ) : !ctx ? (
         <>
           {/*
@@ -353,9 +353,9 @@ export function NewTaskModal({
             />
           </Field>
           <div className="mt-3 min-h-[80px]">
-            {buscando && <p className="text-[13px] text-k-text-2">{t('create.searching')}</p>}
+            {buscando && <p className="text-k-sm text-k-text-2">{t('create.searching')}</p>}
             {!buscando && q.trim().length >= 3 && hits.length === 0 && (
-              <p className="text-[13px] text-k-text-2">{t('create.noClients')}</p>
+              <p className="text-k-sm text-k-text-2">{t('create.noClients')}</p>
             )}
             <ul className="space-y-1">
               {hits.map((c) => {
@@ -365,11 +365,11 @@ export function NewTaskModal({
                     <button
                       type="button"
                       onClick={() => void elegirCliente(c.id)}
-                      className="flex w-full items-center justify-between gap-3 rounded-xl border border-k-border bg-white px-3 py-2.5 text-left text-[14px] text-k-text hover:bg-k-bg"
+                      className="flex w-full items-center justify-between gap-3 rounded-xl border border-k-border bg-white px-3 py-2.5 text-left text-k-base text-k-text hover:bg-k-bg"
                     >
                       <span>{nombre}</span>
                       {/* El carnet enmascarado: con dos «Teresa Mamani» es lo único que las separa. */}
-                      {c.nationalId && <span className="text-[12px] text-k-muted">{c.nationalId}</span>}
+                      {c.nationalId && <span className="text-k-xs text-k-muted">{c.nationalId}</span>}
                     </button>
                   </li>
                 );
@@ -380,17 +380,17 @@ export function NewTaskModal({
       ) : (
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-3 rounded-xl border border-k-border bg-k-bg px-3 py-2.5">
-            <span className="text-[14px] font-medium text-k-text">{ctx.client.displayName}</span>
+            <span className="text-k-base font-medium text-k-text">{ctx.client.displayName}</span>
             {!editing && (
-              <button type="button" onClick={() => setCtx(null)} className="text-[13px] font-medium text-k-periwinkle hover:underline">
+              <TextButton type="button" onClick={() => setCtx(null)} tone="periwinkle">
                 {t('create.changeClient')}
-              </button>
+              </TextButton>
             )}
           </div>
 
           {/* Sin ningún crédito visible no hay nada que agendar, y conviene decirlo entero. */}
           {ctx.credits.length === 0 ? (
-            <p className="rounded-xl bg-k-warning-bg px-3 py-2.5 text-[13px] text-k-warning-text">{t('create.noCredits')}</p>
+            <p className="rounded-xl bg-k-warning-bg px-3 py-2.5 text-k-sm text-k-warning-text">{t('create.noCredits')}</p>
           ) : (
             <Field label={t('create.credit')}>
               <Select value={creditId} onChange={(e) => setCreditId(e.target.value)} disabled={saving || !!editing}>
@@ -427,7 +427,7 @@ export function NewTaskModal({
           )}
 
           <div>
-            <span id="tipo-gestion" className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-k-text-2">
+            <span id="tipo-gestion" className="mb-1.5 block text-k-2xs font-medium uppercase tracking-wide text-k-text-2">
               {t('create.type')}
             </span>
             <div role="radiogroup" aria-labelledby="tipo-gestion" className="flex flex-wrap gap-2">
@@ -442,7 +442,7 @@ export function NewTaskModal({
                     aria-checked={on}
                     disabled={saving}
                     onClick={() => setTipo(v)}
-                    className={`flex items-center gap-2 rounded-full border-[1.5px] py-1 pl-1 pr-3 text-[13px] font-medium transition-colors disabled:opacity-60 ${
+                    className={`flex items-center gap-2 rounded-full border-[1.5px] py-1 pl-1 pr-3 text-k-sm font-medium transition-colors disabled:opacity-60 ${
                       on
                         ? 'border-k-periwinkle bg-k-highlight text-k-navy shadow-k-focus'
                         : 'border-k-border bg-white text-k-text hover:bg-k-bg'
@@ -494,21 +494,21 @@ export function NewTaskModal({
                             }),
                           )
                         }
-                        className="rounded-full border border-k-border bg-white px-3 py-1.5 text-[13px] font-medium text-k-text hover:bg-k-bg disabled:opacity-60"
+                        className="rounded-full border border-k-border bg-white px-3 py-1.5 text-k-sm font-medium text-k-text hover:bg-k-bg disabled:opacity-60"
                       >
                         {p.label}
                       </button>
                     ))}
                   </div>
                 )}
-                <textarea
+                <Textarea
                   value={mensaje}
                   onChange={(e) => setMensaje(e.target.value)}
                   disabled={saving}
                   maxLength={1000}
                   rows={4}
                   placeholder={t('create.messageHint')}
-                  className="w-full rounded-xl border-[1.5px] border-k-border bg-white px-3 py-2.5 text-[14px] text-k-text outline-none focus:border-k-periwinkle"
+                  className="!border-k-border !px-3 !text-k-base focus:!shadow-none"
                 />
               </div>
             </Field>
@@ -532,13 +532,13 @@ export function NewTaskModal({
 
           {tipo === AgendaItemType.REMINDER && (
             <Field label={t('create.description')}>
-              <textarea
+              <Textarea
                 value={descripcion}
                 onChange={(e) => setDescripcion(e.target.value)}
                 disabled={saving}
                 maxLength={500}
                 rows={3}
-                className="w-full rounded-xl border-[1.5px] border-k-border bg-white px-3 py-2.5 text-[14px] text-k-text outline-none focus:border-k-periwinkle disabled:opacity-60"
+                className="!border-k-border !px-3 !text-k-base focus:!shadow-none"
               />
             </Field>
           )}
@@ -559,8 +559,8 @@ export function NewTaskModal({
                     ] as const
                   ).map(([k, v]) => (
                     <div key={k}>
-                      <dt className="text-[11px] font-medium uppercase tracking-wide text-k-text-2">{t(`create.ref.${k}`)}</dt>
-                      <dd className="text-[14px] font-medium text-k-text">{money(v, credito.currency)}</dd>
+                      <dt className="text-k-2xs font-medium uppercase tracking-wide text-k-text-2">{t(`create.ref.${k}`)}</dt>
+                      <dd className="text-k-base font-medium text-k-text">{money(v, credito.currency)}</dd>
                     </div>
                   ))}
                 </dl>
@@ -617,13 +617,13 @@ export function NewTaskModal({
           <ScheduleNotice date={scheduledDate} time={timeMode === ScheduleTimeMode.FIXED ? hora : undefined} />
 
           <Field label={t('create.observations')}>
-            <textarea
+            <Textarea
                 value={observations}
                 onChange={(e) => setObservations(e.target.value)}
                 disabled={saving}
                 maxLength={500}
                 rows={3}
-                className="w-full rounded-xl border-[1.5px] border-k-border bg-white px-3 py-2.5 text-[14px] text-k-text outline-none focus:border-k-periwinkle disabled:opacity-60"
+                className="!border-k-border !px-3 !text-k-base focus:!shadow-none"
               />
           </Field>
         </div>

@@ -44,38 +44,38 @@ export default async function LegalDocumentPage({
     <div className="min-h-screen bg-k-bg">
       <header className="border-b border-k-border bg-white">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-5 py-3">
-          <Link href="/" className="text-[15px] font-semibold tracking-[0.16em] text-k-navy">
+          <Link href="/" className="text-k-md font-semibold tracking-[0.16em] text-k-navy">
             KOBRAX
           </Link>
-          <Link href="/" className="text-[13px] font-medium text-k-purple hover:underline">
+          <Link href="/" className="text-k-sm font-medium text-k-purple hover:underline">
             {t('backHome')}
           </Link>
         </div>
       </header>
 
       <main className="mx-auto max-w-3xl px-5 py-8">
-        <h1 className="mb-1 text-[26px] font-semibold text-k-navy">{doc?.title ?? t(`names.${page.key}`)}</h1>
+        <h1 className="mb-1 text-k-4xl font-semibold text-k-navy">{doc?.title ?? t(`names.${page.key}`)}</h1>
 
         {!doc ? (
-          <p role="status" className="mt-4 rounded-xl border border-k-border bg-white px-5 py-4 text-[14px] text-k-text-2">
+          <p role="status" className="mt-4 rounded-xl border border-k-border bg-white px-5 py-4 text-k-base text-k-text-2">
             {t('notFound')}
           </p>
         ) : (
           <>
-            <p className="mb-6 text-[13px] text-k-muted">
+            <p className="mb-6 text-k-sm text-k-muted">
               {t('version', { version: doc.version })} · {t('effective', { date: date(doc.effectiveAt) })}
             </p>
             <article className="rounded-2xl border border-k-border bg-white px-6 py-6 shadow-k-card">
               <LegalText content={doc.content} />
             </article>
-            <p className="mt-3 break-all font-mono text-[11px] text-k-muted">{t('fingerprint', { hash: doc.contentSha256 })}</p>
+            <p className="mt-3 break-all font-mono text-k-2xs text-k-muted">{t('fingerprint', { hash: doc.contentSha256 })}</p>
           </>
         )}
 
         {versions.length > 1 && (
           <section className="mt-8">
-            <h2 className="mb-2 text-[13px] font-semibold uppercase tracking-wide text-k-muted">{t('history')}</h2>
-            <ul className="space-y-1 text-[14px]">
+            <h2 className="mb-2 text-k-sm font-semibold uppercase tracking-wide text-k-muted">{t('history')}</h2>
+            <ul className="space-y-1 text-k-base">
               {versions.map((v, i) => (
                 <li key={v.id}>
                   <Link href={i === 0 ? `/${params.doc}` : `/${params.doc}?v=${encodeURIComponent(v.version)}`} className="text-k-purple hover:underline">
@@ -92,8 +92,8 @@ export default async function LegalDocumentPage({
         )}
 
         <nav aria-label={t('others')} className="mt-8 border-t border-k-border pt-5">
-          <h2 className="mb-2 text-[13px] font-semibold uppercase tracking-wide text-k-muted">{t('others')}</h2>
-          <ul className="flex flex-wrap gap-x-5 gap-y-1 text-[14px]">
+          <h2 className="mb-2 text-k-sm font-semibold uppercase tracking-wide text-k-muted">{t('others')}</h2>
+          <ul className="flex flex-wrap gap-x-5 gap-y-1 text-k-base">
             {Object.entries(LEGAL_PAGES).map(([path, p]) => (
               <li key={path}>
                 <Link href={`/${path}`} className={path === params.doc ? 'font-semibold text-k-navy' : 'text-k-purple hover:underline'}>

@@ -1,5 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 import { PageHeader, Section } from '@/components/panel-ui';
+import { requirePermission } from '@/lib/authz';
+import { Permission } from '@kobrax/shared';
 
 const ITEMS = [
   { href: '/api/exports/clients', key: 'clients' },
@@ -14,6 +16,8 @@ const ITEMS = [
  * `Content-Disposition: attachment` del backend hace que el navegador lo baje solo.
  */
 export default async function ExportarPage() {
+  const blocked = await requirePermission(Permission.REPORT_EXPORT);
+  if (blocked) return blocked;
   const t = await getTranslations('exports');
 
   return (
@@ -29,8 +33,8 @@ export default async function ExportarPage() {
                 className="flex items-center justify-between gap-3 rounded-2xl border border-k-border bg-white px-5 py-4 shadow-k-card transition-all hover:border-k-periwinkle"
               >
                 <span className="min-w-0">
-                  <span className="block text-[15px] font-medium text-k-text">{t(`items.${item.key}`)}</span>
-                  <span className="block text-[13px] text-k-text-2">{t(`items.${item.key}Desc`)}</span>
+                  <span className="block text-k-md font-medium text-k-text">{t(`items.${item.key}`)}</span>
+                  <span className="block text-k-sm text-k-text-2">{t(`items.${item.key}Desc`)}</span>
                 </span>
                 <span aria-hidden className="text-k-muted">
                   ⬇
@@ -43,12 +47,12 @@ export default async function ExportarPage() {
         <Section title={t('backupTitle')}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <span className="max-w-md">
-              <span className="block text-[14px] font-medium text-k-text">{t('backup')}</span>
-              <span className="block text-[13px] text-k-text-2">{t('backupHint')}</span>
+              <span className="block text-k-base font-medium text-k-text">{t('backup')}</span>
+              <span className="block text-k-sm text-k-text-2">{t('backupHint')}</span>
             </span>
             <a
               href="/api/exports/backup"
-              className="whitespace-nowrap rounded-xl border border-k-border px-4 py-2.5 text-[14px] font-medium text-k-navy hover:bg-k-bg"
+              className="whitespace-nowrap rounded-xl border border-k-border px-4 py-2.5 text-k-base font-medium text-k-navy hover:bg-k-bg"
             >
               {t('backupAction')}
             </a>

@@ -66,9 +66,9 @@ export function OfficeTeam({
     <div className="space-y-5">
       <ErrorBanner message={error} />
       <div>
-        <h3 className="text-[12px] font-semibold uppercase tracking-wide text-k-text-2">{t('team.current')}</h3>
+        <h3 className="text-k-xs font-semibold uppercase tracking-wide text-k-text-2">{t('team.current')}</h3>
         {!table && current.length === 0 ? (
-          <p className="mt-2 text-[13px] text-k-text-2">{t('team.none')}</p>
+          <p className="mt-2 text-k-sm text-k-text-2">{t('team.none')}</p>
         ) : (
           table ? (
             <OfficeTeamTable
@@ -87,8 +87,8 @@ export function OfficeTeam({
 
       {editable && office.active && (
         <div className="space-y-3">
-          <h3 className="text-[12px] font-semibold uppercase tracking-wide text-k-text-2">{t('team.add')}</h3>
-          <p className="text-[12px] text-k-muted">{t('team.oneOffice')}</p>
+          <h3 className="text-k-xs font-semibold uppercase tracking-wide text-k-text-2">{t('team.add')}</h3>
+          <p className="text-k-xs text-k-muted">{t('team.oneOffice')}</p>
           {targets.length > 1 && (
             <Field label={t('team.office')} hint={t('team.officeHint')}>
               <OfficeSelect
@@ -132,7 +132,7 @@ export function OfficeTeam({
               }
             />
           </Field>
-          {chosen && from && <p role="note" className="rounded-xl bg-k-warning-bg px-3 py-2 text-[13px] text-k-warning-text">{t('team.willMove', { name: memberLabel(chosen), from })}</p>}
+          {chosen && from && <p role="note" className="rounded-xl bg-k-warning-bg px-3 py-2 text-k-sm text-k-warning-text">{t('team.willMove', { name: memberLabel(chosen), from })}</p>}
           <div className="flex justify-end">
             <span className="sm:w-48">
               <Button
@@ -159,12 +159,12 @@ function TeamList({ members, editable, busy, onTakeOut }: { members: Member[]; e
       {members.map((m) => (
         <li key={m.userId} className="flex items-center justify-between gap-3 px-3 py-2">
           <span className="min-w-0">
-            <span className="block truncate text-[14px] text-k-text">{memberLabel(m)}</span>
-            <span className="block truncate text-[12px] text-k-text-2">{m.roleName}</span>
+            <span className="block truncate text-k-base text-k-text">{memberLabel(m)}</span>
+            <span className="block truncate text-k-xs text-k-text-2">{m.roleName}</span>
           </span>
           {editable && (
             <span className="inline-block w-24">
-              <Button type="button" variant="ghost" disabled={busy} aria-label={t('team.takeOutOf', { name: memberLabel(m) })} className="!h-9 !text-[13px] !text-k-danger" onClick={() => onTakeOut(m)}>
+              <Button type="button" variant="ghost" disabled={busy} aria-label={t('team.takeOutOf', { name: memberLabel(m) })} className="!h-9 !text-k-sm !text-k-danger" onClick={() => onTakeOut(m)}>
                 {t('team.takeOut')}
               </Button>
             </span>

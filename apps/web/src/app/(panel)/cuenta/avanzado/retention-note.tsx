@@ -10,13 +10,13 @@ export async function RetentionNote({ report }: { report: { retentionMonths: num
   const t = await getTranslations('account.advanced.retention');
   return (
     <Section title={t('title')} inner="space-y-3 p-6">
-      <p className="text-[13px] leading-relaxed text-k-text-2">
+      <p className="text-k-sm leading-relaxed text-k-text-2">
         {report.retentionMonths === null ? t('unlimited') : t('months', { n: report.retentionMonths })}
       </p>
       {report.retentionMonths !== null && (
-        <p className="text-[14px] text-k-text">{t('older', { older: report.older, total: report.total })}</p>
+        <p className="text-k-base text-k-text">{t('older', { older: report.older, total: report.total })}</p>
       )}
-      <p className="rounded-xl bg-k-light-bg px-4 py-3 text-[13px] leading-relaxed text-k-text-2">{t('noDelete')}</p>
+      <p className="rounded-xl bg-k-light-bg px-4 py-3 text-k-sm leading-relaxed text-k-text-2">{t('noDelete')}</p>
     </Section>
   );
 }

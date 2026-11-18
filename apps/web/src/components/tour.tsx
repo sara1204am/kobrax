@@ -435,28 +435,28 @@ function SpotlightTour({
         style={cardStyle}
       >
         <p
-          className="text-[12px] font-medium uppercase tracking-wide text-k-muted"
+          className="text-k-xs font-medium uppercase tracking-wide text-k-muted"
           aria-live="polite"
         >
           {t('tour.progress', { current: index + 1, total: steps.length })}
         </p>
-        <h2 id="tour-title" className="mt-1 text-[16px] font-semibold text-k-navy">
+        <h2 id="tour-title" className="mt-1 text-k-lg font-semibold text-k-navy">
           {title}
         </h2>
-        <div id="tour-desc" className="mt-1 space-y-1 text-[13px] text-k-text">
+        <div id="tour-desc" className="mt-1 space-y-1 text-k-sm text-k-text">
           <p className="font-medium">{t(`${step.textKey}.what`)}</p>
           <p className="text-k-text-2">{t(`${step.textKey}.does`)}</p>
           <p className="text-k-text-2">
             <span className="font-medium text-k-text">{t('tour.startWith')}</span>{' '}
             {t(`${step.textKey}.startWith`)}
           </p>
-          {!box && <p className="text-[12px] text-k-muted">{t('tour.noAnchor')}</p>}
+          {!box && <p className="text-k-xs text-k-muted">{t('tour.noAnchor')}</p>}
         </div>
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
           <button
             type="button"
             onClick={onSkip}
-            className="rounded-lg px-2 py-2 text-[13px] text-k-text-2 hover:bg-k-bg"
+            className="rounded-lg px-2 py-2 text-k-sm text-k-text-2 hover:bg-k-bg"
           >
             {t('tour.skip')}
           </button>
@@ -465,7 +465,7 @@ function SpotlightTour({
               <button
                 type="button"
                 onClick={() => onGo(index - 1)}
-                className="min-h-[40px] rounded-lg border border-k-border px-3 text-[13px] font-medium text-k-navy hover:bg-k-bg"
+                className="min-h-[40px] rounded-lg border border-k-border px-3 text-k-sm font-medium text-k-navy hover:bg-k-bg"
               >
                 {t('tour.back')}
               </button>
@@ -474,7 +474,7 @@ function SpotlightTour({
               ref={nextBtn}
               type="button"
               onClick={() => onGo(index + 1)}
-              className="min-h-[40px] rounded-lg bg-k-navy px-4 text-[13px] font-medium text-white hover:bg-k-navy/90"
+              className="min-h-[40px] rounded-lg bg-k-navy px-4 text-k-sm font-medium text-white hover:bg-k-navy/90"
             >
               {last ? t('tour.finish') : t('tour.next')}
             </button>

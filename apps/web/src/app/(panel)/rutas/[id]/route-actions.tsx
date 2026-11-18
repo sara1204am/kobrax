@@ -78,7 +78,7 @@ export function RouteActions({
   const startNeedsReason = !viewerIsCollector && !caps.isOwner;
   const completeNeedsReason = openStops > 0 || (!viewerIsCollector && !caps.isOwner);
 
-  const btn = 'inline-flex h-9 items-center rounded-lg px-3.5 text-[13px] font-medium disabled:opacity-60';
+  const btn = 'inline-flex h-9 items-center rounded-lg px-3.5 text-k-sm font-medium disabled:opacity-60';
   const primary = `${btn} bg-k-navy text-white hover:bg-k-slate`;
   const ghost = `${btn} border border-k-border bg-white text-k-text-2 hover:bg-k-bg`;
 
@@ -123,11 +123,11 @@ export function RouteActions({
       </div>
 
       {/* El motivo del botón gris, a la vista y no solo en un tooltip que en el celular no existe. */}
-      {!caps.cancel && caps.cancelBlockedByVisits && <p className="mt-2 text-right text-[12px] text-k-text-2">{t('cancelBlocked')}</p>}
+      {!caps.cancel && caps.cancelBlockedByVisits && <p className="mt-2 text-right text-k-xs text-k-text-2">{t('cancelBlocked')}</p>}
       {notice && (
         <p
           role={notice.tone === 'error' ? 'alert' : 'status'}
-          className={`mt-2 text-right text-[13px] ${notice.tone === 'error' ? 'text-k-danger' : 'text-k-success'}`}
+          className={`mt-2 text-right text-k-sm ${notice.tone === 'error' ? 'text-k-danger' : 'text-k-success'}`}
         >
           {notice.text}
         </p>

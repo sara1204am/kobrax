@@ -22,7 +22,7 @@ import { PanelFooter } from './panel-footer';
 
 /** Fila de cualquiera de los dos menús de la topbar: 44 px de toque, ancho completo. */
 const MENU_ITEM =
-  'flex min-h-[44px] w-full items-center gap-2 px-3 text-left text-[14px] text-k-text hover:bg-k-bg disabled:opacity-60';
+  'flex min-h-[44px] w-full items-center gap-2 px-3 text-left text-k-base text-k-text hover:bg-k-bg disabled:opacity-60';
 
 export interface ShellUser {
   /** Con `sessionId`, identifican la sesión con la que se cargó la pestaña (W-LOG-54). */
@@ -217,7 +217,7 @@ function NavList({
           // El borde transparente está en TODOS los ítems, no sólo en el activo: si apareciera
           // recién al activarse, la fila se correría 3 px cada vez que cambiás de pantalla.
           const base =
-            'flex min-h-[44px] items-center gap-3 rounded-xl border-l-[3px] border-transparent px-3 text-[14px] font-medium transition-colors';
+            'flex min-h-[44px] items-center gap-3 rounded-xl border-l-[3px] border-transparent px-3 text-k-base font-medium transition-colors';
 
           if (item.built && item.children) {
             return (
@@ -252,7 +252,7 @@ function NavList({
                   {badges?.[item.label] && (
                     <span
                       aria-label={t('nav.pending', { n: badges[item.label]!.count })}
-                      className={`ml-auto rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white ${
+                      className={`ml-auto rounded-full px-1.5 py-0.5 text-k-2xs font-semibold tabular-nums text-white ${
                         badges[item.label]!.urgent ? 'bg-k-danger' : 'bg-white/25'
                       }`}
                     >
@@ -269,7 +269,7 @@ function NavList({
                   <Icon name={item.label} />
                   <span className={`flex-1 ${labelClass}`}>{t(`nav.${item.label}`)}</span>
                   <span
-                    className={`rounded-md bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/50 ${labelClass}`}
+                    className={`rounded-md bg-white/10 px-1.5 py-0.5 text-k-3xs font-semibold uppercase tracking-wide text-white/50 ${labelClass}`}
                   >
                     {t('soon')}
                   </span>
@@ -330,7 +330,7 @@ function NavGroup({
                 <Link
                   href={child.href}
                   aria-current={childActive ? 'page' : undefined}
-                  className={`flex min-h-[40px] items-center rounded-xl border-l-[3px] border-transparent pl-10 pr-3 text-[13px] font-medium transition-colors ${
+                  className={`flex min-h-[40px] items-center rounded-xl border-l-[3px] border-transparent pl-10 pr-3 text-k-sm font-medium transition-colors ${
                     childActive
                       ? 'border-k-soft-periw bg-white/10 text-white'
                       : 'text-white/70 hover:bg-white/5 hover:text-white'
@@ -366,7 +366,7 @@ function HelpMenu() {
         chevron={false}
         label={
           <span
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-k-border text-[15px] font-semibold text-k-text-2"
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-k-border text-k-md font-semibold text-k-text-2"
             aria-label={t('button')}
           >
             ?
@@ -456,7 +456,7 @@ function NotificationBell() {
         <span className="relative flex h-9 w-9 items-center justify-center" aria-label={t('label')}>
           <Icon name="bell" className="h-5 w-5 text-k-text-2" />
           {unread > 0 && (
-            <span className="absolute right-0.5 top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-k-danger px-1 text-[10px] font-semibold leading-none text-white">
+            <span className="absolute right-0.5 top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-k-danger px-1 text-k-3xs font-semibold leading-none text-white">
               {unread > 9 ? '9+' : unread}
             </span>
           )}
@@ -465,12 +465,12 @@ function NotificationBell() {
       panelClass="absolute right-0 z-20 mt-1 w-[320px] overflow-hidden rounded-xl border border-k-border bg-white shadow-k-card"
     >
       <div className="flex items-center justify-between border-b border-k-border px-3 py-2.5">
-        <p className="text-[13px] font-semibold text-k-text">{t('title')}</p>
+        <p className="text-k-sm font-semibold text-k-text">{t('title')}</p>
         {unread > 0 && (
           <button
             type="button"
             onClick={() => void markAllRead()}
-            className="text-[12px] font-medium text-k-purple hover:underline"
+            className="text-k-xs font-medium text-k-purple hover:underline"
           >
             {t('markAllRead')}
           </button>
@@ -478,9 +478,9 @@ function NotificationBell() {
       </div>
 
       <div className="max-h-[360px] overflow-y-auto">
-        {error && <p className="px-3 py-4 text-[13px] text-k-danger">{t('loadError')}</p>}
+        {error && <p className="px-3 py-4 text-k-sm text-k-danger">{t('loadError')}</p>}
         {!error && items?.length === 0 && (
-          <p className="px-3 py-4 text-[13px] text-k-text-2">{t('empty')}</p>
+          <p className="px-3 py-4 text-k-sm text-k-text-2">{t('empty')}</p>
         )}
         {(items ?? []).map((n) => {
           const href = notificationHref(n, workspace);
@@ -496,11 +496,11 @@ function NotificationBell() {
                 />
               )}
               <span className={`min-w-0 flex-1 ${n.readAt ? 'pl-3.5' : ''}`}>
-                <span className="block truncate text-[13px] font-medium text-k-text">
+                <span className="block truncate text-k-sm font-medium text-k-text">
                   {n.title}
                 </span>
                 {n.body && (
-                  <span className="block truncate text-[12px] text-k-text-2">{n.body}</span>
+                  <span className="block truncate text-k-xs text-k-text-2">{n.body}</span>
                 )}
               </span>
             </>
@@ -587,7 +587,7 @@ function Topbar({
         />
       )}
       <nav aria-label={t('breadcrumb')} className="min-w-0 flex-1">
-        <ol className="flex items-center gap-1.5 text-[14px]">
+        <ol className="flex items-center gap-1.5 text-k-base">
           {crumbs.map((crumb, i) => (
             <li key={crumb.label} className="flex min-w-0 items-center gap-1.5">
               {i > 0 && (
@@ -635,7 +635,7 @@ function Topbar({
         <Dropdown label={<Icon name="account" className="h-5 w-5 text-k-text-2" />}>
           {canSwitch && (
             <div className="border-b border-k-border py-1.5">
-              <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-k-muted">
+              <p className="px-3 pb-1 text-k-2xs font-semibold uppercase tracking-wide text-k-muted">
                 {t('company')}
               </p>
               <AccountList accounts={accounts} activeId={user.accountId} />
@@ -668,7 +668,7 @@ export function Dropdown({
   label,
   children,
   chevron = true,
-  summaryClass = 'flex min-h-[44px] cursor-pointer list-none items-center gap-2 rounded-xl px-2 text-[14px] text-k-text-2 hover:bg-k-bg [&::-webkit-details-marker]:hidden',
+  summaryClass = 'flex min-h-[44px] cursor-pointer list-none items-center gap-2 rounded-xl px-2 text-k-base text-k-text-2 hover:bg-k-bg [&::-webkit-details-marker]:hidden',
   panelClass = 'absolute right-0 z-20 mt-1 w-[260px] overflow-hidden rounded-xl border border-k-border bg-white shadow-k-card',
 }: {
   label: ReactNode;
@@ -759,7 +759,7 @@ function AccountList({ accounts, activeId }: { accounts: AuthAccountOption[]; ac
             >
               <span className="min-w-0 flex-1">
                 <span className="block truncate">{account.name}</span>
-                <span className="block truncate text-[12px] text-k-text-2">{account.role}</span>
+                <span className="block truncate text-k-xs text-k-text-2">{account.role}</span>
               </span>
               {account.id === activeId && <Icon name="check" className="h-4 w-4 text-k-purple" />}
             </button>
@@ -767,7 +767,7 @@ function AccountList({ accounts, activeId }: { accounts: AuthAccountOption[]; ac
         ))}
       </ul>
       {error && (
-        <p role="alert" className="px-3 py-2 text-[12px] text-k-danger">
+        <p role="alert" className="px-3 py-2 text-k-xs text-k-danger">
           {t('switchError')}
         </p>
       )}
@@ -794,8 +794,8 @@ function SidebarIdentity({
     >
       <Avatar user={user} />
       <span className={`min-w-0 flex-1 ${collapsible ? 'hidden xl:block' : ''}`}>
-        <span className="block truncate text-[13px] font-medium text-white">{user.name}</span>
-        <span className="block truncate text-[11px] uppercase tracking-wide text-white/50">
+        <span className="block truncate text-k-sm font-medium text-white">{user.name}</span>
+        <span className="block truncate text-k-2xs uppercase tracking-wide text-white/50">
           {user.role}
         </span>
       </span>
@@ -823,7 +823,7 @@ function SidebarLogout({ collapsible = false }: { collapsible?: boolean }) {
         }}
         disabled={busy}
         title={t('logout')}
-        className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-k-danger px-3 text-[14px] font-medium text-white hover:bg-k-danger/90 disabled:opacity-60"
+        className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-k-danger px-3 text-k-base font-medium text-white hover:bg-k-danger/90 disabled:opacity-60"
       >
         <Icon name="logout" className="h-[18px] w-[18px] shrink-0" />
         <span className={collapsible ? 'hidden xl:inline' : ''}>{t('logout')}</span>
@@ -855,7 +855,7 @@ function Avatar({ user }: { user: ShellUser }) {
   }
 
   return (
-    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-k-highlight text-[13px] font-semibold text-k-purple">
+    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-k-highlight text-k-sm font-semibold text-k-purple">
       {initials(user.name)}
     </span>
   );

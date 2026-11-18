@@ -17,6 +17,8 @@ import { isUuid } from '@/lib/uuid';
 import { dateTime, dayDate } from '@/lib/format';
 import { fileSize, RUN_ITEMS_PAGE_SIZE, runItemAction, runItemsQuery, scopeRefName } from '@/lib/import';
 import { RunItemsTable } from './run-items-table';
+import { requirePermission } from '@/lib/authz';
+import { Permission } from '@kobrax/shared';
 
 /** Qué número de la corrida corresponde a cada pestaña. */
 const COUNT_OF: Record<ImportRunItemAction, keyof ImportRunCounts> = {
@@ -53,6 +55,8 @@ export default async function ImportRunPage({
   params: { id: string };
   searchParams: { action?: string; page?: string; pageSize?: string };
 }) {
+  const blocked = await requirePermission(Permission.CLIENT_IMPORT);
+  if (blocked) return blocked;
   const t = await getTranslations('panel.import');
   const locale = await getLocale();
   if (!isUuid(params.id)) notFound();
@@ -83,7 +87,7 @@ export default async function ImportRunPage({
 
   return (
     <>
-      <Link href="/import" className="mb-3 inline-block text-[14px] font-medium text-k-purple hover:underline">
+      <Link href="/import" className="mb-3 inline-block text-k-base font-medium text-k-purple hover:underline">
         {t('detail.back')}
       </Link>
       <PageHeader title={t('detail.title', { date: dateTime(run.at, locale) })} subtitle={run.file?.name} />
@@ -106,10 +110,10 @@ export default async function ImportRunPage({
           {/* El documento tal cual se subió: se abre en otra pestaña (un PDF se ve ahí mismo) o se baja. */}
           {run.file && canSeeFile && (
             <div className="mt-5 flex flex-wrap gap-4">
-              <a href={fileUrl} target="_blank" rel="noreferrer" className="text-[14px] font-medium text-k-purple hover:underline">
+              <a href={fileUrl} target="_blank" rel="noreferrer" className="text-k-base font-medium text-k-purple hover:underline">
                 {t('detail.view')}
               </a>
-              <a href={`${fileUrl}?download=1`} className="text-[14px] font-medium text-k-purple hover:underline">
+              <a href={`${fileUrl}?download=1`} className="text-k-base font-medium text-k-purple hover:underline">
                 {t('detail.download')}
               </a>
             </div>
@@ -117,13 +121,13 @@ export default async function ImportRunPage({
         </Card>
 
         {!run.itemsComplete && (
-          <p className="rounded-2xl border-l-[3px] border-k-warning bg-k-warning-bg px-4 py-3 text-[13px] text-k-warning-text">
+          <p className="rounded-2xl border-l-[3px] border-k-warning bg-k-warning-bg px-4 py-3 text-k-sm text-k-warning-text">
             {t('detail.partial')}
           </p>
         )}
 
         <section className="space-y-3">
-          <h2 className="text-[16px] font-semibold text-k-navy">{t('detail.movements')}</h2>
+          <h2 className="text-k-lg font-semibold text-k-navy">{t('detail.movements')}</h2>
 
           {/* Las pestañas: mismo mosaico que los números de la vista previa del importador. */}
           <nav className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7" aria-label={t('detail.movements')}>
@@ -140,7 +144,7 @@ export default async function ImportRunPage({
             ))}
           </nav>
 
-          {action && <p className="text-[13px] text-k-text-2">{t(HINT_OF[action])}</p>}
+          {action && <p className="text-k-sm text-k-text-2">{t(HINT_OF[action])}</p>}
 
           {itemsRes.status === 200 && itemsRes.body.data ? (
             <RunItemsTable
@@ -193,8 +197,8 @@ function Tab({
         active ? 'border-k-purple bg-k-highlight' : 'border-transparent bg-k-bg hover:border-k-border'
       }`}
     >
-      <span className="block text-[12px] font-semibold uppercase tracking-wide text-k-text-2">{label}</span>
-      <span className={`mt-1 block text-[22px] font-semibold tabular-nums ${danger && value > 0 ? 'text-k-danger' : 'text-k-navy'}`}>
+      <span className="block text-k-xs font-semibold uppercase tracking-wide text-k-text-2">{label}</span>
+      <span className={`mt-1 block text-k-3xl font-semibold tabular-nums ${danger && value > 0 ? 'text-k-danger' : 'text-k-navy'}`}>
         {value}
       </span>
     </Link>

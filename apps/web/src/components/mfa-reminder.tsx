@@ -13,9 +13,9 @@ export function MfaReminder() {
   return (
     <Link
       href="/settings/perfil/seguridad"
-      className="mb-5 flex flex-wrap items-center gap-3 rounded-xl border border-k-warning bg-k-warning-bg px-4 py-3 text-[13px] text-k-warning-text hover:opacity-90"
+      className="mb-5 flex flex-wrap items-center gap-3 rounded-xl border border-k-warning bg-k-warning-bg px-4 py-3 text-k-sm text-k-warning-text hover:opacity-90"
     >
-      <span className="rounded-full bg-k-warning px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-white">
+      <span className="rounded-full bg-k-warning px-2 py-0.5 text-k-2xs font-semibold uppercase tracking-wide text-white">
         {t('badge')}
       </span>
       <span className="min-w-0 flex-1">

@@ -143,6 +143,7 @@ export function RoutesTable({
       rowKey={(r) => r.id}
       meta={meta}
       filters={filters}
+      filtersOpen={false}
       filtered={filtered}
       entityLabel={t('entity')}
       // Sin rutas ese día y sin resultados con esos filtros no son lo mismo: uno se arregla

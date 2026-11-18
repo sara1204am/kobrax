@@ -40,7 +40,7 @@ export default function PlatformLoginPage() {
     <AuthShell title={t('title')} subtitle={t('subtitle')}>
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
         {notice && (
-          <p role="status" className="rounded-xl border border-k-border bg-white px-4 py-3 text-[13px] text-k-text-2">
+          <p role="status" className="rounded-xl border border-k-border bg-white px-4 py-3 text-k-sm text-k-text-2">
             {notice}
           </p>
         )}

@@ -108,7 +108,7 @@ export default async function MemberPage({
 
   return (
     <>
-      <nav aria-label={t('detail.breadcrumb')} className="mb-4 flex items-center gap-2 text-[13px] text-k-text-2">
+      <nav aria-label={t('detail.breadcrumb')} className="mb-4 flex items-center gap-2 text-k-sm text-k-text-2">
         <Link href="/equipo" className="font-medium text-k-periwinkle hover:underline">
           ← {t('title')}
         </Link>
@@ -121,13 +121,13 @@ export default async function MemberPage({
           <Avatar member={member} muted={!member.isActive} size="xl" />
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2.5">
-              <h1 className="truncate text-[26px] font-semibold tracking-tight text-k-navy">{name}</h1>
+              <h1 className="truncate text-k-4xl font-semibold tracking-tight text-k-navy">{name}</h1>
               <Badge dot tone={STATUS_TONE[status]}>
                 {t(`status.${status}`)}
               </Badge>
             </div>
-            <p className="text-[14px] text-k-text-2">{member.email}</p>
-            <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-k-text-2">
+            <p className="text-k-base text-k-text-2">{member.email}</p>
+            <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-k-sm text-k-text-2">
               <span className="rounded-md bg-k-highlight px-2 py-0.5 font-medium text-k-purple">
                 {isKnownRole(member.roleName) ? tr(member.roleName) : member.roleName}
               </span>
@@ -155,7 +155,7 @@ export default async function MemberPage({
             key={x.key}
             href={x.key === 'info' ? `/equipo/${id}` : `/equipo/${id}?tab=${x.key}`}
             aria-current={tab === x.key ? 'page' : undefined}
-            className={`-mb-px whitespace-nowrap border-b-2 px-4 py-3 text-[14px] font-medium ${
+            className={`-mb-px whitespace-nowrap border-b-2 px-4 py-3 text-k-base font-medium ${
               tab === x.key
                 ? 'border-k-periwinkle text-k-navy'
                 : 'border-transparent text-k-text-2 hover:text-k-text'

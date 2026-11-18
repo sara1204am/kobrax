@@ -56,7 +56,7 @@ export function PortfolioTable({
         <a href={`/cartera/${c.id}`} className="block hover:underline">
           <span className="block font-semibold text-k-text">{fullName(c)}</span>
           {/* Enmascarado: la lista nunca trae la PII en claro. */}
-          <span className="block text-[12px] text-k-muted">{c.nationalId ?? '—'}</span>
+          <span className="block text-k-xs text-k-muted">{c.nationalId ?? '—'}</span>
         </a>
       ),
     },
@@ -73,7 +73,7 @@ export function PortfolioTable({
           <span className={c.totalDebt > 0 ? 'font-semibold text-k-text' : 'text-k-muted'}>{money(c.totalDebt, currency)}</span>
           {/* D7: si parte de la deuda la reporta el banco a su corte, se dice cuánto — no se mezcla callado. */}
           {!!c.totalDebtExternal && c.totalDebtExternal > 0 && (
-            <span className="block text-[12px] text-k-text-2">
+            <span className="block text-k-xs text-k-text-2">
               {c.totalDebtExternal >= c.totalDebt - 0.005
                 ? tsrc('allReported')
                 : tsrc('ofWhich', { amount: money(c.totalDebtExternal, currency) })}
@@ -103,7 +103,7 @@ export function PortfolioTable({
       header: t('columns.credits'),
       center: true,
       render: (c) => (
-        <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-md bg-k-bg px-1.5 text-[12px] font-medium text-k-text-2">
+        <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-md bg-k-bg px-1.5 text-k-xs font-medium text-k-text-2">
           {c.creditCount}
         </span>
       ),

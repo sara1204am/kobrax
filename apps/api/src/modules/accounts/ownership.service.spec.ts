@@ -46,7 +46,7 @@ function makeService(opts: { me?: Row | null; target?: Row | null; mfaOk?: boole
     },
   };
   const prisma = { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) };
-  const audit = { record: async (e: { action: string; before?: unknown; after?: unknown }) => void calls.audit.push(e) };
+  const audit = { recordInTx: async (_t: unknown, e: { action: string; before?: unknown; after?: unknown }) => void calls.audit.push(e) };
   const mfa = {
     challenge: async (_u: string, code: string) => {
       calls.challenged.push(code);

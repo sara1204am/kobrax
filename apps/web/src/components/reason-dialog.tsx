@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { isValidReason, ROUTE_REASON_MAX } from '@kobrax/shared';
 import { Modal } from '@/components/modal';
+import { Button, Textarea } from '@/components/ui';
 
 /**
  * Un diálogo que pide **el motivo escrito** antes de hacer algo que lo exige: cancelar una ruta, cerrarla con paradas
@@ -71,19 +72,19 @@ export function ReasonDialog({
       title={title}
       actions={
         <>
-          <button
+          <Button
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="h-10 rounded-xl border border-k-border bg-white px-4 text-[14px] font-medium text-k-text-2 hover:bg-k-bg disabled:opacity-50"
+            variant="ghost" fullWidth={false} className="!h-10 !px-4 !text-k-base !font-medium"
           >
             {t('back')}
-          </button>
+          </Button>
           <button
             type="button"
             onClick={() => void confirm()}
             disabled={busy || !valid}
-            className={`h-10 rounded-xl px-5 text-[14px] font-semibold text-white disabled:opacity-50 ${
+            className={`h-10 rounded-xl px-5 text-k-base font-semibold text-white disabled:opacity-50 ${
               tone === 'danger' ? 'bg-k-danger hover:brightness-110' : 'bg-k-navy hover:bg-k-slate'
             }`}
           >
@@ -93,21 +94,21 @@ export function ReasonDialog({
       }
     >
       {children && <div className="mb-4">{children}</div>}
-      <label htmlFor="reason" className="mb-1.5 block text-[13px] font-medium text-k-text">
+      <label htmlFor="reason" className="mb-1.5 block text-k-sm font-medium text-k-text">
         {label ?? t('reasonLabel')}
       </label>
-      <textarea
+      <Textarea
         id="reason"
         value={reason}
         onChange={(e) => setReason(e.target.value)}
         maxLength={ROUTE_REASON_MAX}
         rows={3}
         placeholder={placeholder ?? t('reasonPlaceholder')}
-        className="w-full rounded-xl border border-k-border bg-white px-3 py-2.5 text-[14px] text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus"
+        className="!border !border-k-border !px-3 !text-k-base"
       />
-      {required && <p className="mt-1 text-[12px] text-k-muted">{t('reasonHint')}</p>}
+      {required && <p className="mt-1 text-k-xs text-k-muted">{t('reasonHint')}</p>}
       {error && (
-        <p role="alert" className="mt-3 rounded-lg border border-k-danger bg-k-danger-bg px-3 py-2 text-[13px] text-k-text">
+        <p role="alert" className="mt-3 rounded-lg border border-k-danger bg-k-danger-bg px-3 py-2 text-k-sm text-k-text">
           {error}
         </p>
       )}

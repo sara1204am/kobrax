@@ -16,7 +16,7 @@ export function SupportBanner({ expiresAt }: { expiresAt: string }) {
   }, [expiresAt]);
 
   return (
-    <div role="status" className="mb-5 rounded-xl border border-k-warning bg-k-warning-bg px-4 py-3 text-[13px] text-k-warning-text">
+    <div role="status" className="mb-5 rounded-xl border border-k-warning bg-k-warning-bg px-4 py-3 text-k-sm text-k-warning-text">
       <span className="font-semibold">{t('title')}</span> {time ? t('expires', { time }) : t('active')}
     </div>
   );

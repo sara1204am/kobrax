@@ -68,10 +68,10 @@ export function LegalReacceptGate({ pending }: { pending: PendingDocument[] }) {
       className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-k-bg/95 px-5 py-8"
     >
       <div className="w-full max-w-[480px] rounded-2xl border border-k-border bg-white p-6 shadow-k-card">
-        <h1 id="reaccept-title" className="text-[20px] font-semibold text-k-navy">
+        <h1 id="reaccept-title" className="text-k-2xl font-semibold text-k-navy">
           {t('title')}
         </h1>
-        <p className="mt-1 text-[13px] text-k-text-2">{t(pending.some((p) => !p.isMaterial) ? 'intro_new' : 'intro')}</p>
+        <p className="mt-1 text-k-sm text-k-text-2">{t(pending.some((p) => !p.isMaterial) ? 'intro_new' : 'intro')}</p>
 
         <div className="mt-4 space-y-2.5">
           {error && <ErrorBanner message={error} />}
@@ -120,7 +120,7 @@ export function LegalReacceptGate({ pending }: { pending: PendingDocument[] }) {
         </div>
 
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-          <button type="button" onClick={() => void logout()} disabled={saving} className={`${LINK} text-[13px]`}>
+          <button type="button" onClick={() => void logout()} disabled={saving} className={`${LINK} text-k-sm`}>
             {t('logout')}
           </button>
           <Button type="button" variant="primary" className="!w-auto px-6" loading={saving} disabled={!all} onClick={() => void confirm()}>

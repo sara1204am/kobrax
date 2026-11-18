@@ -68,6 +68,7 @@ export class AuthController {
   @Post('select-account')
   @Public()
   @HttpCode(HttpStatus.OK)
+  @RateLimit({ limit: 10, windowSec: 60, by: 'ip' })
   selectAccount(@Body() dto: SelectAccountDto, @Req() req: Request) {
     return this.auth.selectAccount(dto.preAuthToken, dto.accountId, this.meta(req));
   }
@@ -76,6 +77,7 @@ export class AuthController {
   @Post('mfa/setup/start')
   @Public()
   @HttpCode(HttpStatus.OK)
+  @RateLimit({ limit: 10, windowSec: 60, by: 'ip' })
   mfaSetupStart(@Body() dto: MfaSetupStartDto) {
     return this.auth.mfaSetupStart(dto.preAuthToken);
   }
@@ -83,6 +85,7 @@ export class AuthController {
   @Post('mfa/setup/verify')
   @Public()
   @HttpCode(HttpStatus.OK)
+  @RateLimit({ limit: 10, windowSec: 60, by: 'ip' })
   mfaSetupVerify(@Body() dto: MfaSetupVerifyDto, @Req() req: Request) {
     return this.auth.mfaSetupVerify(dto.preAuthToken, dto.code, this.meta(req));
   }
@@ -91,6 +94,7 @@ export class AuthController {
   @Post('mfa/setup/skip')
   @Public()
   @HttpCode(HttpStatus.OK)
+  @RateLimit({ limit: 10, windowSec: 60, by: 'ip' })
   mfaSetupSkip(@Body() dto: MfaSetupStartDto, @Req() req: Request) {
     return this.auth.mfaSetupSkip(dto.preAuthToken, this.meta(req));
   }

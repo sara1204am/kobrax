@@ -138,12 +138,12 @@ export function ColumnsStep({
         }`}
       >
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="text-[15px] font-semibold text-k-navy">{t('columns.calibrate')}</h3>
+          <h3 className="text-k-md font-semibold text-k-navy">{t('columns.calibrate')}</h3>
           <Badge tone={days?.calibrated ? 'success' : 'danger'} dot>
             {days?.calibrated ? t('columns.calibrated') : t('columns.required')}
           </Badge>
         </div>
-        <p className="mt-1 text-[13px] text-k-text-2">{t('columns.calibrateHint')}</p>
+        <p className="mt-1 text-k-sm text-k-text-2">{t('columns.calibrateHint')}</p>
 
         <div className="mt-4 grid gap-5 lg:grid-cols-2">
           <div className="min-w-0">
@@ -175,15 +175,15 @@ export function ColumnsStep({
               </Select>
             </Field>
             {columns.columnCandidates.length === 0 && (
-              <p className="mt-2 text-[13px] text-k-text-2">{t('columns.noCandidates')}</p>
+              <p className="mt-2 text-k-sm text-k-text-2">{t('columns.noCandidates')}</p>
             )}
 
             {/* Los valores de verdad de la columna elegida, con el cliente al lado. Sólo se pueden
                 mostrar si la columna vino en esta muestra; el estado se muestra siempre. */}
             {candidate && (
-              <table className="mt-4 w-full text-[13px]">
+              <table className="mt-4 w-full text-k-sm">
                 <thead>
-                  <tr className="border-b border-k-border text-left text-[12px] uppercase tracking-wide text-k-text-2">
+                  <tr className="border-b border-k-border text-left text-k-xs uppercase tracking-wide text-k-text-2">
                     <th scope="col" className="pb-2 font-semibold">
                       {t('columns.moraColClient')}
                     </th>
@@ -213,13 +213,13 @@ export function ColumnsStep({
             <div className="self-start rounded-xl border border-k-border bg-white p-4">
               {days.calibrated ? (
                 <>
-                  <p className="text-[14px] font-medium text-k-success">{t('columns.calibrated')}</p>
-                  <p className="mt-1 text-[13px] text-k-text-2">{t('columns.calibratedHint')}</p>
+                  <p className="text-k-base font-medium text-k-success">{t('columns.calibrated')}</p>
+                  <p className="mt-1 text-k-sm text-k-text-2">{t('columns.calibratedHint')}</p>
                 </>
               ) : (
                 <>
-                  <p className="text-[14px] font-medium text-k-text">{t('columns.moraCheck')}</p>
-                  <p className="mt-1 text-[13px] text-k-text-2">{t('columns.moraCheckHint')}</p>
+                  <p className="text-k-base font-medium text-k-text">{t('columns.moraCheck')}</p>
+                  <p className="mt-1 text-k-sm text-k-text-2">{t('columns.moraCheckHint')}</p>
                   <div className="mt-4">
                     <Button disabled={busy} onClick={() => onSave(confirmDaysPastDue(days))}>
                       {t('columns.calibrateConfirm')}
@@ -233,7 +233,7 @@ export function ColumnsStep({
       </div>
 
       <div>
-        <p className="text-[12px] font-semibold uppercase tracking-wide text-k-text-2">{t('columns.essential')}</p>
+        <p className="text-k-xs font-semibold uppercase tracking-wide text-k-text-2">{t('columns.essential')}</p>
         <ul className="mt-2 rounded-xl border border-k-border">
           {essential.map((field) => (
             <RowWithName
@@ -252,15 +252,15 @@ export function ColumnsStep({
 
       {extra.length > 0 && (
         <div>
-          <p className="text-[12px] font-semibold uppercase tracking-wide text-k-text-2">{t('columns.extra')}</p>
+          <p className="text-k-xs font-semibold uppercase tracking-wide text-k-text-2">{t('columns.extra')}</p>
           <ul className="mt-2 rounded-xl border border-k-border">{extra.map(row)}</ul>
         </div>
       )}
 
       {addable.length > 0 && (
         <div className="rounded-xl border border-dashed border-k-border p-4">
-          <p className="text-[13px] font-medium text-k-text">{t('columns.add')}</p>
-          <p className="mt-1 text-[13px] text-k-text-2">{t('columns.addHint')}</p>
+          <p className="text-k-sm font-medium text-k-text">{t('columns.add')}</p>
+          <p className="mt-1 text-k-sm text-k-text-2">{t('columns.addHint')}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {addable.map((field) => (
               <button
@@ -268,7 +268,7 @@ export function ColumnsStep({
                 type="button"
                 disabled={busy}
                 onClick={() => onSave({ fields: { [field]: { enabled: true, required: false } } })}
-                className="rounded-lg border border-k-border bg-white px-3 py-2 text-[13px] text-k-text hover:border-k-periwinkle hover:bg-k-bg disabled:opacity-50"
+                className="rounded-lg border border-k-border bg-white px-3 py-2 text-k-sm text-k-text hover:border-k-periwinkle hover:bg-k-bg disabled:opacity-50"
               >
                 <span aria-hidden className="mr-1 text-k-purple">
                   +
@@ -313,7 +313,7 @@ function RowWithName({
     <>
       {children}
       <li className="border-t border-k-border bg-k-bg px-4 py-4 sm:px-5">
-        <p className="text-[13px] font-medium text-k-text">{t('columns.nameOrder')}</p>
+        <p className="text-k-sm font-medium text-k-text">{t('columns.nameOrder')}</p>
         <div className="mt-3 flex flex-wrap items-center gap-4">
           <Segmented
             label={t('columns.nameOrder')}
@@ -321,7 +321,7 @@ function RowWithName({
             options={NAME_ORDERS.map((order) => ({ value: order, label: t(`nameOrder.${order}`) }))}
             onChange={(nameOrder) => onSave({ nameOrder })}
           />
-          <p className="min-w-0 text-[12px] text-k-text-2">
+          <p className="min-w-0 text-k-xs text-k-text-2">
             {realName
               ? t('columns.namePreview', previewName(realName, config.nameOrder))
               : t('columns.namePreviewNone')}

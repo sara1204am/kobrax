@@ -29,7 +29,7 @@ import {
   type RegistrationSituation,
 } from '@kobrax/shared';
 import { Segmented } from '@/components/panel-ui';
-import { Button, Field, Input, Select } from '@/components/ui';
+import { Button, Field, Input, Select, TextButton } from '@/components/ui';
 import { dayDate, money } from '@/lib/format';
 import { useWorkspace } from '@/components/workspace';
 import { downloadText } from '@/lib/download';
@@ -160,7 +160,7 @@ export function CreditTermsFields({
     <>
       {!hideDefinition && (
         <div className="mb-5 space-y-2">
-          <p className="text-[14px] font-medium text-k-text">{t('definitionLabel')}</p>
+          <p className="text-k-base font-medium text-k-text">{t('definitionLabel')}</p>
           <div className="flex flex-wrap">
             <Segmented
               label={t('definitionLabel')}
@@ -172,7 +172,7 @@ export function CreditTermsFields({
               }))}
             />
           </div>
-          <p className="text-[12px] text-k-muted">{t(`definitionHint.${form.definition}`)}</p>
+          <p className="text-k-xs text-k-muted">{t(`definitionHint.${form.definition}`)}</p>
         </div>
       )}
 
@@ -328,7 +328,7 @@ export function CreditTermsFields({
       {/* Solo si queda algo dentro: el método de mora, o —en «Calcular cuotas»— lo avanzado. Si no, sería un panel vacío. */}
       {(showArrears || (calculated && showAdvanced)) && (
         <details className="group mt-5 rounded-xl border border-k-border">
-          <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-[14px] font-medium text-k-text hover:bg-k-bg [&::-webkit-details-marker]:hidden">
+          <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-k-base font-medium text-k-text hover:bg-k-bg [&::-webkit-details-marker]:hidden">
             <span aria-hidden className="text-k-muted transition-transform group-open:rotate-180">
               ⌄
             </span>
@@ -412,7 +412,7 @@ export function CreditTermsFields({
 
                 {/* D18: otros cargos — por cuota, en la primera cuota o descontados del desembolso. */}
                 <div className="space-y-3 sm:col-span-2">
-                  <p className="text-[14px] font-medium text-k-text">⚙ {t('charges')}</p>
+                  <p className="text-k-base font-medium text-k-text">⚙ {t('charges')}</p>
                   {form.charges.map((c) => (
                     <div
                       key={c.id}
@@ -445,22 +445,22 @@ export function CreditTermsFields({
                         value={c.value}
                         onChange={(e) => setCharge(c.id, { value: e.target.value })}
                       />
-                      <button
+                      <TextButton
                         type="button"
                         onClick={() => set({ charges: form.charges.filter((x) => x.id !== c.id) })}
-                        className="text-[13px] font-medium text-k-danger hover:underline"
+                        tone="danger"
                       >
                         {t('chargeRemove')}
-                      </button>
+                      </TextButton>
                     </div>
                   ))}
-                  <button
+                  <TextButton
                     type="button"
                     onClick={addCharge}
-                    className="text-[13px] font-medium text-k-periwinkle hover:underline"
+                    tone="periwinkle"
                   >
                     + {t('chargeAdd')}
-                  </button>
+                  </TextButton>
                 </div>
               </>
             )}
@@ -506,9 +506,9 @@ export function CreditQuotePanel({
 
   return (
     <section className="rounded-2xl border border-k-border bg-k-highlight p-5" aria-live="polite">
-      {clientName && <p className="mb-4 text-[16px] font-bold text-k-navy">{clientName}</p>}
+      {clientName && <p className="mb-4 text-k-lg font-bold text-k-navy">{clientName}</p>}
       {state.missing.length > 0 || !quote ? (
-        <p className="text-[14px] text-k-text-2">{t('incomplete')}</p>
+        <p className="text-k-base text-k-text-2">{t('incomplete')}</p>
       ) : (
         <>
           <dl className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
@@ -528,7 +528,7 @@ export function CreditQuotePanel({
           </dl>
           {/* D13/D20: la situación al registrarlo — cuotas pagadas, saldo, próxima cuota y mora. */}
           {situation && (situation.paid > 0 || situation.daysPastDue > 0) && (
-            <dl className="mt-4 space-y-1 border-t border-k-border pt-3 text-[13px]">
+            <dl className="mt-4 space-y-1 border-t border-k-border pt-3 text-k-sm">
               <Extra
                 label={t('situation.paidCount')}
                 value={t('situation.paidOf', { count: situation.paid, total: situation.total })}
@@ -559,7 +559,7 @@ export function CreditQuotePanel({
                 }
               />
               {situation.daysPastDue > 0 && (
-                <p className="pt-1 text-[12px] text-k-danger">
+                <p className="pt-1 text-k-xs text-k-danger">
                   {t('situation.oldestUnpaid', {
                     number: situation.next.number,
                     date: dayDate(situation.next.dueDate, locale),
@@ -570,7 +570,7 @@ export function CreditQuotePanel({
           )}
           {/* D18: lo que no es ganancia pero sí se cobra, y lo que recibe el cliente si hay descuentos. */}
           {quote.extras && (
-            <dl className="mt-4 space-y-1 border-t border-k-border pt-3 text-[13px]">
+            <dl className="mt-4 space-y-1 border-t border-k-border pt-3 text-k-sm">
               {quote.extras.insuranceTotal > 0 && (
                 <Extra
                   label={t('quote.insurance')}
@@ -599,14 +599,14 @@ export function CreditQuotePanel({
             </dl>
           )}
           {quote.total == null && (
-            <p className="mt-3 text-[13px] text-k-text-2">{t('quote.openLoan')}</p>
+            <p className="mt-3 text-k-sm text-k-text-2">{t('quote.openLoan')}</p>
           )}
         </>
       )}
       {state.issues.map((i) => (
         <p
           key={i.code}
-          className={`mt-3 text-[13px] ${i.severity === 'error' ? 'text-k-danger' : 'text-k-warning-text'}`}
+          className={`mt-3 text-k-sm ${i.severity === 'error' ? 'text-k-danger' : 'text-k-warning-text'}`}
         >
           {t(`issues.${i.code}`)}
         </p>
@@ -636,9 +636,9 @@ function Extra({ label, value, strong }: { label: string; value: string; strong?
 function Quote({ label, value, big }: { label: string; value: string; big?: boolean }) {
   return (
     <div>
-      <dt className="text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{label}</dt>
+      <dt className="text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">{label}</dt>
       <dd
-        className={`mt-0.5 font-semibold tabular-nums text-k-navy ${big ? 'text-[22px]' : 'text-[16px]'}`}
+        className={`mt-0.5 font-semibold tabular-nums text-k-navy ${big ? 'text-k-3xl' : 'text-k-lg'}`}
       >
         {value}
       </dd>

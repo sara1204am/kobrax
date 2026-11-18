@@ -68,7 +68,7 @@ export class RoutesController {
 
   // Igual que `generate`: la puerta es mínima y el service decide sobre QUÉ ruta puede cada capacidad.
   @Patch(':id')
-  @Roles(Permission.ROUTE_READ)
+  @RolesAny(Permission.ROUTE_EXECUTE, Permission.ROUTE_WRITE, Permission.ROUTE_ASSIGN)
   updateStatus(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateRouteDto) {
     return this.routes.updateStatus(id, dto);
   }
@@ -91,26 +91,26 @@ export class RoutesController {
 
   /** Aplica el orden sugerido por el preview. Puerta mínima + scope en el service, como las paradas. */
   @Post(':id/optimize')
-  @Roles(Permission.ROUTE_READ)
+  @RolesAny(Permission.ROUTE_EXECUTE, Permission.ROUTE_WRITE, Permission.ROUTE_ASSIGN)
   optimize(@Param('id', ParseUUIDPipe) id: string) {
     return this.routes.optimize(id);
   }
 
   @Post(':id/stops')
-  @Roles(Permission.ROUTE_READ)
+  @RolesAny(Permission.ROUTE_EXECUTE, Permission.ROUTE_WRITE, Permission.ROUTE_ASSIGN)
   addStop(@Param('id', ParseUUIDPipe) id: string, @Body() dto: AddStopDto) {
     return this.routes.addStop(id, dto);
   }
 
   @Delete(':id/stops/:sid')
   @HttpCode(204)
-  @Roles(Permission.ROUTE_READ)
+  @RolesAny(Permission.ROUTE_EXECUTE, Permission.ROUTE_WRITE, Permission.ROUTE_ASSIGN)
   removeStop(@Param('id', ParseUUIDPipe) id: string, @Param('sid', ParseUUIDPipe) sid: string) {
     return this.routes.removeStop(id, sid);
   }
 
   @Patch(':id/stops/:sid')
-  @Roles(Permission.ROUTE_READ)
+  @RolesAny(Permission.ROUTE_EXECUTE, Permission.ROUTE_WRITE, Permission.ROUTE_ASSIGN)
   updateStop(@Param('id', ParseUUIDPipe) id: string, @Param('sid', ParseUUIDPipe) sid: string, @Body() dto: UpdateStopDto) {
     return this.routes.updateStop(id, sid, dto);
   }
@@ -119,7 +119,7 @@ export class RoutesController {
   // Puerta mínima + alcance y autoría en el service, como el resto de las rutas.
 
   @Post(':id/change-requests')
-  @Roles(Permission.ROUTE_READ)
+  @RolesAny(Permission.ROUTE_EXECUTE, Permission.ROUTE_WRITE, Permission.ROUTE_ASSIGN)
   requestChange(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateChangeRequestDto) {
     return this.changes.create(id, dto);
   }
@@ -131,7 +131,7 @@ export class RoutesController {
   }
 
   @Patch(':id/change-requests/:rid')
-  @Roles(Permission.ROUTE_READ)
+  @RolesAny(Permission.ROUTE_EXECUTE, Permission.ROUTE_WRITE, Permission.ROUTE_ASSIGN)
   decideChange(@Param('id', ParseUUIDPipe) id: string, @Param('rid', ParseUUIDPipe) rid: string, @Body() dto: DecideChangeRequestDto) {
     return this.changes.decide(id, rid, dto);
   }
