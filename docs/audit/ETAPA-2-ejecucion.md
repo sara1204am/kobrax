@@ -59,3 +59,6 @@ Pendiente, necesita ojo humano: revisión visual en navegador (modal de pago, di
 - API: tsc limpio, 2212 pruebas OK.
 
 **S-11 sigue sin hacerse a propósito:** hay 109 llamadas `audit.record(` post-commit y 2 `recordInTx`; volverlas atómicas toca ~25 servicios y cambia el contrato de errores (una auditoría caída pasaría a abortar la mutación). Necesita decidir cuáles son «críticas» antes de tocar. **S-13** depende del despliegue (proxy delante del BFF).
+
+## S-11 (decidido: sólo las críticas) — auditoría dentro de la transacción
+Pasaron a `recordInTx` (si la auditoría falla, la mutación no queda): registro de pagos y confirmación/alta de solicitudes de pago; traspaso de propiedad de la cuenta; cambio de rol/oficina/estado de una persona, invitación y baja de pendiente; asignación temporal, apoyo y revocación de créditos. Quedan post-commit a propósito: cierre de sesiones (Redis, fuera de la BD), reasignación masiva al desactivar, perfil propio, ajustes de la cuenta y el resto (~90 llamadas). Las pruebas de integración (necesitan BD) las corre el CI del PR; en local sólo se verificaron las unitarias (2212 OK).

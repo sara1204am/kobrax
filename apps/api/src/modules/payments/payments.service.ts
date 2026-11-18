@@ -95,19 +95,10 @@ export class PaymentsService {
         if (existing) return { payment: existing, replay: true, external: false }; // reintento → no duplica
       }
       const { payment, external } = await this.applyCore(tx, { ...dto, registeredVia: dto.registeredVia ?? viaHint, idempotencyKey });
-      return { payment, replay: false, external };
-    });
-    // Dos envíos con la misma clave a la vez (el intento en vivo y la cola offline) pasan los dos el chequeo y uno
-    // choca con la unicidad (account_id, idempotency_key): su transacción se deshace y se repite UNA vez, y esta vez
-    // el chequeo encuentra el pago que registró el otro y responde igual que un reintento normal, no un 500/409.
-    const { payment, replay, external } = await run().catch((err: unknown) =>
-      idempotencyKey && isPaymentDuplicate(err) ? run() : Promise.reject(err),
-    );
-
-    if (!replay) {
-      // Qué se cobró, cuándo y por qué canal, y si fue sobre una operación externa: con esto y los
-      // snapshots del reporte se contesta «quién consiguió el pago, cuándo y cómo» (§13).
-      await this.audit.record({
+      // S-11: el rastro del cobro va EN la misma transacción: un pago sin su auditoría no queda (ni la auditoría de un pago que se deshizo).
+      // Qué se cobró, cuándo y por qué canal, y si fue sobre una operación externa: con esto y los snapshots del reporte se contesta
+      // «quién consiguió el pago, cuándo y cómo» (§13).
+      await this.audit.recordInTx(tx, {
         entity: 'payment',
         entityId: payment.id,
         action: 'CREATE',
@@ -122,6 +113,16 @@ export class PaymentsService {
           externalCredit: external,
         },
       });
+      return { payment, replay: false, external };
+    });
+    // Dos envíos con la misma clave a la vez (el intento en vivo y la cola offline) pasan los dos el chequeo y uno
+    // choca con la unicidad (account_id, idempotency_key): su transacción se deshace y se repite UNA vez, y esta vez
+    // el chequeo encuentra el pago que registró el otro y responde igual que un reintento normal, no un 500/409.
+    const { payment, replay, external } = await run().catch((err: unknown) =>
+      idempotencyKey && isPaymentDuplicate(err) ? run() : Promise.reject(err),
+    );
+
+    if (!replay) {
       this.events.emit(DomainEvent.PAYMENT_REGISTERED, { paymentId: payment.id, creditId: payment.creditId, amount: Number(payment.amount), accountId: this.tenant.accountId });
     }
     return { ...serializePayment(payment), idempotentReplay: replay };
@@ -367,7 +368,7 @@ export class PaymentsService {
     const reference = randomBytes(12).toString('base64url');
     const req = await this.tx(async (tx) => {
       if (dto.creditId) await this.assertCreditInScope(tx, dto.creditId);
-      return tx.paymentRequest.create({
+      const created = await tx.paymentRequest.create({
         data: {
           accountId: this.tenant.accountId,
           creditId: dto.creditId,
@@ -381,8 +382,9 @@ export class PaymentsService {
           createdBy: this.tenant.userId,
         },
       });
+      await this.audit.recordInTx(tx, { entity: 'payment_request', entityId: created.id, action: 'CREATE', after: { amount: Number(created.amount), method: created.method } });
+      return created;
     });
-    await this.audit.record({ entity: 'payment_request', entityId: req.id, action: 'CREATE', after: { amount: Number(req.amount), method: req.method } });
     return serializePaymentRequest(req);
   }
 
@@ -451,10 +453,10 @@ export class PaymentsService {
 
       const r = await this.applyCore(tx, { creditId: req.creditId, amount: Number(req.amount), method: req.method, externalTransactionId: dto.externalTransactionId, provider: 'payment_request' });
       await tx.paymentRequest.update({ where: { id }, data: { status: 'PAID', paidPaymentId: r.payment.id } });
+      await this.audit.recordInTx(tx, { entity: 'payment', entityId: r.payment.id, action: 'CREATE', after: { creditId: r.payment.creditId, amount: Number(r.payment.amount), source: 'payment_request' } });
       return r;
     });
 
-    await this.audit.record({ entity: 'payment', entityId: payment.id, action: 'CREATE', after: { creditId: payment.creditId, amount: Number(payment.amount), source: 'payment_request' } });
     this.events.emit(DomainEvent.PAYMENT_REGISTERED, { paymentId: payment.id, creditId: payment.creditId, amount: Number(payment.amount), accountId: this.tenant.accountId });
     return serializePayment(payment);
   }

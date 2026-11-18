@@ -279,6 +279,14 @@ export class UsersService {
       // próximo request con el token viejo recibe AUTHZ_STALE y renueva con lo nuevo.
       const authzChanged = changesRole || dto.isActive !== undefined && dto.isActive !== before.isActive || dto.branchId !== undefined && dto.branchId !== before.branchId;
       if (authzChanged) authzPending = await this.authz.bumpInTx(tx, this.tenant.accountId, [before.id]);
+      // S-11: el cambio de rol/oficina/estado de una persona no existe sin su rastro (misma transacción).
+      await this.audit.recordInTx(tx, {
+        entity: 'user_account',
+        entityId: updated.id,
+        action: 'UPDATE',
+        before: { roleId: before.roleId, isActive: before.isActive, branchId: before.branchId },
+        after: { roleId: updated.roleId, isActive: updated.isActive, branchId: updated.branchId },
+      });
       return { before, updated };
     });
 
@@ -309,13 +317,6 @@ export class UsersService {
       });
     }
 
-    await this.audit.record({
-      entity: 'user_account',
-      entityId: updated.id,
-      action: 'UPDATE',
-      before: { roleId: before.roleId, isActive: before.isActive, branchId: before.branchId },
-      after: { roleId: updated.roleId, isActive: updated.isActive, branchId: updated.branchId },
-    });
     return serializeMember(updated);
   }
 
@@ -383,6 +384,7 @@ export class UsersService {
             expiresAt: new Date(Date.now() + INVITE_TTL_MS),
           },
         });
+        await this.audit.recordInTx(tx, { entity: 'user_account', entityId: member.id, action: 'CREATE', after: { email, roleId: role.id, invited: true } });
         return { member, businessName: account.businessName };
       });
     } catch (err) {
@@ -398,12 +400,6 @@ export class UsersService {
       throw err;
     }
 
-    await this.audit.record({
-      entity: 'user_account',
-      entityId: created.member.id,
-      action: 'CREATE',
-      after: { email, roleId: role.id, invited: true },
-    });
     await this.sendInvitation(email, code, created.businessName);
     return { ...serializeMember(created.member), invitationCode: formatInvitationCode(code) };
   }
@@ -450,7 +446,7 @@ export class UsersService {
    */
   async remove(userId: string): Promise<void> {
     if (userId === this.selfId) throw cannotEditSelf();
-    const member = await this.tx(async (tx) => {
+    await this.tx(async (tx) => {
       const member = await tx.userAccount.findFirst({ where: { userId }, include: MEMBER_INCLUDE });
       if (!member) throw memberNotFound();
       if (member.user.status !== 'PENDING') throw notPending();
@@ -461,14 +457,7 @@ export class UsersService {
       await tx.userAccount.delete({ where: { id: member.id } });
       await tx.profile.deleteMany({ where: { userId } });
       await tx.user.delete({ where: { id: userId } });
-      return member;
-    });
-
-    await this.audit.record({
-      entity: 'user_account',
-      entityId: member.id,
-      action: 'DELETE',
-      before: { email: member.user.email, roleId: member.roleId },
+      await this.audit.recordInTx(tx, { entity: 'user_account', entityId: member.id, action: 'DELETE', before: { email: member.user.email, roleId: member.roleId } });
     });
   }
 
