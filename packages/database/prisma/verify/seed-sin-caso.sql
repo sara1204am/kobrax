@@ -138,6 +138,7 @@ BEGIN
   SELECT count(*) INTO n FROM credits WHERE account_id = acc AND written_off_at IS NOT NULL AND days_past_due >= 240;
   IF n < 1 THEN RAISE EXCEPTION 'FALLO: falta el crédito castigado (written_off_at) que sigue en mora 240+ días'; END IF;
   SELECT count(*) INTO n FROM credits c WHERE c.account_id = acc AND c.external_source IS NULL AND c.status::text <> 'PAID'
+    AND c.code NOT LIKE 'CRD-F13-%' -- fixtures de alcance por oficina (F13): una sola cuota, sin cronograma a propósito
     AND NOT EXISTS (SELECT 1 FROM credit_installments i WHERE i.credit_id = c.id);
   IF n > 0 THEN RAISE EXCEPTION 'FALLO: % créditos de la app sin cronograma', n; END IF;
   SELECT count(*) INTO n FROM credits c JOIN credit_arrear_episodes e ON e.credit_id = c.id AND e.ended_at IS NULL
