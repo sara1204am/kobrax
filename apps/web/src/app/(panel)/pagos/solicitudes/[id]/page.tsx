@@ -6,6 +6,8 @@ import { EmptyState, PageHeader } from '@/components/panel-ui';
 import { PAYMENT_REQUESTS_ENABLED } from '@/lib/features';
 import { isUuid } from '@/lib/payments';
 import { RequestView } from './request-view';
+import { requirePermission } from '@/lib/authz';
+import { Permission } from '@kobrax/shared';
 
 /**
  * Un cobro pedido: el QR, el link y —si la persona puede— el botón de confirmar que entró.
@@ -15,6 +17,8 @@ import { RequestView } from './request-view';
  * — `payment:approve` lo tiene el MANAGER, que no tiene `payment:write`.
  */
 export default async function SolicitudPage({ params }: { params: { id: string } }) {
+  const blocked = await requirePermission(Permission.PAYMENT_READ);
+  if (blocked) return blocked;
   if (!PAYMENT_REQUESTS_ENABLED) notFound(); // apagado en la primera versión: ver `lib/features.ts`
   const t = await getTranslations('panel.payments');
   if (!isUuid(params.id)) notFound();
