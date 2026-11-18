@@ -1,6 +1,7 @@
 import { Controller, Get, StreamableFile } from '@nestjs/common';
 import { Permission } from '@kobrax/shared';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { RequireVerifiedEmail } from '../auth/decorators/require-verified-email.decorator';
 import { ExportsService, type ExportFile } from './exports.service';
 
 function toFile(f: ExportFile): StreamableFile {
@@ -13,6 +14,7 @@ function toFile(f: ExportFile): StreamableFile {
 /** Descargas de datos de la cuenta. Todo detrás de `REPORT_EXPORT`, el permiso ya reservado para esto. */
 @Controller('exports')
 @Roles(Permission.REPORT_EXPORT)
+@RequireVerifiedEmail()
 export class ExportsController {
   constructor(private readonly exports: ExportsService) {}
 

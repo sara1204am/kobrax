@@ -95,7 +95,7 @@ export function CreditEditor({
             className="rounded-2xl border border-k-border bg-white p-5 lg:col-span-3"
             aria-label={t('sections.terms')}
           >
-            <h2 className="mb-4 text-[11px] font-semibold uppercase tracking-wide text-k-text-2">
+            <h2 className="mb-4 text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">
               {t('sections.terms')}
             </h2>
             <CreditTermsFields
@@ -131,7 +131,7 @@ export function CreditEditor({
           {!schedule && (
             <div className="lg:col-span-3">
               <Section title={t('sections.initialState')}>
-                <p className="mb-4 text-[13px] text-k-text-2">{t('initial.hint')}</p>
+                <p className="mb-4 text-k-sm text-k-text-2">{t('initial.hint')}</p>
                 <div className="grid gap-5 sm:grid-cols-3">
                   <Field label={t('initial.paidInstallments')}>
                     <Input
@@ -172,7 +172,7 @@ export function CreditEditor({
                     />
                   </Field>
                 </div>
-                <p className="mt-4 text-[13px]" aria-live="polite">
+                <p className="mt-4 text-k-sm" aria-live="polite">
                   {registered === null ? (
                     <span className="text-k-text-2">{t('initial.issues.TERMS_INVALID')}</span>
                   ) : registered.ok ? (
@@ -187,7 +187,7 @@ export function CreditEditor({
                   )}
                 </p>
                 {derivedTotal == null && state.missing.length === 0 && (
-                  <p className="mt-2 text-[12px] text-k-muted">{tc('quote.openLoan')}</p>
+                  <p className="mt-2 text-k-xs text-k-muted">{tc('quote.openLoan')}</p>
                 )}
               </Section>
             </div>
@@ -195,7 +195,7 @@ export function CreditEditor({
         </div>
       ) : (
         <Section title={t('sections.terms')}>
-          <p className="text-[14px] text-k-text-2">{t(`blocked.${block}`)}</p>
+          <p className="text-k-base text-k-text-2">{t(`blocked.${block}`)}</p>
         </Section>
       )}
 

@@ -64,18 +64,18 @@ export async function PlanCard({ account }: { account: AccountInfo }) {
       {/* Lo primero que se lee: qué plan, en qué estado y cuánta gente. Las barras vienen después. */}
       <div className="grid gap-3 sm:grid-cols-3">
         <Resumen label={t('summary.plan')}>
-          <p className="text-[20px] font-semibold text-k-navy">
+          <p className="text-k-2xl font-semibold text-k-navy">
             {plan ? t(`names.${plan.code}`) : t('unknown', { code: account.planCode })}
           </p>
           {plan && (
-            <p className="mt-0.5 text-[13px] text-k-text-2">
+            <p className="mt-0.5 text-k-sm text-k-text-2">
               {t(`price.${plan.code}`, { base: plan.price.base, perSeat: plan.price.perSeat })}
             </p>
           )}
         </Resumen>
 
         <Resumen label={t('summary.state')}>
-          <p className="text-[20px] font-semibold text-k-navy">
+          <p className="text-k-2xl font-semibold text-k-navy">
             {trialDays !== null
               ? t('summary.trialLeft', { n: trialDays })
               : ESTADOS.has(account.status)
@@ -83,14 +83,14 @@ export async function PlanCard({ account }: { account: AccountInfo }) {
                 : account.status}
           </p>
           {trialDays !== null && account.trialEndsAt && (
-            <p className="mt-0.5 text-[13px] text-k-text-2">
+            <p className="mt-0.5 text-k-sm text-k-text-2">
               {t('summary.trialUntil', { date: fechaFin(account.trialEndsAt, locale, account.timezone) })}
             </p>
           )}
         </Resumen>
 
         <Resumen label={t('summary.members')}>
-          <p className="text-[20px] font-semibold tabular-nums text-k-navy">
+          <p className="text-k-2xl font-semibold tabular-nums text-k-navy">
             {asientos === null
               ? t('count', { n: account.usage.users })
               : t('seatsValue', { used: account.usage.users, max: asientos })}
@@ -102,8 +102,8 @@ export async function PlanCard({ account }: { account: AccountInfo }) {
         // Congelado: se pasó de un tope (al vencer la prueba o bajar de plan). No es un error ni se
         // pierde nada — se dice qué se puede y qué no, antes de que el equipo choque con el bloqueo.
         <div role="status" className="mt-5 rounded-xl border border-k-warning/40 bg-k-highlight px-4 py-3">
-          <p className="text-[14px] font-semibold text-k-navy">{t('frozen.title', { n: excedidos.length })}</p>
-          <p className="mt-1 text-[13px] leading-relaxed text-k-text-2">
+          <p className="text-k-base font-semibold text-k-navy">{t('frozen.title', { n: excedidos.length })}</p>
+          <p className="mt-1 text-k-sm leading-relaxed text-k-text-2">
             {t('frozen.text', {
               limits: new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' }).format(
                 excedidos.map((key) => (key === 'users' ? t('seats') : t(`limits.${key}`))),
@@ -128,7 +128,7 @@ export async function PlanCard({ account }: { account: AccountInfo }) {
           />
         ))}
         {hayMensuales && (
-          <p className="text-[13px] text-k-text-2">
+          <p className="text-k-sm text-k-text-2">
             {t('resets', { month: nextMonthName(locale, account.timezone) })}
           </p>
         )}
@@ -137,29 +137,29 @@ export async function PlanCard({ account }: { account: AccountInfo }) {
       {plan?.limits.users != null && asientos !== null && plan.limits.users !== asientos && (
         // El caso negociado (LIMITES §8.2): esta cuenta tiene un número propio, distinto al de su
         // plan. Sin esta línea, «Free» arriba y «3 de 5» abajo se leen como un error.
-        <p className="mt-2 text-[13px] text-k-text-2">
+        <p className="mt-2 text-k-sm text-k-text-2">
           {t('seatsCustom', { max: asientos, plan: plan.limits.users })}
         </p>
       )}
 
       {plan && (
         <>
-          <h3 className="mt-6 border-t border-k-border pt-5 text-[11px] font-semibold uppercase tracking-wide text-k-text-2">
+          <h3 className="mt-6 border-t border-k-border pt-5 text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">
             {t('includes')}
           </h3>
           <dl className="mt-3 grid gap-x-8 gap-y-2.5 sm:grid-cols-2">
             {DESCRITOS.map((key) => (
               <div key={key} className="flex items-baseline justify-between gap-3">
-                <dt className="text-[13px] text-k-text-2">{t(`limits.${key}`)}</dt>
-                <dd className="text-[14px] font-medium tabular-nums text-k-text">
+                <dt className="text-k-sm text-k-text-2">{t(`limits.${key}`)}</dt>
+                <dd className="text-k-base font-medium tabular-nums text-k-text">
                   {/* De la cuenta y no del catálogo: si negoció otro número, es ése el que rige. */}
                   {limitText(account.limits[key])}
                 </dd>
               </div>
             ))}
             <div className="flex items-baseline justify-between gap-3">
-              <dt className="text-[13px] text-k-text-2">{t('limits.support')}</dt>
-              <dd className="text-right text-[14px] font-medium text-k-text">
+              <dt className="text-k-sm text-k-text-2">{t('limits.support')}</dt>
+              <dd className="text-right text-k-base font-medium text-k-text">
                 {t(`support.${plan.code}`)}
               </dd>
             </div>
@@ -168,7 +168,7 @@ export async function PlanCard({ account }: { account: AccountInfo }) {
       )}
 
       {next && (
-        <p className="mt-6 rounded-xl bg-k-highlight px-4 py-3 text-[13px] leading-relaxed text-k-text-2">
+        <p className="mt-6 rounded-xl bg-k-highlight px-4 py-3 text-k-sm leading-relaxed text-k-text-2">
           {next.limits.users != null && next.limits.credits != null
             ? t('upgrade', {
                 plan: t(`names.${next.code}`),
@@ -201,8 +201,8 @@ function Medidor({
   return (
     <div>
       <div className="flex items-baseline justify-between gap-3">
-        <span className="text-[13px] font-medium text-k-text">{label}</span>
-        <span className="text-[13px] tabular-nums text-k-text-2">{texto}</span>
+        <span className="text-k-sm font-medium text-k-text">{label}</span>
+        <span className="text-k-sm tabular-nums text-k-text-2">{texto}</span>
       </div>
       {/* Decoración: la cifra de arriba ya lo dijo, y un lector de pantalla no gana nada
           escuchándolo dos veces. */}
@@ -219,7 +219,7 @@ function Medidor({
 function Resumen({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="rounded-xl bg-k-light-bg px-4 py-3">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{label}</p>
+      <p className="text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">{label}</p>
       <div className="mt-1">{children}</div>
     </div>
   );

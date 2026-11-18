@@ -22,6 +22,7 @@ import { TodayBoard } from './today-board';
 import { RoutesTable } from './routes-table';
 import { CollectorWorkTable } from './collector-work-table';
 import { WorkSummary } from './work-summary';
+import { requirePermission } from '@/lib/authz';
 
 /**
  * Rutas: **planificar el trabajo de la calle y comprobar qué pasó**.
@@ -35,6 +36,8 @@ import { WorkSummary } from './work-summary';
  * pantalla, porque el contrato no la trae.
  */
 export default async function RutasPage({ searchParams }: { searchParams: RouteParams }) {
+  const blocked = await requirePermission(Permission.ROUTE_READ);
+  if (blocked) return blocked;
   const t = await getTranslations('panel.routes');
   // «Planificar» dejó de ser una pestaña (es una acción del encabezado): el link viejo sigue funcionando.
   if (searchParams.modo === 'planificacion') redirect('/rutas/planificar');
@@ -59,7 +62,9 @@ export default async function RutasPage({ searchParams }: { searchParams: RouteP
         subtitle={t('subtitle')}
         // Sin «Planificar rutas» aquí: cada cobrador se planifica desde su fila en «Hoy» (y por «Planificar» en la lista).
       />
+      <div data-tour="screen.routes.plan">
       <RouteTabs modo={modo} vista={vista} />
+      </div>
     </>
   );
 
@@ -80,13 +85,14 @@ export default async function RutasPage({ searchParams }: { searchParams: RouteP
       <>
         {header}
         {!supervises && (
-          <p className="mb-4 rounded-xl border border-k-border bg-k-bg px-4 py-3 text-[13px] text-k-text-2">{t('scopedToMine')}</p>
+          <p className="mb-4 rounded-xl border border-k-border bg-k-bg px-4 py-3 text-k-sm text-k-text-2">{t('scopedToMine')}</p>
         )}
         <DayPicker
           day={day}
           today={today}
           labels={{ previous: t('previousDay'), next: t('nextDay'), today: t('today'), date: t('date') }}
         />
+        <div data-tour="screen.routes.visits">
         <TodayBoard
           day={day}
           routes={todays.body.data}
@@ -97,6 +103,7 @@ export default async function RutasPage({ searchParams }: { searchParams: RouteP
           canPlan={supervises}
           params={searchParams}
         />
+        </div>
       </>
     );
   }
@@ -128,7 +135,7 @@ export default async function RutasPage({ searchParams }: { searchParams: RouteP
       {header}
 
       {!supervises && (
-        <p className="mb-4 rounded-xl border border-k-border bg-k-bg px-4 py-3 text-[13px] text-k-text-2">
+        <p className="mb-4 rounded-xl border border-k-border bg-k-bg px-4 py-3 text-k-sm text-k-text-2">
           {t('scopedToMine')}
         </p>
       )}
@@ -140,6 +147,7 @@ export default async function RutasPage({ searchParams }: { searchParams: RouteP
             today={today}
             labels={{ previous: t('previousDay'), next: t('nextDay'), today: t('today'), date: t('date') }}
           />
+          <div data-tour="screen.routes.visits">
           <RoutesTable
             rows={list.body.data}
             meta={pageMeta(list.body, searchParams.page, routeLimit(searchParams))}
@@ -149,6 +157,7 @@ export default async function RutasPage({ searchParams }: { searchParams: RouteP
             // Sin `route:assign` la API acota a lo propio, y sin `user:read` no hay nombres que ofrecer.
             showCollector={supervises && members.length > 0}
           />
+          </div>
         </>
       ) : (
         /*

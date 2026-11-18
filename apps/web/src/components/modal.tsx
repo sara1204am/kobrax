@@ -67,10 +67,15 @@ function Dialog({
       aria-labelledby={titleId}
       // Esc: el navegador dispara `cancel` antes de cerrar; con un guardado en curso se frena acá.
       onCancel={(e) => {
+        // React propaga `cancel`/`close` por su árbol aunque el evento nativo no burbujee: un diálogo anidado (p. ej. leer un documento
+        // dentro del pop-up de aceptación) no debe afectar a su padre.
+        if (e.target !== ref.current) return;
         if (locked) e.preventDefault();
       }}
       // Por acá entra la tecla Esc, que cierra el diálogo sin pasar por ningún handler nuestro.
-      onClose={() => {
+      onClose={(e) => {
+        // Ignora el cierre de un diálogo hijo (ver `onCancel`): sin esto, cerrar el hijo cerraba también al padre.
+        if (e.target !== ref.current) return;
         if (closingByCode.current) {
           closingByCode.current = false;
           return;
@@ -83,7 +88,7 @@ function Dialog({
       className={`border border-k-border bg-white p-0 text-k-text shadow-k-card backdrop:bg-k-navy/40 ${shell}`}
     >
       <div className="flex items-start justify-between gap-4 border-b border-transparent px-6 pt-5">
-        <h2 id={titleId} className="text-[18px] font-semibold text-k-navy">
+        <h2 id={titleId} className="text-k-xl font-semibold text-k-navy">
           {title}
         </h2>
         <button
@@ -145,7 +150,7 @@ export function Modal({ wide, ...props }: DialogProps & { wide?: boolean }) {
     <Dialog
       {...props}
       shell={`hidden open:flex max-h-[90vh] flex-col rounded-2xl ${wide ? 'w-[880px] max-w-[94vw]' : 'w-[460px] max-w-[92vw]'}`}
-      body={`flex-1 overflow-y-auto px-6 py-4 text-[14px] ${wide ? 'text-k-text' : 'leading-relaxed text-k-text-2'}`}
+      body={`flex-1 overflow-y-auto px-6 py-4 text-k-base ${wide ? 'text-k-text' : 'leading-relaxed text-k-text-2'}`}
     />
   );
 }

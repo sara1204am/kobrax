@@ -1,9 +1,12 @@
-import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy, Inject, Optional } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { AgendaItemStatus, AgendaItemType, CreditStatus, InstallmentStatus } from '@prisma/client';
 import { isExternalOrigin, isReportStale, readCreditMetadata, staleAfterDaysOf } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { civilTodayUTC, timezoneOf } from '../../common/context/tenant-clock.service';
+import type Redis from 'ioredis';
+import { startJob } from '../../common/jobs/start-job';
+import { REDIS } from '../../redis/redis.module';
 
 /** Ventana hacia adelante: las cuotas que vencen dentro de N días generan su recordatorio (F4/08 · D11). */
 export const INSTALLMENT_REMINDER_HORIZON_DAYS = 3;
@@ -52,11 +55,14 @@ export class InstallmentReminderService implements OnApplicationBootstrap, OnMod
   private readonly logger = new Logger(InstallmentReminderService.name);
   private timer?: NodeJS.Timeout;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    /** Candado entre instancias (opcional: sin Redis el job corre siempre). */
+    @Optional() @Inject(REDIS) private readonly redis?: Redis,
+  ) {}
 
   onApplicationBootstrap(): void {
-    this.timer = setInterval(() => void this.run(), INSTALLMENT_REMINDER_INTERVAL_MS);
-    if (typeof this.timer.unref === 'function') this.timer.unref(); // no bloquea el apagado
+    this.timer = startJob({ name: 'installment-reminders', intervalMs: INSTALLMENT_REMINDER_INTERVAL_MS, run: () => this.run(), redis: this.redis, logger: this.logger });
   }
 
   onModuleDestroy(): void {

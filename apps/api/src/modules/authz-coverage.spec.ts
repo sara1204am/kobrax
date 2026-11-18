@@ -99,7 +99,10 @@ describe('F14·F3 — cobertura del contrato de acceso', () => {
     assert.ok(publics.length > 0 && publics.length <= 25, `públicos: ${publics.length}`);
     // F14 · F4: la ÚNICA ruta pública fuera de esas tres es la lectura por enlace firmado (`GET /files/:id/raw`): la credencial es la firma HMAC
     // (cuenta + archivo + vencimiento de 5 minutos), con límite de peticiones; ver `FilesController.raw`.
-    for (const r of publics) assert.match(r, /\/(auth|accounts|health)\b|^GET \/files\/:id\/raw$/, `ruta pública fuera de auth/accounts/health: ${r}`);
+    // Privacidad (B1): los documentos legales tienen que poder leerse ANTES de crear la cuenta. Solo `GET /legal/...` (lectura); la evidencia
+    // de aceptación (escritura) nunca es pública.
+    // Reportes: `POST /public/reports` es el formulario público de personas sin cuenta (límite 5/hora por IP, trampa anti-robot, tope por correo).
+    for (const r of publics) assert.match(r, /\/(auth|accounts|health)\b|^GET \/files\/:id\/raw$|^GET \/legal\/|^POST \/public\/reports(\/confirm)?$/, `ruta pública fuera de auth/accounts/health/legal/reports: ${r}`);
   });
 
   it('ninguna ruta crea, edita o promueve a un usuario de plataforma (H-11)', async () => {

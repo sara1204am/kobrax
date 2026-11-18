@@ -21,8 +21,8 @@ export function CreditProgress({ pct, label }: { pct: number | null; label: stri
   return (
     <div className="mt-4">
       <div className="mb-1.5 flex items-baseline justify-between">
-        <span className="text-[12px] text-k-text-2">{label}</span>
-        <span className="text-[12px] font-medium tabular-nums text-k-text">{pct}%</span>
+        <span className="text-k-xs text-k-text-2">{label}</span>
+        <span className="text-k-xs font-medium tabular-nums text-k-text">{pct}%</span>
       </div>
       <div
         className="h-2 overflow-hidden rounded-full bg-k-light-bg"

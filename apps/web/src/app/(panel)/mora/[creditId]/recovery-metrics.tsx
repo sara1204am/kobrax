@@ -9,9 +9,9 @@ import { dayDate, money } from '@/lib/format';
 function Metric({ label, value, hint, soft }: { label: string; value: string; hint?: string; soft?: boolean }) {
   return (
     <div className={`rounded-xl border border-k-border p-4 ${soft ? 'bg-k-bg' : 'bg-white'}`}>
-      <dt className="text-[13px] text-k-text-2">{label}</dt>
-      <dd className="mt-1.5 text-[18px] font-semibold leading-snug text-k-navy">{value}</dd>
-      {hint && <dd className="mt-0.5 text-[12px] text-k-muted">{hint}</dd>}
+      <dt className="text-k-sm text-k-text-2">{label}</dt>
+      <dd className="mt-1.5 text-k-xl font-semibold leading-snug text-k-navy">{value}</dd>
+      {hint && <dd className="mt-0.5 text-k-xs text-k-muted">{hint}</dd>}
     </div>
   );
 }
@@ -41,19 +41,19 @@ export function RecoveryMetricsSection({ metrics, currency }: { metrics: Recover
 
   return (
     <section aria-label={t('title')} className="rounded-2xl border border-k-border bg-white p-5">
-      <h2 className="text-[18px] font-semibold text-k-navy">{t('title')}</h2>
+      <h2 className="text-k-xl font-semibold text-k-navy">{t('title')}</h2>
       {metrics === null ? (
-        <p className="mt-2 text-[13px] text-k-muted">{t('unavailable')}</p>
+        <p className="mt-2 text-k-sm text-k-muted">{t('unavailable')}</p>
       ) : (
         <>
-          <p className="mb-3 mt-1 text-[13px] text-k-text-2">
+          <p className="mb-3 mt-1 text-k-sm text-k-text-2">
             {metrics.window === 'EPISODE' ? t('sinceEpisode', { date: dayDate(metrics.since, locale) }) : t('sinceAll')}
             {metrics.window === 'EPISODE' && metrics.sinceEstimated && <span title={t('estimatedHint')}> {t('estimated')}</span>}
           </p>
 
           {/* La mora ya venía de antes de registrarse: los «días hasta…» cuentan desde el inicio, y lo anterior pudo pasar fuera de Kobrax. */}
           {metrics.untrackedDays !== undefined && (
-            <p className="mb-3 rounded-lg border border-k-warning/40 bg-k-warning-bg px-3 py-2 text-[13px] text-k-warning-text">
+            <p className="mb-3 rounded-lg border border-k-warning/40 bg-k-warning-bg px-3 py-2 text-k-sm text-k-warning-text">
               {t('untracked', { n: metrics.untrackedDays })}
             </p>
           )}

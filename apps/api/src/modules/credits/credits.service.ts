@@ -42,7 +42,7 @@ import { OfficeScopeService } from '../../common/office-scope/office-scope.servi
 import { officeInvalid, officeOutOfScope } from '../../common/office-scope/office-scope.errors';
 import { AssignmentService } from '../assignments/assignment.service';
 import { moraAccessConditions, moraScopeOf, seesWholeAccount, visibleCredits } from '../mora/mora-query';
-import type { ReassignOfficeResult } from '../branches/branches.dto';
+import type { ReassignOfficeResult } from '../branches/dto/branch-view.dto';
 import {
   buildSchedule,
   computeArrears,

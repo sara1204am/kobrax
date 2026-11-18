@@ -39,7 +39,7 @@ export function PlanPicker({ onPick }: { onPick: (plan: SignupPlan) => void }) {
                 className="group flex w-full flex-col rounded-2xl border-[1.5px] border-k-border p-5 text-left transition-colors hover:border-k-periwinkle focus-visible:border-k-periwinkle focus-visible:shadow-k-focus focus-visible:outline-none"
               >
                 <span
-                  className={`inline-flex w-fit rounded-lg px-2 py-1 text-[11px] font-medium ${
+                  className={`inline-flex w-fit rounded-lg px-2 py-1 text-k-2xs font-medium ${
                     gratis ? 'bg-k-light-bg text-k-text-2' : 'bg-k-highlight text-k-purple'
                   }`}
                 >
@@ -49,30 +49,30 @@ export function PlanPicker({ onPick }: { onPick: (plan: SignupPlan) => void }) {
                 <span className="mt-3 block text-[19px] font-semibold text-k-navy">
                   {tp(`names.${code}`)}
                 </span>
-                <span className="mt-0.5 block text-[13px] text-k-text-2">
+                <span className="mt-0.5 block text-k-sm text-k-text-2">
                   {tp(`price.${code}`, { base: plan.price.base, perSeat: plan.price.perSeat })}
                 </span>
 
                 <dl className="mt-4 space-y-1.5 border-t border-k-border pt-4">
                   {VISIBLES.map((key) => (
                     <div key={key} className="flex items-baseline justify-between gap-3">
-                      <dt className="text-[12px] text-k-text-2">
+                      <dt className="text-k-xs text-k-text-2">
                         {key === 'users' ? tp('seats') : tp(`limits.${key}`)}
                       </dt>
-                      <dd className="text-[13px] font-medium tabular-nums text-k-text">
+                      <dd className="text-k-sm font-medium tabular-nums text-k-text">
                         {valor(key, plan.limits[key])}
                       </dd>
                     </div>
                   ))}
                 </dl>
 
-                <span className="mt-3 block text-[12px] leading-snug text-k-muted">
+                <span className="mt-3 block text-k-xs leading-snug text-k-muted">
                   {tp(`support.${code}`)}
                 </span>
 
                 {/* Afordancia de botón al pie: la tarjeta entera es el control, pero sin esto no
                     se lee como algo que se pueda tocar. */}
-                <span className="mt-5 block rounded-xl bg-k-bg px-4 py-2.5 text-center text-[14px] font-semibold text-k-navy group-hover:bg-k-navy group-hover:text-white">
+                <span className="mt-5 block rounded-xl bg-k-bg px-4 py-2.5 text-center text-k-base font-semibold text-k-navy group-hover:bg-k-navy group-hover:text-white">
                   {t('choose')}
                 </span>
               </button>
@@ -88,7 +88,7 @@ export function PlanPicker({ onPick }: { onPick: (plan: SignupPlan) => void }) {
         ponytail: sin `mailto:` porque el producto todavía no tiene una casilla de contacto
         configurada en ningún lado. El día que exista, es un `<a>` acá y nada más.
       */}
-      <p className="rounded-xl bg-k-bg px-4 py-3 text-[13px] leading-relaxed text-k-text-2">
+      <p className="rounded-xl bg-k-bg px-4 py-3 text-k-sm leading-relaxed text-k-text-2">
         <span className="font-medium text-k-text">{tp('names.ENTERPRISE')}</span> — {t('enterprise')}
       </p>
     </div>

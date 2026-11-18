@@ -1,6 +1,6 @@
 /**
  * Contrato de RESPUESTA de oficinas y tipos (F13 · P2) para quien consume la API (web P3, móvil después). Las respuestas viajan
- * dentro de `{ data, meta, error }`; acá está sólo el `data`. Los CUERPOS de entrada están en `dto/branch.dto.ts`:
+ * dentro de `{ data, meta, error }`; acá está sólo el `data`. Los CUERPOS de entrada están en `branch.dto.ts`:
  *
  *   POST   /branches                       {name, parentId?, typeId?, code?, city?, address?, managerUserId?}  → BranchView (201)
  *   PATCH  /branches/:id                   {name?, code?|null, city?|null, address?|null, managerUserId?|null, typeId?, active?} → BranchView

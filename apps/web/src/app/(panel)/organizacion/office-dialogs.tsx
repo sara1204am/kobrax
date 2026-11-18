@@ -75,7 +75,7 @@ export function PreviewDialog({
       {row && (
         <div className="space-y-4">
           {/* La ruta completa, siempre (R10). */}
-          <p className="text-[13px] text-k-text-2">{row.isRoot ? t('tree.root') : row.fullName}</p>
+          <p className="text-k-sm text-k-text-2">{row.isRoot ? t('tree.root') : row.fullName}</p>
           <div className="flex flex-wrap gap-2">
             <Badge dot tone={row.active ? 'success' : 'neutral'}>
               {row.active ? t('status.active') : t('status.inactive')}
@@ -88,12 +88,12 @@ export function PreviewDialog({
               .filter(([, v]) => v)
               .map(([k, v]) => (
                 <div key={k} className={k === t('preview.parent') ? 'sm:col-span-2' : ''}>
-                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{k}</dt>
-                  <dd className="mt-0.5 break-words text-[14px] text-k-text">{v}</dd>
+                  <dt className="text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">{k}</dt>
+                  <dd className="mt-0.5 break-words text-k-base text-k-text">{v}</dd>
                 </div>
               ))}
           </dl>
-          <ul className="flex flex-wrap gap-2 border-t border-k-border pt-3 text-[13px] text-k-text-2">
+          <ul className="flex flex-wrap gap-2 border-t border-k-border pt-3 text-k-sm text-k-text-2">
             <li className="rounded-lg bg-k-bg px-2.5 py-1">{t('preview.members', { n: row.members })}</li>
             <li className="rounded-lg bg-k-bg px-2.5 py-1">{t('preview.credits', { n: row.credits })}</li>
             <li className="rounded-lg bg-k-bg px-2.5 py-1">{t('preview.children', { n: kids })}</li>
@@ -175,8 +175,8 @@ export function QuickAddDialog({
     >
       <div className="space-y-4">
         <ErrorBanner message={error} />
-        {parent && <p className="text-[13px] text-k-text-2">{t('quick.under', { path: parent.fullName || parent.name })}</p>}
-        {branching && <p role="note" className="rounded-xl bg-k-warning-bg px-3 py-2 text-[13px] text-k-warning-text">{t('form.branchingWarning')}</p>}
+        {parent && <p className="text-k-sm text-k-text-2">{t('quick.under', { path: parent.fullName || parent.name })}</p>}
+        {branching && <p role="note" className="rounded-xl bg-k-warning-bg px-3 py-2 text-k-sm text-k-warning-text">{t('form.branchingWarning')}</p>}
         <Field label={t('form.fields.name')}>
           <Input value={name} maxLength={80} onChange={(e) => setName(e.target.value)} autoFocus />
         </Field>
@@ -266,12 +266,12 @@ export function MoveDialog({
             <OfficeSelect options={options} disabledIds={blocked} emptyLabel={t('move.pick')} value={target} onChange={(e) => setTarget(e.target.value)} />
           </Field>
           {dest && (
-            <p className="text-[14px] text-k-text">
+            <p className="text-k-base text-k-text">
               {t('move.confirm', { name: node.fullName || node.name, to: dest.fullName || dest.name })}
             </p>
           )}
           {(people > 0 || credits > 0) && (
-            <p role="note" className="rounded-xl bg-k-warning-bg px-3 py-2 text-[13px] text-k-warning-text">
+            <p role="note" className="rounded-xl bg-k-warning-bg px-3 py-2 text-k-sm text-k-warning-text">
               {t('move.impact', { people, credits, offices: branch.length })}
             </p>
           )}
@@ -320,14 +320,14 @@ export function DeactivateDialog({ office, rows, onClose }: { office: OfficeRow 
       <div className="space-y-3">
         <ErrorBanner message={error} />
         {blocked && check ? (
-          <ul className="list-disc space-y-1 pl-5 text-[14px] text-k-text">
+          <ul className="list-disc space-y-1 pl-5 text-k-base text-k-text">
             {check.blockers.includes('ROOT') && <li>{t('deactivate.root')}</li>}
             {check.blockers.includes('ACTIVE_CHILDREN') && <li>{t('deactivate.children', { n: check.children })}</li>}
             {check.blockers.includes('MEMBERS') && <li>{t('deactivate.members', { n: check.members })}</li>}
             {check.blockers.includes('CREDITS') && <li>{t('deactivate.credits', { n: check.credits })}</li>}
           </ul>
         ) : (
-          <p className="text-[14px] text-k-text">{t('deactivate.text')}</p>
+          <p className="text-k-base text-k-text">{t('deactivate.text')}</p>
         )}
       </div>
     </Modal>

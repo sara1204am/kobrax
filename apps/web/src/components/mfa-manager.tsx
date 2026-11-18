@@ -117,11 +117,11 @@ export function MfaManager() {
     <div className="space-y-4">
       <ErrorBanner message={error} />
 
-      {view === 'loading' && <p className="text-[14px] text-k-text-2">{tc('loading')}</p>}
+      {view === 'loading' && <p className="text-k-base text-k-text-2">{tc('loading')}</p>}
 
       {view === 'disabled' && (
         <>
-          <p className="text-[14px] text-k-text-2">{t('intro')}</p>
+          <p className="text-k-base text-k-text-2">{t('intro')}</p>
           <Button onClick={startEnroll} loading={busy}>
             {t('activate')}
           </Button>
@@ -130,7 +130,7 @@ export function MfaManager() {
 
       {view === 'enrolling' && (
         <>
-          <p className="text-[14px] text-k-text-2">{t('scan')}</p>
+          <p className="text-k-base text-k-text-2">{t('scan')}</p>
           {qr && (
             // eslint-disable-next-line @next/next/no-img-element -- data: URI generada en el navegador
             <img
@@ -140,10 +140,10 @@ export function MfaManager() {
             />
           )}
           <div className="rounded-lg border border-k-border bg-k-bg p-3 text-center">
-            <p className="text-[11px] font-semibold uppercase text-k-text-2">{t('manualKey')}</p>
-            <p className="mt-1 select-all break-all font-mono text-[14px] font-semibold text-k-navy">{secret}</p>
+            <p className="text-k-2xs font-semibold uppercase text-k-text-2">{t('manualKey')}</p>
+            <p className="mt-1 select-all break-all font-mono text-k-base font-semibold text-k-navy">{secret}</p>
           </div>
-          <p className="text-[13px] text-k-text-2">{t('enterCode')}</p>
+          <p className="text-k-sm text-k-text-2">{t('enterCode')}</p>
           <OtpInput value={code} onChange={setCode} error={!!error} />
           <Button onClick={verify} loading={busy} disabled={code.length !== 6}>
             {t('verify')}
@@ -153,9 +153,9 @@ export function MfaManager() {
 
       {view === 'codes' && (
         <>
-          <h2 className="text-[15px] font-semibold text-k-text">{t('codesTitle')}</h2>
-          <p className="text-[13px] text-k-text-2">{t('codesText')}</p>
-          <ul className="grid grid-cols-2 gap-2 rounded-lg border border-k-border bg-k-bg p-3 font-mono text-[13px] text-k-text">
+          <h2 className="text-k-md font-semibold text-k-text">{t('codesTitle')}</h2>
+          <p className="text-k-sm text-k-text-2">{t('codesText')}</p>
+          <ul className="grid grid-cols-2 gap-2 rounded-lg border border-k-border bg-k-bg p-3 font-mono text-k-sm text-k-text">
             {backupCodes.map((c) => (
               <li key={c} className="text-center">
                 {c}
@@ -171,20 +171,20 @@ export function MfaManager() {
 
       {view === 'enabled' && (
         <>
-          <div className="flex items-center gap-2 rounded-lg bg-k-success-bg px-3 py-2 text-[13px] text-k-success">
+          <div className="flex items-center gap-2 rounded-lg bg-k-success-bg px-3 py-2 text-k-sm text-k-success">
             <span aria-hidden>✓</span> {t('active')}
           </div>
           <Button variant="ghost" onClick={regenerate} loading={busy}>
             {t('regenerate')}
           </Button>
           {required ? (
-            <p className="border-t border-k-border pt-4 text-[12px] text-k-text-2">
+            <p className="border-t border-k-border pt-4 text-k-xs text-k-text-2">
               Tu rol exige verificación en dos pasos: no se puede desactivar.
             </p>
           ) : (
           <div className="border-t border-k-border pt-4">
-            <p className="text-[13px] font-medium text-k-text">{t('disableTitle')}</p>
-            <p className="mt-1 text-[12px] text-k-text-2">{t('disableHint')}</p>
+            <p className="text-k-sm font-medium text-k-text">{t('disableTitle')}</p>
+            <p className="mt-1 text-k-xs text-k-text-2">{t('disableHint')}</p>
             <div className="mt-2 space-y-2">
               <Field label={t('password')}>
                 <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />

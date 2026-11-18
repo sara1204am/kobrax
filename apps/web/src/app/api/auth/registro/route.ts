@@ -19,6 +19,9 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const { businessName, firstName, lastName, email, password, planCode } = body;
+  // Privacidad: lo que aceptó la persona. Se nombra campo por campo porque lo que no se nombre acá se pierde en silencio y la API
+  // respondería `LEGAL_ACCEPTANCE_REQUIRED`. El servidor revalida todo contra la versión vigente: esto solo transporta.
+  const { termsVersionId, privacyVersionId, marketingOptIn, analyticsOptIn } = body;
   if (!businessName || !firstName || !lastName || !email || !password) {
     return NextResponse.json({ error: { code: 'VALIDATION', message: 'Faltan datos' } }, { status: 400 });
   }
@@ -29,7 +32,18 @@ export async function POST(req: Request): Promise<NextResponse> {
   // arma campo por campo, así que lo que no se nombre se pierde en silencio.
   const { status, body: res } = await apiCall<{ accountId: string; email: string }>('/accounts', {
     method: 'POST',
-    body: JSON.stringify({ businessName, firstName, lastName, email, password, planCode }),
+    body: JSON.stringify({
+      businessName,
+      firstName,
+      lastName,
+      email,
+      password,
+      planCode,
+      termsVersionId,
+      privacyVersionId,
+      marketingOptIn,
+      analyticsOptIn,
+    }),
   });
   if (status >= 400 || !res.data) return apiError(status, res);
   // Si llegó con las cookies de otra sesión, esa sesión se cierra (en el servidor y en el navegador).

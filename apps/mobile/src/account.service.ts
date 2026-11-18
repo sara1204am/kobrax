@@ -28,6 +28,12 @@ export interface SignupPayload {
    * decide el servidor (`SIGNUP_PLANS`), no esta pantalla.
    */
   planCode?: SignupPlan;
+  /**
+   * Lo que aceptó (privacidad): los ids de las versiones de los Términos y de la Política que la pantalla mostró. Sin ellos el servidor
+   * responde 422 y no crea la cuenta. Nunca un texto ni un hash: el servidor calcula el hash con su copia.
+   */
+  termsVersionId?: string;
+  privacyVersionId?: string;
 }
 
 export type SignupResult = PublicResult<{ accountId: string }>;

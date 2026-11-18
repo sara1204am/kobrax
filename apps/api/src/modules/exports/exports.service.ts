@@ -264,6 +264,8 @@ export class ExportsService {
     const data = await this.tx(async (tx) => {
       // D-7: es de TODA la cuenta. Sólo kind ALL o un SUBTREE asignado a la raíz (que `assignScope` ya resuelve como ALL).
       if ((await this.officeScope.assignScope(tx)).kind !== 'ALL') throw exportBackupForbidden();
+      // S-7: el backup lleva documento, contactos y direcciones DESCIFRADOS: sólo quien puede verlos en claro en cualquier otra pantalla.
+      if (!this.can(Permission.CLIENT_PII_READ) || !this.can(Permission.CLIENT_CONTACT_READ)) throw exportBackupForbidden();
       const [clients, credits, activities, arrearEpisodes, payments, agendaItems] = await Promise.all([
         tx.client.findMany({
           where: { accountId, deletedAt: null },

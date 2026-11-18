@@ -251,7 +251,7 @@ export async function FichaGestion({
                   {activity.type === 'ASSIGNMENT' && assignedTo(activity.notes) ? (
                     <Assignee id={assignedTo(activity.notes)!} members={members} />
                   ) : (
-                    activity.notes && <p className="mt-0.5 text-[13px] text-k-text">{activity.notes}</p>
+                    activity.notes && <p className="mt-0.5 text-k-sm text-k-text">{activity.notes}</p>
                   )}
                 </ActivityCard>
               </li>
@@ -288,7 +288,7 @@ export async function FichaGestion({
           {/* La persona, al servicio de la recuperación: sólo lectura (se corrige desde Cartera). */}
           {withPerson && (
             <Section title={t('ficha.person.title')} anchor="PERSON" collapsible={{ scroll: false }}>
-              <p className="mb-3 text-[13px] text-k-text-2">{t('ficha.person.hint')}</p>
+              <p className="mb-3 text-k-sm text-k-text-2">{t('ficha.person.hint')}</p>
               {client?.status === 200 && client.body.data ? (
                 <PersonSections creditId={item.creditId} client={client.body.data} currency={currency} collateralTypes={collateralTypes?.body.data ?? []} />
               ) : (
@@ -316,11 +316,11 @@ async function Assignee({ id, members }: { id: string; members: Member[] }) {
   const tRoles = await getTranslations('team.roles');
   const member = members.find((m) => m.userId === id);
 
-  if (!member) return <p className="mt-1 text-[14px] text-k-text-2">{t('unknownAssignee')}</p>;
+  if (!member) return <p className="mt-1 text-k-base text-k-text-2">{t('unknownAssignee')}</p>;
 
   return (
     <p className="mt-1 flex flex-wrap items-center gap-2">
-      <span className="text-[14px] font-medium text-k-text">{memberName(member)}</span>
+      <span className="text-k-base font-medium text-k-text">{memberName(member)}</span>
       {/* Un rol que el diccionario no conoce se pinta crudo: es preferible al renglón sin cargo. */}
       <Badge tone="neutral">{isKnownRole(member.roleName) ? tRoles(member.roleName) : member.roleName}</Badge>
     </p>

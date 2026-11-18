@@ -162,10 +162,12 @@
     "route": "DELETE /routes/:id/stops/:sid",
     "handler": "RoutesController.removeStop",
     "kind": "permissions",
-    "all": [
-      "route:read"
-    ],
-    "any": []
+    "all": [],
+    "any": [
+      "route:assign",
+      "route:execute",
+      "route:write"
+    ]
   },
   {
     "route": "DELETE /users/:id",
@@ -640,6 +642,41 @@
     "any": []
   },
   {
+    "route": "GET /legal/documents/:slug/current",
+    "handler": "LegalController.current",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "GET /legal/documents/:slug/versions/:version",
+    "handler": "LegalController.version",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "GET /legal/documents/:slug/versions",
+    "handler": "LegalController.versions",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "GET /legal/me",
+    "handler": "LegalController.me",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "GET /legal/signup-documents",
+    "handler": "LegalController.signupDocuments",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
     "route": "GET /mora/:creditId/episodes",
     "handler": "MoraController.episodes",
     "kind": "permissions",
@@ -778,6 +815,40 @@
     "kind": "permissions",
     "all": [
       "platform:accounts:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /platform/accounts",
+    "handler": "PlatformController.listAccounts",
+    "kind": "permissions",
+    "all": [
+      "platform:accounts:read"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /platform/privacy-requests",
+    "handler": "PrivacyPlatformController.list",
+    "kind": "permissions",
+    "all": [
+      "platform:privacy:manage"
+    ],
+    "any": []
+  },
+  {
+    "route": "GET /privacy/requests/mine",
+    "handler": "PrivacyRequestsController.mine",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "GET /privacy/requests/org",
+    "handler": "PrivacyRequestsController.org",
+    "kind": "permissions",
+    "all": [
+      "account:write"
     ],
     "any": []
   },
@@ -937,6 +1008,13 @@
     "all": [
       "user:read"
     ],
+    "any": []
+  },
+  {
+    "route": "GET /users/me/guides",
+    "handler": "UsersController.getMyGuides",
+    "kind": "authenticated",
+    "all": [],
     "any": []
   },
   {
@@ -1129,31 +1207,55 @@
     "any": []
   },
   {
+    "route": "PATCH /platform/privacy-requests/:id/status",
+    "handler": "PrivacyPlatformController.transition",
+    "kind": "permissions",
+    "all": [
+      "platform:privacy:manage"
+    ],
+    "any": []
+  },
+  {
+    "route": "PATCH /privacy/requests/org/:id/status",
+    "handler": "PrivacyRequestsController.transitionOrg",
+    "kind": "permissions",
+    "all": [
+      "account:write"
+    ],
+    "any": []
+  },
+  {
     "route": "PATCH /routes/:id/change-requests/:rid",
     "handler": "RoutesController.decideChange",
     "kind": "permissions",
-    "all": [
-      "route:read"
-    ],
-    "any": []
+    "all": [],
+    "any": [
+      "route:assign",
+      "route:execute",
+      "route:write"
+    ]
   },
   {
     "route": "PATCH /routes/:id/stops/:sid",
     "handler": "RoutesController.updateStop",
     "kind": "permissions",
-    "all": [
-      "route:read"
-    ],
-    "any": []
+    "all": [],
+    "any": [
+      "route:assign",
+      "route:execute",
+      "route:write"
+    ]
   },
   {
     "route": "PATCH /routes/:id",
     "handler": "RoutesController.updateStatus",
     "kind": "permissions",
-    "all": [
-      "route:read"
-    ],
-    "any": []
+    "all": [],
+    "any": [
+      "route:assign",
+      "route:execute",
+      "route:write"
+    ]
   },
   {
     "route": "PATCH /users/:id",
@@ -1290,6 +1392,20 @@
     "route": "POST /auth/change-password",
     "handler": "AuthController.changePassword",
     "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /auth/email/resend",
+    "handler": "AuthController.resendVerification",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /auth/email/verify",
+    "handler": "AuthController.verifyEmail",
+    "kind": "public",
     "all": [],
     "any": []
   },
@@ -1650,6 +1766,13 @@
     "any": []
   },
   {
+    "route": "POST /legal/acceptances",
+    "handler": "LegalController.reaccept",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
     "route": "POST /mora/:creditId/activities",
     "handler": "MoraController.addActivity",
     "kind": "permissions",
@@ -1716,6 +1839,15 @@
     "any": []
   },
   {
+    "route": "POST /platform/accounts/:accountId/status",
+    "handler": "PlatformController.setAccountStatus",
+    "kind": "permissions",
+    "all": [
+      "platform:accounts:suspend"
+    ],
+    "any": []
+  },
+  {
     "route": "POST /platform/accounts/:accountId/support-sessions/:id/token",
     "handler": "PlatformController.token",
     "kind": "permissions",
@@ -1748,6 +1880,36 @@
     "any": []
   },
   {
+    "route": "POST /privacy/requests/org",
+    "handler": "PrivacyRequestsController.createOrg",
+    "kind": "permissions",
+    "all": [
+      "account:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /privacy/requests",
+    "handler": "PrivacyRequestsController.create",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /public/reports/confirm",
+    "handler": "PublicReportsController.confirm",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /public/reports",
+    "handler": "PublicReportsController.create",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
     "route": "POST /roles/:key/restore-template",
     "handler": "RolesController.restore",
     "kind": "permissions",
@@ -1760,28 +1922,34 @@
     "route": "POST /routes/:id/change-requests",
     "handler": "RoutesController.requestChange",
     "kind": "permissions",
-    "all": [
-      "route:read"
-    ],
-    "any": []
+    "all": [],
+    "any": [
+      "route:assign",
+      "route:execute",
+      "route:write"
+    ]
   },
   {
     "route": "POST /routes/:id/optimize",
     "handler": "RoutesController.optimize",
     "kind": "permissions",
-    "all": [
-      "route:read"
-    ],
-    "any": []
+    "all": [],
+    "any": [
+      "route:assign",
+      "route:execute",
+      "route:write"
+    ]
   },
   {
     "route": "POST /routes/:id/stops",
     "handler": "RoutesController.addStop",
     "kind": "permissions",
-    "all": [
-      "route:read"
-    ],
-    "any": []
+    "all": [],
+    "any": [
+      "route:assign",
+      "route:execute",
+      "route:write"
+    ]
   },
   {
     "route": "POST /routes/generate",
@@ -1943,12 +2111,26 @@
     "any": []
   },
   {
+    "route": "PUT /legal/consents/:purpose",
+    "handler": "LegalController.setConsent",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
     "route": "PUT /roles/:key/permissions",
     "handler": "RolesController.update",
     "kind": "permissions",
     "all": [
       "role:write"
     ],
+    "any": []
+  },
+  {
+    "route": "PUT /users/me/guides",
+    "handler": "UsersController.putMyGuides",
+    "kind": "authenticated",
+    "all": [],
     "any": []
   }
 ]

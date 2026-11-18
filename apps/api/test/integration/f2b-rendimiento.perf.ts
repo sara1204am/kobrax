@@ -11,7 +11,7 @@
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import type { PrismaClient } from '@prisma/client';
-import { addMember, API, call, db, freshDatabase, installScopePolicies, login, loginSkippingMfa, startApi, stopApi, uninstallScopePolicies } from './harness';
+import { addMember, API, call, db, freshDatabase, installScopePolicies, login, loginSkippingMfa, startApi, stopApi, uninstallScopePolicies, legalAcceptance } from './harness';
 
 interface Office {
   id: string;
@@ -36,7 +36,7 @@ async function main(): Promise<void> {
   const res = await fetch(`${API}/accounts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ businessName: 'Banco Carga', firstName: 'Dueño', lastName: 'Carga', email, password: 'Kobrax123!' }),
+    body: JSON.stringify({ ...(await legalAcceptance()), businessName: 'Banco Carga', firstName: 'Dueño', lastName: 'Carga', email, password: 'Kobrax123!' }),
   });
   if (res.status !== 201) throw new Error(await res.text());
   const owner = await prisma.user.findUniqueOrThrow({ where: { email }, include: { userAccounts: true } });

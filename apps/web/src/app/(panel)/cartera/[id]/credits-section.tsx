@@ -48,7 +48,7 @@ export async function CreditsSection({
   const t = await getTranslations('portfolio');
   const locale = await getLocale();
 
-  if (denied) return <p className="text-[14px] text-k-muted">{t('creditsDenied')}</p>;
+  if (denied) return <p className="text-k-base text-k-muted">{t('creditsDenied')}</p>;
 
   const cerrados = credits.filter((c) => c.status && CERRADOS.includes(c.status)).length;
   const visibles = showClosed ? credits : credits.filter((c) => !c.status || !CERRADOS.includes(c.status));
@@ -60,7 +60,7 @@ export async function CreditsSection({
         <p className="mb-3 text-right">
           <Link
             href={showClosed ? `/cartera/${clientId}` : `/cartera/${clientId}?historial=1`}
-            className="text-[13px] font-medium text-k-periwinkle hover:underline"
+            className="text-k-sm font-medium text-k-periwinkle hover:underline"
           >
             {showClosed ? t('hideHistory') : t('showHistory', { count: cerrados })}
           </Link>
@@ -70,7 +70,7 @@ export async function CreditsSection({
       {visibles.length === 0 ? (
         // 🔴 «No tiene créditos» y «no tiene ninguno abierto» no son lo mismo: con un crédito pagado
         // escondido detrás del historial, lo primero es directamente falso.
-        <p className="text-[14px] text-k-muted">{cerrados > 0 ? t('noOpenCredits') : t('noCredits')}</p>
+        <p className="text-k-base text-k-muted">{cerrados > 0 ? t('noOpenCredits') : t('noCredits')}</p>
       ) : (
         <ul className="space-y-3">
           {visibles.map((c) => (
@@ -83,22 +83,22 @@ export async function CreditsSection({
 
       {otherCredits?.items && otherCredits.items.length > 0 && (
         <div className="mt-5">
-          <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-k-muted">{t('otherCredits.cardsTitle')}</h3>
+          <h3 className="mb-2 text-k-xs font-semibold uppercase tracking-wide text-k-muted">{t('otherCredits.cardsTitle')}</h3>
           <ul className="space-y-2">
             {otherCredits.items.map((o, i) => (
               // Sin enlace a propósito: el detalle de un crédito ajeno no se abre (el servidor también lo niega).
               <li key={i} className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl border border-dashed border-k-border bg-k-bg/60 p-4">
                 <span aria-hidden className="text-k-muted">🔒</span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[15px] font-semibold text-k-text-2">{o.code ?? t('noCode')}</span>
-                  <span className="block truncate text-[13px] text-k-text-2">{(o.typeCode && types.get(o.typeCode)) || t('creditNoType')}</span>
-                  <span className="block truncate text-[12px] text-k-muted">
+                  <span className="block truncate text-k-md font-semibold text-k-text-2">{o.code ?? t('noCode')}</span>
+                  <span className="block truncate text-k-sm text-k-text-2">{(o.typeCode && types.get(o.typeCode)) || t('creditNoType')}</span>
+                  <span className="block truncate text-k-xs text-k-muted">
                     {t('otherCredits.responsible', { names: o.responsibles.join(', ') || t('otherCredits.nobody') })}
                   </span>
                 </span>
                 <span className="text-right">
-                  <span className="block text-[11px] uppercase tracking-wide text-k-muted">{t('credit.outstanding')}</span>
-                  <span className="block text-[15px] font-semibold tabular-nums text-k-text-2">{money(o.outstandingBalance, o.currency ?? undefined)}</span>
+                  <span className="block text-k-2xs uppercase tracking-wide text-k-muted">{t('credit.outstanding')}</span>
+                  <span className="block text-k-md font-semibold tabular-nums text-k-text-2">{money(o.outstandingBalance, o.currency ?? undefined)}</span>
                 </span>
                 {o.status && (
                   <Badge tone={CREDIT_STATUS_TONE[o.status] ?? 'neutral'} dot>
@@ -108,7 +108,7 @@ export async function CreditsSection({
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-[12px] text-k-muted">{t('otherCredits.cardsHint')}</p>
+          <p className="mt-2 text-k-xs text-k-muted">{t('otherCredits.cardsHint')}</p>
         </div>
       )}
     </>
@@ -143,19 +143,19 @@ function CreditCard({
               la pantalla; el chevron solo, que haya que apuntarle a 16 píxeles. */}
           <Link
             href={`/cartera/${clientId}/credito/${c.id}`}
-            className="block truncate text-[15px] font-semibold text-k-text hover:underline"
+            className="block truncate text-k-md font-semibold text-k-text hover:underline"
           >
             {c.code ?? t('noCode')}
           </Link>
-          <span className="block truncate text-[13px] text-k-text-2">
+          <span className="block truncate text-k-sm text-k-text-2">
             {(c.typeCode && types.get(c.typeCode)) || t('creditNoType')}
           </span>
           <CreditBadges credit={c} t={t} />
         </span>
 
         <span className="text-right">
-          <span className="block text-[11px] uppercase tracking-wide text-k-muted">{t('credit.principal')}</span>
-          <span className="block text-[15px] font-semibold tabular-nums text-k-text">
+          <span className="block text-k-2xs uppercase tracking-wide text-k-muted">{t('credit.principal')}</span>
+          <span className="block text-k-md font-semibold tabular-nums text-k-text">
             {amountOf(c, 'principalAmount', t)}
           </span>
         </span>
@@ -168,9 +168,9 @@ function CreditCard({
           )}
           {/* Del cerrado interesa CUÁNDO; del vivo, cuánto lleva de atraso. */}
           {cerrado
-            ? c.nextDueDate && <span className="text-[12px] text-k-muted">{relativeDate(c.nextDueDate, locale)}</span>
+            ? c.nextDueDate && <span className="text-k-xs text-k-muted">{relativeDate(c.nextDueDate, locale)}</span>
             : (c.daysPastDue ?? 0) > 0 && (
-                <span className="text-[12px] font-medium text-k-danger">{t('days', { count: c.daysPastDue ?? 0 })}</span>
+                <span className="text-k-xs font-medium text-k-danger">{t('days', { count: c.daysPastDue ?? 0 })}</span>
               )}
         </span>
       </summary>
@@ -197,7 +197,7 @@ function CreditCard({
           label={t('credit.progress')}
         />
 
-        {c.locked && <p className="mt-3 text-[12px] text-k-muted">{t('importedHint')}</p>}
+        {c.locked && <p className="mt-3 text-k-xs text-k-muted">{t('importedHint')}</p>}
       </div>
     </details>
   );
@@ -206,9 +206,9 @@ function CreditCard({
 function Figure({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div>
-      <dt className="text-[12px] text-k-text-2">{label}</dt>
+      <dt className="text-k-xs text-k-text-2">{label}</dt>
       <dd className="mt-0.5 text-[17px] font-semibold tabular-nums text-k-text">{value}</dd>
-      {hint && <p className="text-[12px] text-k-muted">{hint}</p>}
+      {hint && <p className="text-k-xs text-k-muted">{hint}</p>}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { server } from '@/test/msw-server';
+import { SIGNUP_DOCS, acceptLegal, legalHandler, privacyBox, termsBox } from '@/test/legal';
 import { hardNav } from '@/lib/client';
 import InvitacionPage from './page';
 
@@ -24,10 +25,17 @@ vi.mock('next/link', () => ({
   ),
 }));
 
+/** Marca las dos casillas (están debajo de la confirmación de contraseña) y pulsa «Entrar a Kobrax». */
+async function entrar() {
+  await acceptLegal();
+  await userEvent.click(screen.getByRole('button', { name: /entrar a kobrax/i }));
+}
+
 const INVITATION = { email: 'ana@kobrax.demo', firstName: 'Ana', businessName: 'Cobranzas Pérez' };
 
 describe('InvitacionPage', () => {
   beforeEach(() => {
+    server.use(legalHandler());
     replace.mockClear();
     push.mockClear();
     window.history.replaceState({}, '', '/invitacion');
@@ -66,9 +74,16 @@ describe('InvitacionPage', () => {
     await screen.findByText(/te uniste a/i);
     await userEvent.type(screen.getByLabelText('Contraseña'), 'Kobrax123!');
     await userEvent.type(screen.getByLabelText('Confirmar contraseña'), 'Kobrax123!');
-    await userEvent.click(screen.getByRole('button', { name: /entrar a kobrax/i }));
+    await entrar();
 
-    expect(sent).toEqual({ code: 'abcd-1234', password: 'Kobrax123!' });
+    // El código y la contraseña viajan tal cual; la aceptación viaja como ids de versión (nunca un texto ni un hash), y sin marcar
+    // el marketing no viaja ningún consentimiento opcional.
+    expect(sent).toEqual({
+      code: 'abcd-1234',
+      password: 'Kobrax123!',
+      termsVersionId: SIGNUP_DOCS[0]!.versionId,
+      privacyVersionId: SIGNUP_DOCS[1]!.versionId,
+    });
     expect(loginBody).toEqual({ email: 'ana@kobrax.demo', password: 'Kobrax123!' });
     expect(hardNavigate).toHaveBeenCalledWith('/dashboard');
   });
@@ -103,10 +118,61 @@ describe('InvitacionPage', () => {
     await screen.findByText(/te uniste a/i);
     await userEvent.type(screen.getByLabelText('Contraseña'), 'Kobrax123!');
     await userEvent.type(screen.getByLabelText('Confirmar contraseña'), 'Kobrax123!');
-    await userEvent.click(screen.getByRole('button', { name: /entrar a kobrax/i }));
+    await entrar();
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/tu contraseña quedó guardada/i);
     expect(screen.queryByRole('button', { name: /entrar a kobrax/i })).toBeNull();
     expect(screen.getByRole('link', { name: /ir a iniciar sesión/i })).toBeInTheDocument();
+  });
+});
+
+/** Privacidad: quien se une por invitación también acepta los Términos y reconoce la Política, con las casillas en línea. */
+describe('InvitacionPage · aceptación legal en línea', () => {
+  beforeEach(() => {
+    server.use(legalHandler(), http.get('*/api/auth/invitacion/:code', () => HttpResponse.json(INVITATION)));
+    window.history.replaceState({}, '', '/invitacion?c=ABCD1234');
+  });
+
+  async function fillPasswords() {
+    await screen.findByText(/te uniste a/i);
+    await userEvent.type(screen.getByLabelText('Contraseña'), 'Kobrax123!');
+    await userEvent.type(screen.getByLabelText('Confirmar contraseña'), 'Kobrax123!');
+  }
+
+  it('🔴 las dos casillas aparecen debajo de las contraseñas, desmarcadas, y no se puede entrar sin ellas', async () => {
+    render(<InvitacionPage />);
+    await fillPasswords();
+    const terms = await termsBox();
+    const privacy = await privacyBox();
+    expect(terms).not.toBeChecked();
+    expect(privacy).not.toBeChecked();
+    expect(screen.getAllByRole('checkbox')).toHaveLength(2);
+    const entrar = screen.getByRole('button', { name: /entrar a kobrax/i });
+    expect(entrar).toBeDisabled();
+    await userEvent.click(terms);
+    expect(entrar).toBeDisabled();
+    await userEvent.click(privacy);
+    expect(entrar).toBeEnabled();
+  });
+
+  it('🔴 si la versión cambió, avisa, desmarca y no se consume la invitación ni se encadena el login', async () => {
+    let loginCalls = 0;
+    server.use(
+      http.post('*/api/auth/invitacion', () =>
+        HttpResponse.json({ error: { code: 'LEGAL_VERSION_STALE', message: 'Los documentos legales cambiaron' } }, { status: 409 }),
+      ),
+      http.post('*/api/auth/login', () => {
+        loginCalls += 1;
+        return HttpResponse.json({ step: 'done' });
+      }),
+    );
+    render(<InvitacionPage />);
+    await fillPasswords();
+    await entrar();
+
+    expect(await screen.findByText(/se actualizaron mientras completabas/i)).toBeInTheDocument();
+    expect(await termsBox()).not.toBeChecked();
+    expect(screen.getByRole('button', { name: /entrar a kobrax/i })).toBeDisabled();
+    expect(loginCalls).toBe(0);
   });
 });

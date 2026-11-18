@@ -1,8 +1,11 @@
-import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy, Inject, Optional } from '@nestjs/common';
 import { CreditAssignmentKind, CreditStatus, InstallmentStatus, NotificationType } from '@prisma/client';
 import { civilTodayUTC, timezoneOf } from '../../common/context/tenant-clock.service';
 import { PrismaService } from '../../database/prisma.service';
 import { NotificationsService } from './notifications.service';
+import type Redis from 'ioredis';
+import { startJob } from '../../common/jobs/start-job';
+import { REDIS } from '../../redis/redis.module';
 
 /** Ventana hacia adelante: cuotas que vencen dentro de N días entran al aviso. */
 export const PROMISE_DUE_HORIZON_DAYS = 3;
@@ -33,11 +36,12 @@ export class PromiseDueService implements OnApplicationBootstrap, OnModuleDestro
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    /** Candado entre instancias (opcional: sin Redis el job corre siempre). */
+    @Optional() @Inject(REDIS) private readonly redis?: Redis,
   ) {}
 
   onApplicationBootstrap(): void {
-    this.timer = setInterval(() => void this.run(), PROMISE_DUE_INTERVAL_MS);
-    if (typeof this.timer.unref === 'function') this.timer.unref(); // no bloquea el apagado
+    this.timer = startJob({ name: 'promise-due', intervalMs: PROMISE_DUE_INTERVAL_MS, run: () => this.run(), redis: this.redis, logger: this.logger });
   }
 
   onModuleDestroy(): void {

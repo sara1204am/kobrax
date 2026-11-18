@@ -16,6 +16,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Permission, type ImportAssignments } from '@kobrax/shared';
+import { UploadConcurrencyInterceptor } from '../../common/interceptors/upload-concurrency.interceptor';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { PortfolioImportService } from './portfolio-import.service';
 import type { ImportConfigPatch } from './import-config';
@@ -80,6 +81,7 @@ export class PortfolioImportController {
   @Post()
   @Roles(Permission.CLIENT_IMPORT)
   @UseInterceptors(
+    UploadConcurrencyInterceptor,
     FileInterceptor('file', {
       limits: { fileSize: 15 * 1024 * 1024 }, // N6: 15 MB
       // Cortar temprano: no gastar el motor sobre bytes de cualquier tipo.

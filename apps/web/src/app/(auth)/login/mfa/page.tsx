@@ -49,7 +49,7 @@ export default function MfaPage() {
             <button
               type="button"
               onClick={() => setUseBackup(true)}
-              className="w-full text-center text-[13px] font-medium text-k-purple"
+              className="w-full text-center text-k-sm font-medium text-k-purple"
             >
               {t('useBackup')}
             </button>
@@ -71,7 +71,7 @@ export default function MfaPage() {
             <button
               type="button"
               onClick={() => setUseBackup(false)}
-              className="w-full text-center text-[13px] font-medium text-k-purple"
+              className="w-full text-center text-k-sm font-medium text-k-purple"
             >
               {t('backToApp')}
             </button>

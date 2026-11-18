@@ -8,9 +8,10 @@ import type { ClientDetail, CreditOption } from '@kobrax/shared';
 import type { CatalogOption } from '@/components/client-form';
 import { Badge, PageHeader, Section } from '@/components/panel-ui';
 import { SendWhatsappDialog } from '@/components/send-whatsapp-dialog';
-import { Button } from '@/components/ui';
+import { Button, TextButton } from '@/components/ui';
 import { Modal } from '@/components/modal';
 import { usePermissions } from '@/components/permissions';
+import { useWorkspace } from '@/components/workspace';
 import { useToast } from '@/components/toast';
 import { postJson, sendJson } from '@/lib/client';
 import { date, fullName, money } from '@/lib/format';
@@ -78,6 +79,8 @@ export function ClientCard({
   const toast = useToast();
   const { can } = usePermissions();
   const [shown, setShown] = useState(client);
+  // F15 · P3: Ingresos, Garantes, Garantías y Adjuntos se pueden ocultar. Los que el cliente ya tiene cargados se muestran igual (R7).
+  const workspace = useWorkspace();
   const [revealed, setRevealed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirmBaja, setConfirmBaja] = useState(false);
@@ -158,14 +161,14 @@ export function ClientCard({
   /** El botón «Editar» de un encabezado de sección. Sin permiso de escritura no se dibuja. */
   const editarAction = (section: SectionKey) =>
     canWrite ? (
-      <button
+      <TextButton
         type="button"
         onClick={() => void editar(section)}
         disabled={busy}
-        className="text-[13px] font-medium text-k-periwinkle hover:underline disabled:opacity-50"
+        tone="periwinkle"
       >
         {t('edit')}
-      </button>
+      </TextButton>
     ) : undefined;
 
   return (
@@ -181,27 +184,30 @@ export function ClientCard({
                 la API lo audita como `client/PII_REVEAL`. */}
             {/* Escribirle con una plantilla de la cuenta; queda como gestión pendiente de resultado. */}
             {can('collection:write') && (
-              <button
+              <TextButton
                 type="button"
                 onClick={() => setWriting(true)}
-                className="text-[13px] font-medium text-k-periwinkle hover:underline"
+                tone="periwinkle"
               >
                 {tw('send')}
-              </button>
+              </TextButton>
             )}
-            <a href={`/api/clients/${client.id}/pdf`} className="text-[13px] font-medium text-k-purple hover:underline">
+            <a
+              href={`/api/clients/${client.id}/pdf`}
+              className="text-k-sm font-medium text-k-purple hover:underline"
+            >
               {t('downloadPdf')}
             </a>
             {/* La baja no se ofrece si hay plata en la calle: la API la rechaza igual, pero un
                 botón que siempre falla enseña a desconfiar de la pantalla. */}
             {canDelete && !hasActiveCredits && shown.status !== 'INACTIVE' && (
-              <button
+              <TextButton
                 type="button"
                 onClick={() => setConfirmBaja(true)}
-                className="text-[13px] font-medium text-k-danger hover:underline"
+                tone="danger"
               >
                 {t('archive')}
-              </button>
+              </TextButton>
             )}
           </>
         }
@@ -209,11 +215,16 @@ export function ClientCard({
 
       {/* F14 · F2 (H-7): el cliente no tiene dueño. Si tiene créditos que yo no veo, un aviso con SÓLO agregados (nunca su detalle). */}
       {shown.otherCredits && (
-        <p role="note" className="mb-4 rounded-lg bg-k-highlight px-4 py-3 text-[13px] text-k-periwinkle">
+        <p
+          role="note"
+          className="mb-4 rounded-lg bg-k-highlight px-4 py-3 text-k-sm text-k-periwinkle"
+        >
           {t('otherCredits.notice', {
             count: shown.otherCredits.count,
             total: money(shown.otherCredits.totalOutstanding, currency),
-            names: shown.otherCredits.responsibles.map((p) => p.name).join(', ') || t('otherCredits.nobody'),
+            names:
+              shown.otherCredits.responsibles.map((p) => p.name).join(', ') ||
+              t('otherCredits.nobody'),
           })}
         </p>
       )}
@@ -237,24 +248,36 @@ export function ClientCard({
            * lee «Persona 1234 asterisco asterisco» de corrido. Los separadores son de CSS.
            */}
           <Section title={t('sections.identity')} action={editarAction('identity')}>
-            <dl className="flex flex-wrap items-center gap-x-6 gap-y-1.5 text-[13px]">
+            <dl className="flex flex-wrap items-center gap-x-6 gap-y-1.5 text-k-sm">
               <Dato label={t('fields.document')} value={shown.nationalId || '—'} />
               {shown.taxId && <Dato label={t('fields.taxId')} value={shown.taxId} />}
               {shown.riskSegment && <Dato label={t('fields.risk')} value={shown.riskSegment} />}
               {shown.preferredContactChannel && (
                 <Dato
                   label={t('form.preferredChannel')}
-                  value={['PHONE', 'WHATSAPP', 'VISIT'].includes(shown.preferredContactChannel) ? t(`channel.${shown.preferredContactChannel}`) : shown.preferredContactChannel}
+                  value={
+                    ['PHONE', 'WHATSAPP', 'VISIT'].includes(shown.preferredContactChannel)
+                      ? t(`channel.${shown.preferredContactChannel}`)
+                      : shown.preferredContactChannel
+                  }
                 />
               )}
-              {shown.createdAt && <Dato label={t('fields.createdAt')} value={date(shown.createdAt, locale)} />}
+              {shown.createdAt && (
+                <Dato label={t('fields.createdAt')} value={date(shown.createdAt, locale)} />
+              )}
             </dl>
           </Section>
 
           {/* F4/13 · E3: de qué vive y cuándo le llega el dinero. Opcional: sin perfil dice que no está cargado. */}
-          <Section title={t('sections.income')} action={editarAction('income')}>
-            <IncomeSummary profile={shown.incomeProfile} sources={incomeSources} occupations={occupations} />
-          </Section>
+          {(workspace.shows('client.income') || shown.incomeProfile) && (
+            <Section title={t('sections.income')} action={editarAction('income')}>
+              <IncomeSummary
+                profile={shown.incomeProfile}
+                sources={incomeSources}
+                occupations={occupations}
+              />
+            </Section>
+          )}
 
           {/*
            * Los créditos los pinta el servidor y bajan como children: esta tarjeta es cliente por
@@ -272,7 +295,7 @@ export function ClientCard({
                 can('credit:create') && (
                   <Link
                     href={`/cartera/${client.id}/prestamo`}
-                    className="inline-flex min-h-[32px] items-center rounded-lg bg-k-highlight px-3 text-[13px] font-medium text-k-periwinkle hover:bg-k-light-bg"
+                    className="inline-flex min-h-[32px] items-center rounded-lg bg-k-highlight px-3 text-k-sm font-medium text-k-periwinkle hover:bg-k-light-bg"
                   >
                     + {t('newLoan')}
                   </Link>
@@ -291,31 +314,38 @@ export function ClientCard({
            * que es la verdad de lo que pasó—; por eso las dos listas comparten el mismo `reveal`.
            */}
           {canSeeContact && (
-          <div className="grid gap-5 sm:grid-cols-2">
-            <ContactList
-              rows={shown.contacts ?? []}
-              revealed={revealed}
-              onReveal={() => void reveal()}
-              busy={busy}
-              canWrite={canWrite}
-              onEdit={() => void editar('contacts')}
-            />
-            <LocationList
-              rows={shown.locations ?? []}
-              revealed={revealed}
-              onReveal={() => void reveal()}
-              busy={busy}
-              onEdit={() => void editar('locations')}
-              canWrite={canWrite}
-              modalities={collectionModalities}
-            />
-          </div>
+            <div className="grid gap-5 sm:grid-cols-2">
+              <ContactList
+                rows={shown.contacts ?? []}
+                revealed={revealed}
+                onReveal={() => void reveal()}
+                busy={busy}
+                canWrite={canWrite}
+                onEdit={() => void editar('contacts')}
+              />
+              <LocationList
+                rows={shown.locations ?? []}
+                revealed={revealed}
+                onReveal={() => void reveal()}
+                busy={busy}
+                onEdit={() => void editar('locations')}
+                canWrite={canWrite}
+                modalities={collectionModalities}
+              />
+            </div>
           )}
 
           {/* 🔴 Con `client`, no con `shown`: los adjuntos no llevan máscara, y `shown` es una copia
               congelada del primer render — el `router.refresh()` de la subida traía el adjunto
               nuevo y no se veía hasta recargar la página. */}
-          {canSeeContact && <AttachmentsSection clientId={client.id} rows={client.attachments ?? []} canWrite={canWrite} />}
+          {canSeeContact &&
+            (workspace.shows('client.attachments') || (client.attachments?.length ?? 0) > 0) && (
+              <AttachmentsSection
+                clientId={client.id}
+                rows={client.attachments ?? []}
+                canWrite={canWrite}
+              />
+            )}
         </div>
 
         {/* La columna de consulta: cuánto debe, qué se hizo, y quién responde si no paga. */}
@@ -328,14 +358,22 @@ export function ClientCard({
            * también destapa los teléfonos del garante** —es a quien se llama cuando el deudor no
            * aparece—, y con el cliente original quedarían tapados para siempre.
            */}
-          <GuarantorsSection client={shown} canWrite={canWrite} onEdit={() => void editar('guarantors')} />
-          <CollateralsSection
-            client={shown}
-            currency={currency}
-            types={collateralTypes}
-            canWrite={canWrite}
-            onEdit={() => void editar('collaterals')}
-          />
+          {(workspace.shows('client.guarantors') || (shown.relations?.length ?? 0) > 0) && (
+            <GuarantorsSection
+              client={shown}
+              canWrite={canWrite}
+              onEdit={() => void editar('guarantors')}
+            />
+          )}
+          {(workspace.shows('client.collateral') || (shown.collaterals?.length ?? 0) > 0) && (
+            <CollateralsSection
+              client={shown}
+              currency={currency}
+              types={collateralTypes}
+              canWrite={canWrite}
+              onEdit={() => void editar('collaterals')}
+            />
+          )}
         </div>
       </div>
 
@@ -393,12 +431,15 @@ function IncomeSummary({
   occupations: CatalogOption[];
 }) {
   const t = useTranslations('portfolio');
-  if (!profile) return <p className="text-[13px] text-k-muted">{t('income.empty')}</p>;
+  if (!profile) return <p className="text-k-sm text-k-muted">{t('income.empty')}</p>;
 
   const fuente = profile.incomeSourceCode
-    ? sources.find((s) => s.code === profile.incomeSourceCode)?.label ?? t(`income.sourceDefault.${profile.incomeSourceCode}`)
+    ? (sources.find((s) => s.code === profile.incomeSourceCode)?.label ??
+      t(`income.sourceDefault.${profile.incomeSourceCode}`))
     : undefined;
-  const rubro = profile.occupationCode ? occupations.find((o) => o.code === profile.occupationCode)?.label ?? profile.occupationCode : undefined;
+  const rubro = profile.occupationCode
+    ? (occupations.find((o) => o.code === profile.occupationCode)?.label ?? profile.occupationCode)
+    : undefined;
   const ciclo = profile.incomeCycle ? t(`income.cycleOptions.${profile.incomeCycle}`) : undefined;
   const dia =
     profile.incomeDay != null
@@ -408,11 +449,16 @@ function IncomeSummary({
       : undefined;
 
   return (
-    <dl className="flex flex-wrap items-center gap-x-6 gap-y-1.5 text-[13px]">
+    <dl className="flex flex-wrap items-center gap-x-6 gap-y-1.5 text-k-sm">
       {fuente && <Dato label={t('income.source')} value={fuente} />}
       {rubro && <Dato label={t('income.occupation')} value={rubro} />}
       {ciclo && <Dato label={t('income.cycle')} value={ciclo} />}
-      {dia && <Dato label={profile.incomeCycle === 'WEEKLY' ? t('income.dayOfWeek') : t('income.dayOfMonth')} value={dia} />}
+      {dia && (
+        <Dato
+          label={profile.incomeCycle === 'WEEKLY' ? t('income.dayOfWeek') : t('income.dayOfMonth')}
+          value={dia}
+        />
+      )}
       {profile.notes && <Dato label={t('income.notes')} value={profile.notes} />}
     </dl>
   );

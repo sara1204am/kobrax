@@ -28,10 +28,10 @@ export async function WorkSummary({ rows }: { rows: CollectorWork[] }) {
     <dl className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
       {stats.map((s) => (
         <div key={s.key} className="rounded-xl border border-k-border bg-white px-4 py-3">
-          <dd className={`text-[22px] font-semibold tabular-nums ${s.strong ? 'text-k-navy' : 'text-k-text'}`}>
+          <dd className={`text-k-3xl font-semibold tabular-nums ${s.strong ? 'text-k-navy' : 'text-k-text'}`}>
             {s.value}
           </dd>
-          <dt className="text-[12px] uppercase tracking-wide text-k-text-2">{t(`summary.${s.key}`)}</dt>
+          <dt className="text-k-xs uppercase tracking-wide text-k-text-2">{t(`summary.${s.key}`)}</dt>
         </div>
       ))}
     </dl>

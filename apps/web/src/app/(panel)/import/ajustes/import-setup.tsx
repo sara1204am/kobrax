@@ -186,7 +186,7 @@ export function ImportSetup({ screen, officeScope = true }: { screen: ConfigScre
                   onProfile={saveAndReread}
                 />
                 {columns && columns.labels.length === 0 && (
-                  <p className="mt-4 rounded-xl bg-k-warning-bg px-4 py-3 text-[13px] text-k-warning-text">
+                  <p className="mt-4 rounded-xl bg-k-warning-bg px-4 py-3 text-k-sm text-k-warning-text">
                     {t('columns.noLabels')}
                   </p>
                 )}
@@ -238,8 +238,8 @@ export function ImportSetup({ screen, officeScope = true }: { screen: ConfigScre
               <Card>
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="min-w-0">
-                    <p className="text-[14px] font-medium text-k-text">{t('columns.testTitle')}</p>
-                    <p className="mt-1 text-[13px] text-k-text-2">
+                    <p className="text-k-base font-medium text-k-text">{t('columns.testTitle')}</p>
+                    <p className="mt-1 text-k-sm text-k-text-2">
                       {canTest ? t('columns.testHint') : t('columns.testBlocked')}
                     </p>
                   </div>
@@ -279,7 +279,7 @@ export function ImportSetup({ screen, officeScope = true }: { screen: ConfigScre
             {/* Todo se guarda al momento, así que «continuar» es navegar: no hay nada que enviar. */}
             <Link
               href="/import"
-              className="flex h-12 w-full items-center justify-center rounded-xl bg-k-navy px-5 text-[15px] font-semibold text-white transition-colors hover:bg-k-slate"
+              className="flex h-12 w-full items-center justify-center rounded-xl bg-k-navy px-5 text-k-md font-semibold text-white transition-colors hover:bg-k-slate"
             >
               {t('columns.continue')}
             </Link>
@@ -331,7 +331,7 @@ export function DryRunPreview({ summary }: { summary: PortfolioSummary }) {
   return (
     <div className="min-w-0 rounded-xl border border-k-border bg-k-bg p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[13px] font-medium text-k-text">
+        <p className="text-k-sm font-medium text-k-text">
           {t('columns.testResult', {
             created: counts.created,
             updated: counts.updated,
@@ -344,11 +344,11 @@ export function DryRunPreview({ summary }: { summary: PortfolioSummary }) {
       </div>
 
       {(counts.ignored ?? 0) > 0 && (
-        <p className="mt-3 text-[12px] text-k-text-2">{t('columns.testIgnored', { n: counts.ignored ?? 0 })}</p>
+        <p className="mt-3 text-k-xs text-k-text-2">{t('columns.testIgnored', { n: counts.ignored ?? 0 })}</p>
       )}
 
       {plan && plan.over > 0 && (
-        <p className="mt-3 rounded-lg bg-k-danger-bg px-3 py-2 text-[12px] text-k-danger">
+        <p className="mt-3 rounded-lg bg-k-danger-bg px-3 py-2 text-k-xs text-k-danger">
           {t('run.planOver', { nuevos: counts.created, lugar: plan.roomLeft, sobran: plan.over })}
         </p>
       )}
@@ -356,7 +356,7 @@ export function DryRunPreview({ summary }: { summary: PortfolioSummary }) {
       {rows.length > 0 && (
         // La tabla scrollea dentro de su caja: el `<body>` nunca se va de lado.
         <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[280px] text-[12px]">
+          <table className="w-full min-w-[280px] text-k-xs">
             <thead>
               <tr className="border-b border-k-border text-left uppercase tracking-wide text-k-text-2">
                 <th scope="col" className="pb-1.5 font-semibold">
@@ -381,7 +381,7 @@ export function DryRunPreview({ summary }: { summary: PortfolioSummary }) {
 
       {/* Los motivos, agrupados: un archivo de 3.000 créditos puede traer 700 avisos idénticos. */}
       {warnings.length > 0 && (
-        <ul className="mt-3 space-y-1 text-[12px] text-k-warning-text">
+        <ul className="mt-3 space-y-1 text-k-xs text-k-warning-text">
           {warnings.map((w) => (
             <li key={`${w.code}-${w.detail ?? ''}`}>
               {warningText(w, t)} {w.count > 1 && <span className="text-k-muted">×{w.count}</span>}
@@ -390,7 +390,7 @@ export function DryRunPreview({ summary }: { summary: PortfolioSummary }) {
         </ul>
       )}
       {preview.invalid.length > 0 && (
-        <ul className="mt-3 space-y-1 text-[12px] text-k-danger">
+        <ul className="mt-3 space-y-1 text-k-xs text-k-danger">
           {[...new Set(preview.invalid.map((i) => i.reason))].map((reason) => (
             <li key={reason}>{rejectText(reason, t)}</li>
           ))}

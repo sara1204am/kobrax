@@ -35,7 +35,7 @@ export default async function EditRolePage({ params }: { params: { key: string }
   if (role.editable === false) {
     return (
       <>
-        <Link href={back} className="mb-3 inline-block text-[13px] font-medium text-k-purple hover:underline">
+        <Link href={back} className="mb-3 inline-block text-k-sm font-medium text-k-purple hover:underline">
           ← {name}
         </Link>
         <EmptyState title={t('detail.locked')} />
@@ -45,7 +45,7 @@ export default async function EditRolePage({ params }: { params: { key: string }
 
   return (
     <>
-      <Link href={back} className="mb-3 inline-block text-[13px] font-medium text-k-purple hover:underline">
+      <Link href={back} className="mb-3 inline-block text-k-sm font-medium text-k-purple hover:underline">
         ← {name}
       </Link>
       <PageHeader title={t('editor.title', { name })} />

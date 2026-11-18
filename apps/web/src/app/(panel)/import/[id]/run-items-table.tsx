@@ -66,7 +66,7 @@ export function RunItemsTable({
           )}
           {/* D2: si la nueva abrió cliente o se sumó a uno que ya existía, y si quedó a revisar. */}
           {r.action === 'CREATED' && (
-            <span className="block text-[12px] text-k-text-2">
+            <span className="block text-k-xs text-k-text-2">
               {r.after?.newClient ? t('detail.newClient') : t('detail.existingClient')}
               {r.after?.linkReview && <span className="ml-2 font-semibold text-k-warning-text">{t('detail.linkReview')}</span>}
             </span>
@@ -106,15 +106,15 @@ export function RunItemsTable({
         // El estado tal como lo escribió el banco («Vencida») dice más que el nuestro; si no vino, el del crédito.
         const reported = r.after?.reportedStatus;
         const status = r.after?.status ?? r.before?.status;
-        if (reported) return <span className="text-[13px] text-k-text-2">{reported}</span>;
-        return status ? <span className="text-[13px] text-k-text-2">{tp(`creditStatus.${status}`)}</span> : '—';
+        if (reported) return <span className="text-k-sm text-k-text-2">{reported}</span>;
+        return status ? <span className="text-k-sm text-k-text-2">{tp(`creditStatus.${status}`)}</span> : '—';
       },
     },
     {
       key: 'note',
       header: t('detail.columns.note'),
       sortable: false,
-      render: (r) => (r.reason ? <span className="text-[13px] text-k-danger">{rejectText(r.reason, t)}</span> : null),
+      render: (r) => (r.reason ? <span className="text-k-sm text-k-danger">{rejectText(r.reason, t)}</span> : null),
     },
   ];
 

@@ -17,8 +17,10 @@ import { getAgendaSummary } from '@/lib/agenda-summary';
 import { AGENDA_STATUS_TONE, entrySummary, itemActions, itemWhen } from '@/lib/agenda';
 import { Badge, EmptyState } from '@/components/panel-ui';
 import { dateTime, dayDate, money } from '@/lib/format';
+import { workspaceOfMe } from '@/lib/workspace';
 import { ContactActions } from './contact-actions';
 import { ItemActions } from './item-actions';
+import { requirePermission } from '@/lib/authz';
 
 const INITIAL_ACTIONS: Record<string, 'complete' | 'reschedule' | 'cancel' | 'edit' | 'delete'> = {
   completar: 'complete',
@@ -40,8 +42,8 @@ export interface CatalogOption {
 function Datum({ label, children, dark = false }: { label: string; children: React.ReactNode; dark?: boolean }) {
   return (
     <div className="min-w-0">
-      <dt className={`text-[12px] ${dark ? 'text-white/65' : 'text-k-text-2'}`}>{label}</dt>
-      <dd className={`mt-1 text-[16px] font-medium ${dark ? 'text-white' : 'text-k-text'}`}>{children}</dd>
+      <dt className={`text-k-xs ${dark ? 'text-white/65' : 'text-k-text-2'}`}>{label}</dt>
+      <dd className={`mt-1 text-k-lg font-medium ${dark ? 'text-white' : 'text-k-text'}`}>{children}</dd>
     </div>
   );
 }
@@ -64,6 +66,8 @@ export default async function GestionPage({
   /** `?accion=` — desde el menú «⋮» de la lista: abre directo el diálogo pedido. */
   searchParams: { accion?: string };
 }) {
+  const blocked = await requirePermission(Permission.AGENDA_READ);
+  if (blocked) return blocked;
   const t = await getTranslations('panel.agenda');
   const locale = await getLocale();
 
@@ -78,6 +82,7 @@ export default async function GestionPage({
   }
 
   const { item, client, credit, target, labels, history, execution, rescheduledTo, route } = detail.body.data;
+  const routesShown = workspaceOfMe(me.body.data).showsModule('routes');
   const canWrite = me.body.data?.permissions?.includes(Permission.AGENDA_WRITE) ?? false;
   const actions = canWrite ? itemActions(item.status) : [];
   /**
@@ -180,14 +185,14 @@ export default async function GestionPage({
           />
         </span>
         <span className="w-28 shrink-0">
-          <span className="block text-[14px] font-semibold text-k-text">{dayDate(r.scheduledDate, locale)}</span>
-          <span className="block text-[13px] text-k-text-2">{itemWhen(r as never, t)}</span>
+          <span className="block text-k-base font-semibold text-k-text">{dayDate(r.scheduledDate, locale)}</span>
+          <span className="block text-k-sm text-k-text-2">{itemWhen(r as never, t)}</span>
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-[14px] font-semibold text-k-text">{t(`type.${r.type}`)}</span>
-          {line && <span className="block truncate text-[13px] text-k-text-2">{line}</span>}
+          <span className="block text-k-base font-semibold text-k-text">{t(`type.${r.type}`)}</span>
+          {line && <span className="block truncate text-k-sm text-k-text-2">{line}</span>}
           {result && (
-            <span className="block truncate text-[13px] text-k-success">
+            <span className="block truncate text-k-sm text-k-success">
               {t('detail.result')}: {result}
             </span>
           )}
@@ -212,14 +217,14 @@ export default async function GestionPage({
   };
   /** El hilo que une los puntos: pasa por detrás y se corta en el primero y el último. */
   const thread = <span aria-hidden className="absolute bottom-7 left-[25px] top-7 w-0.5 bg-k-light-bg" />;
-  const groupTitle = 'mb-1 text-[12px] font-semibold uppercase tracking-wide text-k-text-2';
+  const groupTitle = 'mb-1 text-k-xs font-semibold uppercase tracking-wide text-k-text-2';
 
   return (
     <>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-[28px] font-semibold tracking-tight text-k-navy">{client.displayName}</h1>
-          <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px] text-k-text-2">
+          <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-k-base text-k-text-2">
             <span>{t(`type.${item.type}`)}</span>
             <span aria-hidden>·</span>
             <span>{dayDate(item.scheduledDate, locale)}</span>
@@ -250,7 +255,10 @@ export default async function GestionPage({
               rescheduleReasons={rescheduleReasons?.body.data ?? []}
               canExecute={actions.length > 0}
               // Una visita que una ruta lleva se registra en su parada (con GPS y evidencia): acá solo se manda a la ruta.
-              routeStopHref={route ? `/rutas/${route.routeId}/parada/${route.stopId}` : undefined}
+              routeStopHref={route && routesShown ? `/rutas/${route.routeId}/parada/${route.stopId}` : undefined}
+              // F15 (G6): una visita que una ruta lleva se registra en su parada, con GPS y evidencia. Con Rutas oculto no hay a dónde
+              // mandar, y caer a «Completar» la cerraría sin esa evidencia: la acción no se ofrece (sigue pudiendo reagendarse o cancelarse).
+              completeBlocked={Boolean(route) && !routesShown}
               editable={canEdit ? item : undefined}
               schedule={{ timeMode: item.timeMode, scheduledTime: item.scheduledTime, timeSlot: item.timeSlot }}
               assign={me.body.data?.permissions?.includes(Permission.AGENDA_ASSIGN) ? { meId: me.body.data.userId } : undefined}
@@ -268,10 +276,10 @@ export default async function GestionPage({
           {/* La tarjeta azul de la ficha de cartera: lo que se debe, en grande, sobre el mismo fondo del menú. */}
           <section className="rounded-2xl bg-k-navy p-6 text-white">
             <div className="flex items-start justify-between gap-3">
-              <h2 className="text-[18px] font-semibold">{t('detail.creditInfo')}</h2>
+              <h2 className="text-k-xl font-semibold">{t('detail.creditInfo')}</h2>
               <Link
                 href={`/mora/${item.creditId}`}
-                className="shrink-0 text-[13px] font-medium text-white/85 hover:text-white hover:underline"
+                className="shrink-0 text-k-sm font-medium text-white/85 hover:text-white hover:underline"
               >
                 {t('detail.seeInMora')} →
               </Link>
@@ -281,7 +289,7 @@ export default async function GestionPage({
                 {credit?.code ?? credit?.creditId ?? '—'}
               </Datum>
               <Datum dark label={t('detail.balanceNow')}>
-                <span className="text-[22px] font-semibold tabular-nums">
+                <span className="text-k-3xl font-semibold tabular-nums">
                   {credit ? money(credit.outstandingBalance, credit.currency) : '—'}
                 </span>
               </Datum>
@@ -298,7 +306,7 @@ export default async function GestionPage({
           </section>
 
           <section className="rounded-2xl border border-k-border bg-white p-6">
-            <h2 className="text-[18px] font-semibold text-k-navy">{t('detail.gestion')}</h2>
+            <h2 className="text-k-xl font-semibold text-k-navy">{t('detail.gestion')}</h2>
             <dl className="mt-5 grid grid-cols-3 divide-x divide-k-border">
               <div className="pr-4">
                 <Datum label={t('detail.type')}>{t(`type.${item.type}`)}</Datum>
@@ -328,12 +336,12 @@ export default async function GestionPage({
             {/* Qué pasó: sin esto una gestión ejecutada solo decía «Ejecutada». */}
             {execution && (
               <div className="mt-5 border-t border-k-border pt-5">
-                <p className="text-[13px] text-k-text-2">{t('detail.result')}</p>
+                <p className="text-k-sm text-k-text-2">{t('detail.result')}</p>
                 <div className="mt-2 rounded-xl bg-k-success-bg px-4 py-3">
-                  <p className="text-[14px] font-semibold text-k-success">{outcomeLabel(execution.outcome) ?? t('status.EXECUTED')}</p>
-                  {execution.notes && <p className="mt-1 whitespace-pre-wrap text-[14px] text-k-text">{execution.notes}</p>}
+                  <p className="text-k-base font-semibold text-k-success">{outcomeLabel(execution.outcome) ?? t('status.EXECUTED')}</p>
+                  {execution.notes && <p className="mt-1 whitespace-pre-wrap text-k-base text-k-text">{execution.notes}</p>}
                 </div>
-                <p className="mt-2 text-[12px] text-k-text-2">
+                <p className="mt-2 text-k-xs text-k-text-2">
                   {execution.byName
                     ? t('detail.executedBy', { name: execution.byName, date: dateTime(execution.at, locale) })
                     : t('detail.executedOn', { date: dateTime(execution.at, locale) })}
@@ -345,27 +353,27 @@ export default async function GestionPage({
               <div className="mt-5 space-y-4 border-t border-k-border pt-5">
                 {reminder && (
                   <div>
-                    <p className="text-[13px] text-k-text-2">{t('detail.remember')}</p>
-                    <p className="mt-2 rounded-xl bg-k-bg px-4 py-3 text-[14px] text-k-text">{reminder}</p>
+                    <p className="text-k-sm text-k-text-2">{t('detail.remember')}</p>
+                    <p className="mt-2 rounded-xl bg-k-bg px-4 py-3 text-k-base text-k-text">{reminder}</p>
                   </div>
                 )}
                 {message && (
                   <div>
-                    <p className="text-[13px] text-k-text-2">{t('detail.message')}</p>
-                    <p className="mt-2 whitespace-pre-wrap rounded-xl bg-k-bg px-4 py-3 text-[14px] text-k-text">{message}</p>
+                    <p className="text-k-sm text-k-text-2">{t('detail.message')}</p>
+                    <p className="mt-2 whitespace-pre-wrap rounded-xl bg-k-bg px-4 py-3 text-k-base text-k-text">{message}</p>
                   </div>
                 )}
                 {item.observations && (
                   <div>
-                    <p className="text-[13px] text-k-text-2">{t('detail.observations')}</p>
-                    <p className="mt-2 whitespace-pre-wrap rounded-xl bg-k-bg px-4 py-3 text-[14px] text-k-text">{item.observations}</p>
+                    <p className="text-k-sm text-k-text-2">{t('detail.observations')}</p>
+                    <p className="mt-2 whitespace-pre-wrap rounded-xl bg-k-bg px-4 py-3 text-k-base text-k-text">{item.observations}</p>
                   </div>
                 )}
               </div>
             )}
 
             {(reasonLabel || rescheduledTo || item.rescheduledFromId) && (
-              <div className="mt-5 space-y-1.5 border-t border-k-border pt-5 text-[13px] text-k-text-2">
+              <div className="mt-5 space-y-1.5 border-t border-k-border pt-5 text-k-sm text-k-text-2">
                 {reasonLabel && (
                   <p>
                     {t('detail.reason')}: <span className="font-medium text-k-text">{reasonLabel}</span>
@@ -391,7 +399,7 @@ export default async function GestionPage({
         </div>
 
         <section className="rounded-2xl border border-k-border bg-white p-6">
-          <h2 className="mb-4 text-[18px] font-semibold text-k-navy">{t('detail.history')}</h2>
+          <h2 className="mb-4 text-k-xl font-semibold text-k-navy">{t('detail.history')}</h2>
           {upcoming.length > 0 && (
             <>
               <h3 className={groupTitle}>{t('detail.upcoming')}</h3>
@@ -410,7 +418,7 @@ export default async function GestionPage({
               </ol>
               {past.length > PAST_VISIBLE && (
                 <details className="mt-1">
-                  <summary className="cursor-pointer list-none rounded-xl px-2 py-2 text-[13px] font-medium text-k-periwinkle hover:bg-k-bg">
+                  <summary className="cursor-pointer list-none rounded-xl px-2 py-2 text-k-sm font-medium text-k-periwinkle hover:bg-k-bg">
                     {t('detail.showMore', { n: past.length - PAST_VISIBLE })}
                   </summary>
                   <ol className="relative">
@@ -421,7 +429,7 @@ export default async function GestionPage({
               )}
             </>
           )}
-          {history.length === 0 && <p className="mt-3 text-[13px] text-k-text-2">{t('detail.historyEmpty')}</p>}
+          {history.length === 0 && <p className="mt-3 text-k-sm text-k-text-2">{t('detail.historyEmpty')}</p>}
         </section>
       </div>
     </>

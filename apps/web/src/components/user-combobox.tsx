@@ -114,13 +114,13 @@ export function SearchCombobox({
           setOpen(true);
         }}
         onKeyDown={onKeyDown}
-        className="h-[52px] w-full rounded-xl border-[1.5px] border-k-light-bg bg-white px-3.5 text-[15px] text-k-text outline-none transition-all placeholder:text-k-muted focus:border-k-periwinkle focus:shadow-k-focus disabled:opacity-60"
+        className="h-[52px] w-full rounded-xl border-[1.5px] border-k-light-bg bg-white px-3.5 text-k-md text-k-text outline-none transition-all placeholder:text-k-muted focus:border-k-periwinkle focus:shadow-k-focus disabled:opacity-60"
       />
       {open && (
         <div className="absolute left-0 right-0 z-20 mt-1 overflow-hidden rounded-xl border border-k-border bg-white shadow-k-card">
           <ul id={listId} role="listbox" aria-label={label} className="max-h-56 overflow-y-auto py-1">
             {shown.length === 0 ? (
-              <li className="px-3.5 py-2.5 text-[13px] text-k-text-2">{noResults}</li>
+              <li className="px-3.5 py-2.5 text-k-sm text-k-text-2">{noResults}</li>
             ) : (
               shown.map((o, i) => (
                 <li
@@ -133,10 +133,10 @@ export function SearchCombobox({
                     e.preventDefault();
                     pick(o.id);
                   }}
-                  className={`cursor-pointer px-3.5 py-2 text-[14px] ${i === active ? 'bg-k-bg' : ''} ${o.id === value ? 'font-semibold text-k-navy' : 'text-k-text'}`}
+                  className={`cursor-pointer px-3.5 py-2 text-k-base ${i === active ? 'bg-k-bg' : ''} ${o.id === value ? 'font-semibold text-k-navy' : 'text-k-text'}`}
                 >
                   <span className="block">{o.label}</span>
-                  {o.detail && <span className="block text-[12px] text-k-text-2">{o.detail}</span>}
+                  {o.detail && <span className="block text-k-xs text-k-text-2">{o.detail}</span>}
                 </li>
               ))
             )}

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import type { ClientDuplicateMatch } from '@kobrax/shared';
+import { Checkbox } from '@/components/form-kit';
 import { usePermissions } from '@/components/permissions';
 
 /** Link a la ficha en otra pestaña: el alta a medio cargar no se pierde por ir a mirar. */
@@ -23,7 +24,7 @@ export function DocumentTaken({ match }: { match: ClientDuplicateMatch }) {
   const t = useTranslations('portfolio.duplicate');
   const { can } = usePermissions();
   return (
-    <div role="alert" className="mt-1.5 text-[13px] text-k-danger">
+    <div role="alert" className="mt-1.5 text-k-sm text-k-danger">
       {match.hidden ? (
         // F14 · F2b (D-6, revisada): el cliente ya existe y lo llevan otras personas; con quien tiene `credit:create` se le ofrece
         // crear SU crédito sobre él (recién entonces lo ve).
@@ -63,7 +64,7 @@ export function NamesTaken({
 }) {
   const t = useTranslations('portfolio.duplicate');
   return (
-    <div role="status" className="mb-3 rounded-md border-l-[3px] border-k-warning bg-k-warning-bg px-3 py-2 text-[13px] text-k-warning-text">
+    <div role="status" className="mb-3 rounded-md border-l-[3px] border-k-warning bg-k-warning-bg px-3 py-2 text-k-sm text-k-warning-text">
       <p className="font-medium">{t('namesTitle', { n: matches.length })}</p>
       <p className="mt-0.5">{t('namesText')}</p>
       <ul className="mt-2 space-y-1">
@@ -77,10 +78,13 @@ export function NamesTaken({
           </li>
         ))}
       </ul>
-      <label className="mt-2 flex items-center gap-2 font-medium">
-        <input type="checkbox" checked={accepted} onChange={(e) => onAccept(e.target.checked)} disabled={disabled} />
-        {t('acceptNames')}
-      </label>
+      <Checkbox
+        className="mt-2 font-medium"
+        checked={accepted}
+        onChange={(e) => onAccept(e.target.checked)}
+        disabled={disabled}
+        label={t('acceptNames')}
+      />
     </div>
   );
 }

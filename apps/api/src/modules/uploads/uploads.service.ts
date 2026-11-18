@@ -23,6 +23,25 @@ const ALLOWED: Record<string, string> = {
 };
 
 /**
+ * S-12: el MIME lo declara el cliente; los primeros bytes dicen qué es de verdad. Un `.png` que es un HTML o un ejecutable se
+ * rechaza. Sólo se verifican los formatos con firma fija (imágenes, PDF, xlsx/zip, xls/OLE); CSV y TXT no tienen firma.
+ */
+const SIGNATURES: Record<string, (b: Buffer) => boolean> = {
+  'image/jpeg': (b) => b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+  'image/png': (b) => b.length > 8 && b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+  'image/webp': (b) => b.length > 12 && b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP',
+  'application/pdf': (b) => b.subarray(0, 1024).includes('%PDF-'),
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': (b) => b.length > 4 && b[0] === 0x50 && b[1] === 0x4b,
+  'application/vnd.ms-excel': (b) => b.length > 4 && b[0] === 0xd0 && b[1] === 0xcf && b[2] === 0x11 && b[3] === 0xe0,
+};
+
+/** `true` si el contenido es coherente con el tipo declarado (o si ese tipo no tiene firma que comprobar). */
+export function matchesDeclaredType(mimeType: string, buffer: Buffer): boolean {
+  const check = SIGNATURES[mimeType];
+  return check ? check(buffer) : true;
+}
+
+/**
  * El tipo con el que se sirve un archivo, deducido de su extensión.
  *
  * No es cosmético: la app manda `X-Content-Type-Options: nosniff`, y con ese header un
@@ -95,6 +114,7 @@ export class UploadsService {
     const ext = ALLOWED[file.mimetype];
     if (!ext) throw fileRejected(`Tipo no permitido: ${file.mimetype}. Solo JPEG, PNG o WebP.`);
     if (file.size > MAX_UPLOAD_BYTES) throw fileRejected('El archivo supera los 8 MB');
+    if (!matchesDeclaredType(file.mimetype, file.buffer)) throw fileRejected('El contenido del archivo no corresponde a su tipo');
 
     // Hash del buffer ORIGINAL (evidencia inmutable), y además nombra el archivo: subir dos veces
     // el mismo contenido no lo duplica.
@@ -117,6 +137,7 @@ export class UploadsService {
   async storeDocument(buffer: Buffer, mimeType: string, folder: 'imports'): Promise<StoredDocument> {
     const ext = DOCUMENTS[mimeType];
     if (!ext) throw fileRejected(`Tipo de documento no permitido: ${mimeType}`);
+    if (!matchesDeclaredType(mimeType, buffer)) throw fileRejected('El contenido del documento no corresponde a su tipo');
     const hash = sha256OfBuffer(buffer);
     const dir = join(this.root, this.tenant.accountId, folder);
     await mkdir(dir, { recursive: true });

@@ -1,4 +1,4 @@
-import { Permission } from '@kobrax/shared';
+import { Permission, emptyWorkspace, resolveWorkspace, type Workspace, type WorkspaceNavKey } from '@kobrax/shared';
 import { isUuid } from './uuid';
 
 /**
@@ -105,9 +105,12 @@ function canSee(item: NavItem, granted: ReadonlySet<string>): boolean {
   return item.permission === null || granted.has(item.permission);
 }
 
-export function visibleNav(permissions: string[]): NavItem[] {
+export function visibleNav(permissions: string[], workspace?: Workspace | null): NavItem[] {
   const granted = new Set(permissions);
-  return NAV.filter((item) => !item.hidden && canSee(item, granted))
+  // F15: lo que la organización ocultó sale del menú. Solo QUITA (R1): nunca aparece algo que el permiso no daba. Un ítem sin
+  // entrada en el catálogo (p. ej. el de seguridad de la sesión) o troncal siempre se muestra.
+  const shown = resolveWorkspace(workspace ?? emptyWorkspace());
+  return NAV.filter((item) => !item.hidden && canSee(item, granted) && shown.showsModule(item.label as WorkspaceNavKey))
     .map((item) => (item.children ? { ...item, children: item.children.filter((c) => granted.has(c.permission)) } : item))
     // Un grupo sin ningún hijo visible no lleva a ningún lado: no se dibuja.
     .filter((item) => !item.children || item.children.length > 0);

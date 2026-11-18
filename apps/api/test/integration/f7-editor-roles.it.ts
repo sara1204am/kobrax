@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import type { PrismaClient } from '@prisma/client';
 import { Permission, PERMISSION_META } from '@kobrax/shared';
 import type { PermissionCatalogEntry, RoleCompare, RoleDetail, RoleHistoryPage, RoleSummary, RoleUpdateResult } from '@kobrax/shared';
-import { API, addMember, call, db, freshDatabase, login, loginSkippingMfa, startApi, stopApi } from './harness';
+import { API, addMember, call, db, freshDatabase, login, loginSkippingMfa, startApi, stopApi, legalAcceptance } from './harness';
 
 const suffix = randomUUID().slice(0, 8);
 let prisma: PrismaClient;
@@ -26,7 +26,7 @@ async function signup(label: string): Promise<{ id: string; admin: string }> {
   const res = await fetch(`${API}/accounts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ businessName: `Empresa ${label}`, firstName: 'Dueño', lastName: label, email, password: 'Kobrax123!' }),
+    body: JSON.stringify({ ...(await legalAcceptance()), businessName: `Empresa ${label}`, firstName: 'Dueño', lastName: label, email, password: 'Kobrax123!' }),
   });
   assert.equal(res.status, 201, await res.text());
   const owner = await prisma.user.findUniqueOrThrow({ where: { email }, include: { userAccounts: true } });

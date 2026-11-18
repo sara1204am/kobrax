@@ -1,11 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { compare, hash } from 'bcryptjs';
 import { randomBytes } from 'node:crypto';
-import { KOBRAX, isPasswordValid } from '@kobrax/shared';
+import { KOBRAX, LegalAcceptanceSource, isPasswordValid } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { SessionService } from './session.service';
 import { AppConfigService } from '../../config/app-config.service';
 import { MailService, passwordResetBody } from '../../common/mail/mail.service';
+import { LegalService, type LegalAcceptanceInput } from '../legal/legal.service';
 import { normalizeInvitationCode, sha256hex } from './invitation-code';
 import { invitationInvalid, invalidCredentials, resetTokenInvalid, weakPassword } from './auth.errors';
 
@@ -25,6 +26,7 @@ export class PasswordService {
     private readonly sessions: SessionService,
     private readonly config: AppConfigService,
     private readonly mail: MailService,
+    private readonly legal: LegalService,
   ) {}
 
   private hashToken(token: string): string {
@@ -107,7 +109,8 @@ export class PasswordService {
   async acceptInvitation(
     rawCode: string,
     password: string,
-    meta: { ip?: string; userAgent?: string },
+    meta: { ip?: string; userAgent?: string; appVersion?: string; source?: LegalAcceptanceSource },
+    legal: LegalAcceptanceInput = {},
   ): Promise<{ email: string }> {
     if (!isPasswordValid(password)) throw weakPassword();
     // ponytail: leer el token acá y marcarlo usado más abajo es una ventana en la que dos
@@ -124,7 +127,17 @@ export class PasswordService {
     await this.prisma.withTenant(accountId, async (tx) => {
       await tx.user.update({
         where: { id: record.userId },
-        data: { passwordHash, status: 'ACTIVE', requiresPasswordChange: false },
+        // Quien acepta una invitación ya probó que el correo es suyo (el código le llegó ahí): nace confirmado.
+        data: { passwordHash, status: 'ACTIVE', requiresPasswordChange: false, emailVerifiedAt: new Date() },
+      });
+      // Privacidad: la persona invitada también acepta los Términos y reconoce la Política antes de entrar. Dentro de la misma
+      // transacción: si falta una aceptación, la invitación NO se consume y el usuario sigue PENDING.
+      await this.legal.recordOnboarding(tx, {
+        userId: record.userId,
+        accountId,
+        source: meta.source ?? LegalAcceptanceSource.INVITATION_WEB,
+        evidence: { ip: meta.ip, userAgent: meta.userAgent, appVersion: meta.appVersion },
+        ...legal,
       });
       // Un solo uso: marca éste e invalida cualquier otro pendiente del usuario.
       await tx.passwordResetToken.updateMany({

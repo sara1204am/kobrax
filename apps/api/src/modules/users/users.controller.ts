@@ -9,21 +9,38 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
 import { Permission } from '@kobrax/shared';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UsersService } from './users.service';
+import { GuidesService } from './guides.service';
 import { MemberDetailService, decodeCursor } from './member-detail.service';
 import { InviteMemberDto, UpdateMemberDto, UpdateProfileDto } from './dto/user.dto';
 import { Authenticated } from '../auth/decorators/authz.decorator';
+import { RequireVerifiedEmail } from '../auth/decorators/require-verified-email.decorator';
 
 @Controller('users')
 export class UsersController {
   constructor(
     private readonly users: UsersService,
     private readonly detail: MemberDetailService,
+    private readonly guides: GuidesService,
   ) {}
+
+  // F15 · P6: el estado de las guías de la propia persona. Sin permiso: cada quien solo toca su fila (la clave sale de la sesión).
+  @Get('me/guides')
+  @Authenticated()
+  getMyGuides() {
+    return this.guides.get();
+  }
+
+  @Put('me/guides')
+  @Authenticated()
+  putMyGuides(@Body() body: Record<string, unknown>) {
+    return this.guides.put(body);
+  }
 
   // `me/profile` va antes que `:id` por claridad; no colisionan (2 segmentos vs 1).
   // Sin @Roles: es el propio perfil. Exigir un permiso dejaría al COLLECTOR sin
@@ -95,6 +112,7 @@ export class UsersController {
 
   // `invite` va antes que `:id` por claridad; no colisionan (POST vs PATCH/DELETE).
   @Post('invite')
+  @RequireVerifiedEmail()
   @Roles(Permission.USER_INVITE)
   invite(@Body() dto: InviteMemberDto) {
     return this.users.invite(dto);

@@ -12,8 +12,8 @@ export function paidPercent(principal: number | undefined, balance: number | und
 function Cell({ label, value, danger }: { label: string; value: string; danger?: boolean }) {
   return (
     <div className="bg-white px-4 py-3.5">
-      <dt className="text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{label}</dt>
-      <dd className={`mt-1 text-[16px] font-semibold tabular-nums ${danger ? 'text-k-danger' : 'text-k-text'}`}>{value}</dd>
+      <dt className="text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">{label}</dt>
+      <dd className={`mt-1 text-k-lg font-semibold tabular-nums ${danger ? 'text-k-danger' : 'text-k-text'}`}>{value}</dd>
     </div>
   );
 }
@@ -74,7 +74,7 @@ export function FichaSummary({
       <div className="rounded-2xl border border-k-border bg-white p-5">
         <div className="grid gap-5 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
           <div className="rounded-2xl bg-k-navy p-5 text-white">
-            <p className="text-[13px] text-white/70">{t('detail.balanceOwed')}</p>
+            <p className="text-k-sm text-white/70">{t('detail.balanceOwed')}</p>
             <p className="mt-1 text-[32px] font-semibold leading-tight tabular-nums">{amount(balance)}</p>
 
             {pct !== undefined && (
@@ -89,18 +89,18 @@ export function FichaSummary({
                 >
                   <div className="h-full rounded-full bg-k-periwinkle" style={{ width: `${pct}%` }} />
                 </div>
-                <span className="text-[13px] tabular-nums text-white/70">{pct} %</span>
+                <span className="text-k-sm tabular-nums text-white/70">{pct} %</span>
               </div>
             )}
 
             <div className="mt-4 grid grid-cols-2 gap-4 border-t border-white/15 pt-4">
               <div>
-                <p className="text-[11px] uppercase tracking-wide text-white/60">{t('detail.principal')}</p>
-                <p className="mt-0.5 text-[18px] font-semibold tabular-nums">{amount(principal)}</p>
+                <p className="text-k-2xs uppercase tracking-wide text-white/60">{t('detail.principal')}</p>
+                <p className="mt-0.5 text-k-xl font-semibold tabular-nums">{amount(principal)}</p>
               </div>
               <div>
-                <p className="text-[11px] uppercase tracking-wide text-white/60">{t('detail.overdue')}</p>
-                <p className="mt-0.5 text-[18px] font-semibold tabular-nums text-k-danger">{amount(overdue)}</p>
+                <p className="text-k-2xs uppercase tracking-wide text-white/60">{t('detail.overdue')}</p>
+                <p className="mt-0.5 text-k-xl font-semibold tabular-nums text-k-danger">{amount(overdue)}</p>
               </div>
             </div>
           </div>
@@ -123,10 +123,10 @@ export function FichaSummary({
         </div>
 
         <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 border-t border-k-border pt-4">
-          <Link href={clientHref} className="text-[14px] font-medium text-k-purple hover:underline">
+          <Link href={clientHref} className="text-k-base font-medium text-k-purple hover:underline">
             {t('detail.openClient')}
           </Link>
-          <Link href={creditHref} className="text-[14px] font-medium text-k-purple hover:underline">
+          <Link href={creditHref} className="text-k-base font-medium text-k-purple hover:underline">
             {t('detail.openCredit')}
           </Link>
         </div>

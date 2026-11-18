@@ -33,11 +33,11 @@ export default async function CuentaAvanzadoPage() {
   return (
     <>
       <Section title={t('backup.title')} inner="space-y-3 p-6">
-        <p className="text-[13px] leading-relaxed text-k-text-2">{t('backup.text')}</p>
+        <p className="text-k-sm leading-relaxed text-k-text-2">{t('backup.text')}</p>
         {/* Descarga directa: la ruta del BFF ya valida `report:export` y audita la exportación. */}
         <a
           href="/api/exports/backup"
-          className="inline-flex h-11 items-center rounded-xl border border-k-border bg-white px-5 text-[14px] font-semibold text-k-navy hover:bg-k-bg"
+          className="inline-flex h-11 items-center rounded-xl border border-k-border bg-white px-5 text-k-base font-semibold text-k-navy hover:bg-k-bg"
         >
           {t('backup.download')}
         </a>

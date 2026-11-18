@@ -15,6 +15,8 @@ import {
 } from '@/components';
 import { validateSignup, type SignupForm } from '@/account-form';
 import { signup } from '@/account.service';
+import { EMPTY_CHOICE, canSubmitLegal, legalPayload, type LegalChoice } from '@kobrax/shared';
+import { LegalConsents, useSignupDocuments } from '@/legal-consents';
 import { authService, type Step } from '@/auth-service';
 import { goToStep } from '@/route-step';
 import { COLORS, RADIUS, SPACING, TYPE } from '@/theme';
@@ -119,6 +121,10 @@ export default function RegistroScreen() {
   const [created, setCreated] = useState(false);
   /** Alta OK y sesión resuelta: se confirma antes de mandarla al paso siguiente. */
   const [done, setDone] = useState<Step | null>(null);
+  // Privacidad: los documentos vigentes y lo que la persona marcó (todo nace desmarcado). Sin las dos casillas no hay alta.
+  const legalDocs = useSignupDocuments();
+  const [choice, setChoice] = useState<LegalChoice>(EMPTY_CHOICE);
+  const [stale, setStale] = useState(false);
 
   const set = (k: keyof SignupForm) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -138,9 +144,18 @@ export default function RegistroScreen() {
       email,
       // El servidor lo revalida contra su lista blanca: acá es una preferencia, no una decisión.
       planCode: plan ?? 'FREE',
+      // Los ids de las versiones que se le mostraron: el servidor calcula el hash con su copia y rechaza una versión vencida.
+      ...legalPayload(legalDocs.docs, choice),
     });
     if (res.status !== 'ok') {
       setLoading(false);
+      if (res.status === 'error' && res.code === 'LEGAL_VERSION_STALE') {
+        // Se publicó una versión nueva mientras llenaba el formulario: se recarga y se le pide volver a marcar. No se creó nada.
+        setChoice(EMPTY_CHOICE);
+        setStale(true);
+        void legalDocs.reload();
+        return;
+      }
       setError(
         res.status === 'offline'
           ? 'Sin conexión. Para crear la cuenta necesitás internet.'
@@ -311,10 +326,25 @@ export default function RegistroScreen() {
           />
           <PasswordChecklist password={form.password} />
 
+          {!created && (
+            <LegalConsents
+              docs={legalDocs.docs}
+              state={legalDocs.state}
+              onReload={() => void legalDocs.reload()}
+              choice={choice}
+              onChange={(next) => {
+                setStale(false);
+                setChoice(next);
+              }}
+              disabled={loading}
+              stale={stale}
+            />
+          )}
+
           {created ? (
             <Button label="Ir a iniciar sesión" onPress={() => router.replace('/(auth)/login')} />
           ) : (
-            <Button label="Crear cuenta" onPress={submit} loading={loading} />
+            <Button label="Crear cuenta" onPress={submit} loading={loading} disabled={!canSubmitLegal(legalDocs.docs, choice)} />
           )}
           <TextLink label="Ya tengo cuenta" onPress={() => router.replace('/(auth)/login')} />
         </Card>

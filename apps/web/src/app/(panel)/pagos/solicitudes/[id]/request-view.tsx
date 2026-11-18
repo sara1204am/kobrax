@@ -83,15 +83,15 @@ export function RequestView({
       </Card>
 
       <Card>
-        <p className="text-[12px] font-semibold uppercase tracking-wide text-k-text-2">{t('request.qr')}</p>
+        <p className="text-k-xs font-semibold uppercase tracking-wide text-k-text-2">{t('request.qr')}</p>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         {qr && <img src={qr} alt={t('request.qr')} className="mt-3 h-[220px] w-[220px]" />}
 
         {request.url && (
           <div className="mt-5">
-            <p className="text-[12px] font-semibold uppercase tracking-wide text-k-text-2">{t('request.link')}</p>
+            <p className="text-k-xs font-semibold uppercase tracking-wide text-k-text-2">{t('request.link')}</p>
             <div className="mt-2 flex flex-wrap items-center gap-3">
-              <span className="break-all text-[14px] text-k-text">{request.url}</span>
+              <span className="break-all text-k-base text-k-text">{request.url}</span>
               <Button
                 variant="ghost"
                 onClick={() => {
@@ -113,7 +113,7 @@ export function RequestView({
               tiene: sin él el botón no se dibuja, o quedaría un 403 esperando. */}
           {can('payment:approve') ? (
             <>
-              <p className="text-[14px] text-k-text-2">{t('request.confirmHint')}</p>
+              <p className="text-k-base text-k-text-2">{t('request.confirmHint')}</p>
               <div className="mt-4">
                 <Button onClick={confirm} loading={busy} className="sm:w-auto sm:px-5">
                   {t('request.confirmEntry')}
@@ -121,7 +121,7 @@ export function RequestView({
               </div>
             </>
           ) : (
-            <p className="text-[14px] text-k-text-2">{t('request.noApprove')}</p>
+            <p className="text-k-base text-k-text-2">{t('request.noApprove')}</p>
           )}
         </Card>
       )}

@@ -12,7 +12,7 @@ import { hashSync } from 'bcryptjs';
 import type { PrismaClient } from '@prisma/client';
 import { ROLE_PERMISSIONS, RoleType } from '@kobrax/shared';
 import { totpNow } from '../../src/modules/auth/totp';
-import { API, call, db, freshDatabase, loginSkippingMfa, startApi, stopApi } from './harness';
+import { API, call, db, freshDatabase, loginSkippingMfa, startApi, stopApi, legalAcceptance } from './harness';
 
 const suffix = randomUUID().slice(0, 8);
 const ENROLL_KEY = `it-enroll-${suffix}-0123456789`;
@@ -25,7 +25,7 @@ async function signup(label: string): Promise<{ id: string; admin: string; email
   const res = await fetch(`${API}/accounts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ businessName: `Empresa ${label}`, firstName: 'Dueño', lastName: label, email, password: 'Kobrax123!' }),
+    body: JSON.stringify({ ...(await legalAcceptance()), businessName: `Empresa ${label}`, firstName: 'Dueño', lastName: label, email, password: 'Kobrax123!' }),
   });
   assert.equal(res.status, 201, await res.text());
   const owner = await prisma.user.findUniqueOrThrow({ where: { email }, include: { userAccounts: true } });

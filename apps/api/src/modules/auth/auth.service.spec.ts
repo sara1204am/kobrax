@@ -433,7 +433,28 @@ describe('AuthService.me — sesión del token (W-LOG-54)', () => {
       timezone: null,
       soloUser: false,
       preferences: { workDays: [1, 2, 3, 4, 5, 6], workStart: '08:00', workEnd: '18:00', weekStart: 'MON', defaultLocale: 'es' },
+      workspace: { version: 1, rev: 0, hiddenModules: [], options: {} },
+      onboarding: null,
     });
+  });
+
+  it('🔴 F15 · P6: entrega el estado del asistente a todo miembro (solo el estado: sin quién ni cuándo); null en una cuenta anterior', async () => {
+    const user = { id: 'u1', email: 'c@kobrax.demo', profile: null, mfaEnabled: false, requiresPasswordChange: false };
+    const configuration = { onboarding: { v: 1, status: 'done', decidedBy: 'u9', decidedAt: '2026-11-14T00:00:00.000Z', preset: 'team' } };
+    const me = await makeAuth({ user, brand: { businessName: 'Cobranzas', phone: null, logoUrl: null, configuration } }).service.me({ userId: 'u1', accountId: 'a1', roleId: 'r1', permissions: [] });
+    assert.deepEqual(me.account?.onboarding, { status: 'done' });
+    assert.ok(!JSON.stringify(me.account).includes('u9'), 'quién lo resolvió no viaja por /auth/me');
+  });
+
+  it('🔴 F15 · A-9: entrega el espacio de trabajo a todo miembro (Completo si nunca se configuró), sin conteos ni datos de la cuenta', async () => {
+    const user = { id: 'u1', email: 'c@kobrax.demo', profile: null, mfaEnabled: false, requiresPasswordChange: false };
+    const nunca = await makeAuth({ user, brand: { businessName: 'Cobranzas', phone: null, logoUrl: null } }).service.me({ userId: 'u1', accountId: 'a1', roleId: 'r1', permissions: [] });
+    assert.deepEqual(nunca.account?.workspace, { version: 1, rev: 0, hiddenModules: [], options: {} });
+
+    const configuration = { billing: { legalName: 'Pérez SRL' }, workspace: { version: 1, rev: 3, hiddenModules: ['routes'], options: { 'client.income': false } } };
+    const con = await makeAuth({ user, brand: { businessName: 'Cobranzas', phone: null, logoUrl: null, configuration } }).service.me({ userId: 'u1', accountId: 'a1', roleId: 'r1', permissions: [] });
+    assert.deepEqual(con.account?.workspace, { version: 1, rev: 3, hiddenModules: ['routes'], options: { 'client.income': false } });
+    assert.ok(!JSON.stringify(con.account).includes('Pérez SRL'), 'la facturación no viaja por /auth/me');
   });
 
   it('entrega las preferencias de trabajo de la cuenta junto con la marca (la agenda las lee sin account:read)', async () => {
@@ -590,5 +611,42 @@ describe('AuthService — canal móvil y roles de campo (F14 · F8, D-3 y D-5)',
     assert.equal(token.verifyAccess(web.accessToken!).ch, 'web');
     const raro = await login([memb('COLLECTOR')], 'otra-cosa');
     assert.equal(token.verifyAccess(raro.accessToken!).ch, 'api');
+  });
+});
+
+/** S-9: tope de fallos de MFA por usuario (independiente de la IP). */
+describe('AuthService.mfaChallenge — contador por usuario', () => {
+  function make(codeOk: () => boolean) {
+    const store = new Map<string, number>();
+    const redis = {
+      get: async (k: string) => (store.has(k) ? String(store.get(k)) : null),
+      del: async (k: string) => void store.delete(k),
+      multi: () => ({
+        incr: (k: string) => {
+          store.set(k, (store.get(k) ?? 0) + 1);
+          return { expire: () => ({ exec: async () => [] }) };
+        },
+      }),
+    };
+    const mfa = { challenge: async () => codeOk(), isCritical: async () => false };
+    const prisma = { $queryRaw: async () => [], withTenant: async () => [] };
+    const service = new AuthService(prisma as never, token, {} as never, {} as never, mfa as never, { record: async () => {} } as never, {} as never, redis as never);
+    return { service, store };
+  }
+  const pre = () => token.signPreAuth({ sub: 'u-mfa', purpose: 'mfa' });
+
+  it('tras 5 fallos bloquea con 429 aunque el código sea correcto', async () => {
+    let ok = false;
+    const { service } = make(() => ok);
+    for (let i = 0; i < 5; i++) await assert.rejects(() => service.mfaChallenge(pre(), '000000', META), (e: { getStatus?: () => number }) => e.getStatus?.() === 401);
+    ok = true;
+    await assert.rejects(() => service.mfaChallenge(pre(), '123456', META), (e: { getStatus?: () => number }) => e.getStatus?.() === 429);
+  });
+
+  it('el contador es por usuario: otro usuario no queda bloqueado', async () => {
+    const { service, store } = make(() => false);
+    for (let i = 0; i < 5; i++) await service.mfaChallenge(pre(), '000000', META).catch(() => undefined);
+    assert.equal(store.get('mfa:fail:u-mfa'), 5);
+    assert.equal(store.has('mfa:fail:otro'), false);
   });
 });

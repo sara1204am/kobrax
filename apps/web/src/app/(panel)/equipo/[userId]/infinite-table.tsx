@@ -77,14 +77,14 @@ export function InfiniteTable<T extends { id: string }>({
 
   return (
     <div ref={box} className="max-h-[560px] overflow-auto rounded-xl border border-k-border">
-      <table className="w-full text-[14px]" style={{ minWidth }}>
+      <table className="w-full text-k-base" style={{ minWidth }}>
         <thead>
           <tr>
             {columns.map((c) => (
               <th
                 key={c.key}
                 scope="col"
-                className="sticky top-0 z-10 border-b border-k-border bg-white px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-k-text-2"
+                className="sticky top-0 z-10 border-b border-k-border bg-white px-3 py-2.5 text-left text-k-2xs font-semibold uppercase tracking-wide text-k-text-2"
               >
                 {c.header}
               </th>
@@ -103,7 +103,7 @@ export function InfiniteTable<T extends { id: string }>({
           ))}
         </tbody>
       </table>
-      <div ref={end} className="px-3 py-3 text-center text-[12px] text-k-text-2" aria-live="polite">
+      <div ref={end} className="px-3 py-3 text-center text-k-xs text-k-text-2" aria-live="polite">
         {loading && t('loading')}
         {failed && (
           <button type="button" onClick={() => void more()} className="font-medium text-k-periwinkle hover:underline">

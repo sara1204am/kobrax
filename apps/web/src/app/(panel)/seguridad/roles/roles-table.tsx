@@ -55,7 +55,7 @@ export function RolesTable({ roles, timezone, userId }: { roles: RoleSummary[]; 
       entityLabel={t('title').toLowerCase()}
       actions={
         can('role:read') ? (
-          <Link href="/seguridad/roles/comparar" className="flex h-10 items-center rounded-xl border border-k-border bg-white px-4 text-[14px] font-medium text-k-text-2 hover:bg-k-bg">
+          <Link href="/seguridad/roles/comparar" className="flex h-10 items-center rounded-xl border border-k-border bg-white px-4 text-k-base font-medium text-k-text-2 hover:bg-k-bg">
             {t('compare')}
           </Link>
         ) : undefined

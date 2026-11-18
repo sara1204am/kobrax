@@ -23,15 +23,15 @@ export async function CollectorsTable({
   currency: string;
 }) {
   const t = await getTranslations('panel.dashboard');
-  if (rows.length === 0) return <p className="text-[13px] text-k-text-2">{t('noCollectors')}</p>;
+  if (rows.length === 0) return <p className="text-k-sm text-k-text-2">{t('noCollectors')}</p>;
 
   const byId = new Map(members.map((m) => [m.userId, memberName(m)]));
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-[13px]">
+      <table className="w-full border-collapse text-k-sm">
         <thead>
-          <tr className="border-b border-k-border text-left text-[11px] font-semibold uppercase tracking-wide text-k-text-2">
+          <tr className="border-b border-k-border text-left text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">
             <th scope="col" className="py-2 pr-3">{t('table.collector')}</th>
             <th scope="col" className="py-2 pr-3 text-right">{t('table.inArrears')}</th>
             <th scope="col" className="py-2 pr-3 text-right">{t('table.balance')}</th>
@@ -66,7 +66,7 @@ export async function CollectorsTable({
       </table>
 
       {rows.length > 8 && (
-        <Link href="/mora" className="mt-3 inline-block text-[13px] font-medium text-k-purple hover:underline">
+        <Link href="/mora" className="mt-3 inline-block text-k-sm font-medium text-k-purple hover:underline">
           {t('table.seeAll', { n: rows.length })}
         </Link>
       )}

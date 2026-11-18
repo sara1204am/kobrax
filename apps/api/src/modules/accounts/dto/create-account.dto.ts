@@ -1,6 +1,7 @@
 import { IsEmail, IsIn, IsOptional, IsString, Length, MaxLength, MinLength } from 'class-validator';
 import { EMAIL_MAX_LENGTH, MaxBytes, PASSWORD_MAX_BYTES } from '../../../common/validation/max-bytes';
 import { SIGNUP_PLANS, type SignupPlan } from '@kobrax/shared';
+import { LegalAcceptanceDto } from '../../legal/dto/legal-acceptance.dto';
 
 /**
  * Registro público (CUENTA · S4). Es un endpoint **sin sesión**: este DTO es la
@@ -12,7 +13,7 @@ import { SIGNUP_PLANS, type SignupPlan } from '@kobrax/shared';
  * País y moneda **no están a propósito** (S4-D8): arrancan en el default del
  * mercado y se configuran después en la pantalla de datos de la cuenta (S1).
  */
-export class CreateAccountDto {
+export class CreateAccountDto extends LegalAcceptanceDto {
   @IsString() @Length(2, 160) businessName!: string;
   @IsString() @Length(1, 80) firstName!: string;
   @IsString() @Length(1, 80) lastName!: string;

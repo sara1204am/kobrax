@@ -71,14 +71,14 @@ export class OwnershipService {
     await this.tx(async (tx) => {
       await tx.userAccount.update({ where: { id: me.id }, data: { isOwner: false } });
       await tx.userAccount.update({ where: { id: target.id }, data: { isOwner: true } });
-    });
-
-    await this.audit.record({
-      entity: 'user_account',
-      entityId: target.id,
-      action: 'OWNERSHIP_TRANSFER',
-      before: { ownerUserId: me.userId, ownerName: names.from },
-      after: { ownerUserId: target.userId, ownerName: names.to },
+      // S-11: el traspaso de la cuenta no existe sin su rastro (misma transacción).
+      await this.audit.recordInTx(tx, {
+        entity: 'user_account',
+        entityId: target.id,
+        action: 'OWNERSHIP_TRANSFER',
+        before: { ownerUserId: me.userId, ownerName: names.from },
+        after: { ownerUserId: target.userId, ownerName: names.to },
+      });
     });
 
     // 5) Aviso a los dos. Es un aviso: si falla, el traspaso ya está hecho y auditado.

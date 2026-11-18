@@ -25,6 +25,7 @@ import { RouteEditor } from './route-editor';
 import { RouteActions } from './route-actions';
 import { NextStopCard } from './next-stop-card';
 import { ChangeRequestsPanel } from './change-requests-panel';
+import { requirePermission } from '@/lib/authz';
 
 /** Techo de lo que se trae de un día —pagos y visitas—. Un día de un tenant no llega a tanto. */
 const DAY_LIMIT = 100;
@@ -50,6 +51,8 @@ export default async function RutaPage({
   params: { id: string };
   searchParams: PlanParams & { editar?: string };
 }) {
+  const blocked = await requirePermission(Permission.ROUTE_READ);
+  if (blocked) return blocked;
   const t = await getTranslations('panel.routes');
   const locale = await getLocale();
 
@@ -184,7 +187,7 @@ export default async function RutaPage({
             />
             {/* Navegación llana: el navegador maneja la descarga con el `Content-Disposition` del
                 backend. Mismo revelado auditado que ya paga esta pantalla al pedir el detalle. */}
-            <a href={`/api/routes/${route.id}/pdf`} className="text-[13px] font-medium text-k-purple hover:underline">
+            <a href={`/api/routes/${route.id}/pdf`} className="text-k-sm font-medium text-k-purple hover:underline">
               {t('detail.downloadPdf')}
             </a>
           </div>
@@ -226,7 +229,7 @@ export default async function RutaPage({
                 style={{ width: `${summary.percent}%` }}
               />
             </div>
-            <span className="shrink-0 text-[12px] font-medium tabular-nums text-k-text-2">{summary.percent}%</span>
+            <span className="shrink-0 text-k-xs font-medium tabular-nums text-k-text-2">{summary.percent}%</span>
           </div>
 
           {/* Sólo las categorías con al menos una parada: un cero no cuenta nada y ocupa lugar. */}
@@ -244,7 +247,7 @@ export default async function RutaPage({
 
           {/* El motivo escrito de un cierre con paradas sin gestionar, o de una cancelación: queda a la vista. */}
           {route.statusReason && closed && (
-            <p className="mt-4 rounded-lg border border-k-border bg-k-bg px-3 py-2 text-[13px] text-k-text-2">
+            <p className="mt-4 rounded-lg border border-k-border bg-k-bg px-3 py-2 text-k-sm text-k-text-2">
               <span className="font-medium text-k-text">
                 {route.status === 'CANCELLED' ? t('detail.cancelledReason') : t('detail.reasonOfClose')}:
               </span>{' '}
@@ -291,7 +294,7 @@ export default async function RutaPage({
           />
         ) : (
           <section>
-            <h2 className="mb-3 text-[18px] font-semibold text-k-navy">{t('detail.stops')}</h2>
+            <h2 className="mb-3 text-k-xl font-semibold text-k-navy">{t('detail.stops')}</h2>
             <EmptyState title={t('detail.stopsEmpty')} />
           </section>
         )}
@@ -321,14 +324,14 @@ function Stat({
 }) {
   return (
     <div className={`min-w-0 ${divided ? 'lg:border-l lg:border-k-border lg:pl-6' : 'lg:pr-6'}`}>
-      <dt className="text-[13px] text-k-slate">{label}</dt>
+      <dt className="text-k-sm text-k-slate">{label}</dt>
       <dd
         className={`mt-1 tabular-nums ${
           value === null
-            ? 'text-[15px] text-k-text-2'
+            ? 'text-k-md text-k-text-2'
             : strong
-              ? 'text-[26px] font-semibold leading-tight text-k-navy'
-              : 'text-[22px] font-medium leading-tight text-k-navy'
+              ? 'text-k-4xl font-semibold leading-tight text-k-navy'
+              : 'text-k-3xl font-medium leading-tight text-k-navy'
         }`}
       >
         {value ?? empty}

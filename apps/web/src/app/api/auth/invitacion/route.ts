@@ -16,14 +16,24 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json({ error: { code: 'CSRF', message: 'Origen no permitido' } }, { status: 403 });
   }
 
-  const { code, password } = (await req.json().catch(() => ({}))) as { code?: string; password?: string };
+  const { code, password, termsVersionId, privacyVersionId, marketingOptIn, analyticsOptIn } = (await req
+    .json()
+    .catch(() => ({}))) as {
+    code?: string;
+    password?: string;
+    termsVersionId?: string;
+    privacyVersionId?: string;
+    marketingOptIn?: boolean;
+    analyticsOptIn?: boolean;
+  };
   if (!code || !password) {
     return NextResponse.json({ error: { code: 'VALIDATION', message: 'Faltan datos' } }, { status: 400 });
   }
 
   const { status, body } = await apiCall<{ email: string }>('/auth/invitation/accept', {
     method: 'POST',
-    body: JSON.stringify({ code, password }),
+    // Privacidad: se transportan los ids de lo que aceptó; el servidor revalida contra la versión vigente.
+    body: JSON.stringify({ code, password, termsVersionId, privacyVersionId, marketingOptIn, analyticsOptIn }),
   });
   if (status >= 400 || !body.data) return apiError(status, body);
   // Si llegó con las cookies de otra sesión, esa sesión se cierra (en el servidor y en el navegador).

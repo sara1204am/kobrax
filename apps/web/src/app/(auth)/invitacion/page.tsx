@@ -8,6 +8,8 @@ import { AuthShell } from '@/components/auth-shell';
 import { Button, ErrorBanner, Field, Input } from '@/components/ui';
 import { allPassed, PasswordChecklist } from '@/components/password-checklist';
 import { postJson, routeByStep, type AccountOption, type Step } from '@/lib/client';
+import { LegalConsents, useSignupDocuments } from '@/components/legal-consents';
+import { EMPTY_CHOICE, canSubmitLegal, legalPayload, type LegalChoice } from '@/lib/legal';
 
 interface Invitation {
   email: string;
@@ -38,6 +40,10 @@ export default function InvitacionPage() {
   const [loading, setLoading] = useState(false);
   /** La invitación ya se aceptó y el login posterior falló: reintentar sería un código usado. */
   const [accepted, setAccepted] = useState(false);
+  // Privacidad: quien se une por invitación también acepta los Términos y reconoce la Política antes de entrar.
+  const legalDocs = useSignupDocuments();
+  const [choice, setChoice] = useState<LegalChoice>(EMPTY_CHOICE);
+  const [stale, setStale] = useState(false);
 
   async function lookup(raw: string) {
     setError(null);
@@ -74,9 +80,19 @@ export default function InvitacionPage() {
     setError(null);
     setLoading(true);
 
-    const res = await postJson('/api/auth/invitacion', { code: code.trim(), password });
+    const res = await postJson('/api/auth/invitacion', {
+      code: code.trim(),
+      password,
+      ...legalPayload(legalDocs.docs, choice),
+    });
     if (!res.ok) {
       setLoading(false);
+      if (res.data.error?.code === 'LEGAL_VERSION_STALE') {
+        setChoice(EMPTY_CHOICE);
+        setStale(true);
+        void legalDocs.reload();
+        return;
+      }
       setError(res.data.error?.message ?? t('acceptError'));
       return;
     }
@@ -122,7 +138,7 @@ export default function InvitacionPage() {
           <Button type="submit" variant="cta" loading={loading} disabled={code.trim().length < CODE_MIN}>
             {t('lookup')}
           </Button>
-          <Link href="/login" className="block text-center text-[13px] font-medium text-k-purple">
+          <Link href="/login" className="block text-center text-k-sm font-medium text-k-purple">
             {t('backToLogin')}
           </Link>
         </form>
@@ -167,12 +183,27 @@ export default function InvitacionPage() {
             required
           />
         </Field>
-        {mismatch && <p className="text-[12px] text-k-danger">{t('mismatch')}</p>}
+        {mismatch && <p className="text-k-xs text-k-danger">{t('mismatch')}</p>}
+
+        {!accepted && (
+          <LegalConsents
+            docs={legalDocs.docs}
+            state={legalDocs.state}
+            onReload={() => void legalDocs.reload()}
+            choice={choice}
+            onChange={(next) => {
+              setStale(false);
+              setChoice(next);
+            }}
+            disabled={loading}
+            stale={stale}
+          />
+        )}
 
         {accepted ? (
           <Link
             href="/login"
-            className="flex h-12 w-full items-center justify-center rounded-xl border border-k-border bg-white text-[15px] font-semibold text-k-text-2 hover:bg-k-bg"
+            className="flex h-12 w-full items-center justify-center rounded-xl border border-k-border bg-white text-k-md font-semibold text-k-text-2 hover:bg-k-bg"
           >
             {t('goToLogin')}
           </Link>
@@ -181,7 +212,7 @@ export default function InvitacionPage() {
             type="submit"
             variant="cta"
             loading={loading}
-            disabled={!allPassed(password) || password !== confirm}
+            disabled={!allPassed(password) || password !== confirm || !canSubmitLegal(legalDocs.docs, choice)}
           >
             {t('submit')}
           </Button>

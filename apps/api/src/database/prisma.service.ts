@@ -146,6 +146,19 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   }
 
   /**
+   * Corre `fn` en una transacción que declara su SUPERFICIE (`app.surface`): `'public'` (el formulario sin sesión) o `'platform'` (la consola
+   * de plataforma). Es lo único que deja ver y escribir los reportes de personas sin cuenta (`privacy_requests.subject_kind = THIRD_PARTY`): la
+   * policy de RLS los niega a cualquier otra consulta, incluida una de empresa que se olvide un filtro. `grep withSurface` lista quién entra.
+   * No fija cuenta ni usuario: estas filas no pertenecen a ninguna empresa.
+   */
+  async withSurface<T>(surface: 'public' | 'platform', fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
+    return this.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT set_config('app.surface', ${surface}, true)`;
+      return fn(tx as unknown as PrismaClient);
+    });
+  }
+
+  /**
    * F14 · F2b: sube a alcance `system` **dentro de la transacción en curso** para UNA lectura que necesita ver toda la cuenta aunque
    * quien pide tenga un alcance menor (los topes del plan, la detección de duplicados, el emparejamiento de las importaciones), y
    * vuelve al alcance original. No cambia de transacción ni de usuario: sólo el alcance de lectura, y sólo mientras corre `fn`.

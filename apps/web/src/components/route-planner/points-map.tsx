@@ -442,7 +442,7 @@ export function PointsMap({
     if (!label.current) {
       const chip = document.createElement('div');
       chip.className =
-        'pointer-events-none whitespace-nowrap rounded-full border border-k-periwinkle bg-white px-2 py-0.5 text-[11px] font-semibold text-k-periwinkle shadow';
+        'pointer-events-none whitespace-nowrap rounded-full border border-k-periwinkle bg-white px-2 py-0.5 text-k-2xs font-semibold text-k-periwinkle shadow';
       label.current = new Marker({ element: chip }).setLngLat([circle.longitude, circle.latitude]).addTo(m);
     }
     if (circle.label) label.current.getElement().textContent = circle.label;
@@ -452,7 +452,7 @@ export function PointsMap({
     if (!center.current) {
       const handle = document.createElement('div');
       handle.className =
-        'flex h-6 w-6 cursor-grab items-center justify-center rounded-full border-2 border-white bg-k-periwinkle text-[11px] text-white shadow active:cursor-grabbing';
+        'flex h-6 w-6 cursor-grab items-center justify-center rounded-full border-2 border-white bg-k-periwinkle text-k-2xs text-white shadow active:cursor-grabbing';
       handle.textContent = '✥';
       handle.setAttribute('aria-hidden', 'true');
       center.current = new Marker({ element: handle, draggable: true })
@@ -496,12 +496,12 @@ export function PointsMap({
             onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
             placeholder={t('mapSearch')}
             aria-label={t('mapSearch')}
-            className="h-9 w-full rounded-lg border border-k-border bg-white px-3 text-[13px] text-k-text shadow outline-none focus:border-k-periwinkle"
+            className="h-9 w-full rounded-lg border border-k-border bg-white px-3 text-k-sm text-k-text shadow outline-none focus:border-k-periwinkle"
           />
           {searchOpen && query.trim().length >= 2 && (
             <ul className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-lg border border-k-border bg-white py-1 shadow-k-card">
               {found.length === 0 ? (
-                <li className="px-3 py-2 text-[12px] text-k-text-2">{t('mapSearchNone')}</li>
+                <li className="px-3 py-2 text-k-xs text-k-text-2">{t('mapSearchNone')}</li>
               ) : (
                 found.map((p) => (
                   <li key={p.id}>
@@ -515,8 +515,8 @@ export function PointsMap({
                       }}
                       className="block w-full px-3 py-1.5 text-left hover:bg-k-bg"
                     >
-                      <span className="block truncate text-[13px] font-medium text-k-text">{p.label}</span>
-                      {p.detail && <span className="block truncate text-[11px] text-k-text-2">{p.detail}</span>}
+                      <span className="block truncate text-k-sm font-medium text-k-text">{p.label}</span>
+                      {p.detail && <span className="block truncate text-k-2xs text-k-text-2">{p.detail}</span>}
                     </button>
                   </li>
                 ))
@@ -526,12 +526,12 @@ export function PointsMap({
         </div>
 
         {trip && nextStop && (
-          <div className="rounded-lg border border-k-border bg-white px-3 py-2 text-[12px] text-k-text-2 shadow">
+          <div className="rounded-lg border border-k-border bg-white px-3 py-2 text-k-xs text-k-text-2 shadow">
             <p className="font-medium text-k-text">{t('mapToNext', { km: trip.distanceKm })}</p>
             <p className="mt-0.5 tabular-nums">
               {t('mapByVehicle', { min: trip.minutes })} · {t('mapOnFoot', { min: Math.max(1, Math.round((trip.distanceKm / WALK_KMH) * 60)) })}
             </p>
-            <p className="mt-0.5 text-[11px] text-k-muted">{t('mapFootNote')}</p>
+            <p className="mt-0.5 text-k-2xs text-k-muted">{t('mapFootNote')}</p>
           </div>
         )}
 
@@ -539,14 +539,14 @@ export function PointsMap({
           <button
             type="button"
             onClick={() => goTo(nextStop)}
-            className="h-9 rounded-lg border border-k-border bg-white px-3 text-left text-[13px] font-medium text-k-purple shadow hover:bg-k-highlight"
+            className="h-9 rounded-lg border border-k-border bg-white px-3 text-left text-k-sm font-medium text-k-purple shadow hover:bg-k-highlight"
           >
             {t('mapNextStop')}
           </button>
         )}
       </div>
 
-      <div role="group" className="absolute bottom-6 left-3 z-10 flex overflow-hidden rounded-lg border border-k-border bg-white text-[12px] font-medium shadow">
+      <div role="group" className="absolute bottom-6 left-3 z-10 flex overflow-hidden rounded-lg border border-k-border bg-white text-k-xs font-medium shadow">
         {(['map', 'satellite'] as const).map((b) => (
           <button
             key={b}
@@ -632,7 +632,7 @@ function pinClass(p: MapPoint, focused: boolean): string {
   // Dónde se registró una visita: más chico y de otro color, no compite con la parada — la distancia entre los dos es lo que se mira.
   if (p.tone === 'visit') return `${base} h-3 w-3 border-2 bg-k-purple${ring}`;
   if (p.tone === 'suggestion') {
-    return `${base} h-5 w-5 border-2 border-k-warning bg-white text-[13px] font-bold leading-none text-k-warning-text group-hover:bg-k-warning-bg${ring}`;
+    return `${base} h-5 w-5 border-2 border-k-warning bg-white text-k-sm font-bold leading-none text-k-warning-text group-hover:bg-k-warning-bg${ring}`;
   }
   if (p.order) {
     const fill =
@@ -645,7 +645,7 @@ function pinClass(p: MapPoint, focused: boolean): string {
             : 'bg-k-navy group-hover:bg-k-slate';
     // La que tiene una visita agendada lleva un aro: es un compromiso, no sólo una parada.
     const agenda = p.tone === 'scheduled' ? ' ring-2 ring-k-warning' : '';
-    return `${base} h-6 w-6 border-2 text-[11px] font-semibold text-white ${fill}${agenda}${ring}`;
+    return `${base} h-6 w-6 border-2 text-k-2xs font-semibold text-white ${fill}${agenda}${ring}`;
   }
   return p.picked
     ? `${base} h-4 w-4 border-2 bg-k-navy group-hover:bg-k-slate${ring}`
@@ -697,13 +697,13 @@ function fillTip(hit: HTMLElement, p: MapPoint, focused: boolean): void {
   tip.replaceChildren();
 
   const name = document.createElement('span');
-  name.className = 'block text-[12px] font-semibold text-k-text';
+  name.className = 'block text-k-xs font-semibold text-k-text';
   name.textContent = p.label;
   tip.appendChild(name);
 
   if (p.detail) {
     const sub = document.createElement('span');
-    sub.className = 'block text-[11px] text-k-text-2';
+    sub.className = 'block text-k-2xs text-k-text-2';
     sub.textContent = p.detail;
     tip.appendChild(sub);
   }
@@ -712,7 +712,7 @@ function fillTip(hit: HTMLElement, p: MapPoint, focused: boolean): void {
     row.className = 'mt-1 flex flex-wrap gap-1';
     for (const b of p.badges) {
       const chip = document.createElement('span');
-      chip.className = `rounded-full px-2 py-0.5 text-[10px] font-medium ${BADGE_CLASS[b.tone]}`;
+      chip.className = `rounded-full px-2 py-0.5 text-k-3xs font-medium ${BADGE_CLASS[b.tone]}`;
       chip.textContent = b.label;
       row.appendChild(chip);
     }

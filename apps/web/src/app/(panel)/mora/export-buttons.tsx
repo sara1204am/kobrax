@@ -65,7 +65,7 @@ export function ExportButtons() {
           loading={busy === format}
           disabled={busy !== null}
           onClick={() => download(format)}
-          className="h-9 text-[13px] sm:w-auto sm:px-3"
+          className="h-9 text-k-sm sm:w-auto sm:px-3"
         >
           {busy === format ? t('working') : t(format)}
         </Button>

@@ -27,7 +27,7 @@ export function Stepper({ current }: { current: number }) {
             <span className="flex items-center gap-2 px-1">
               <span
                 aria-hidden
-                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[12px] font-semibold ${
+                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-k-xs font-semibold ${
                   done
                     ? 'bg-k-success text-white'
                     : here
@@ -38,7 +38,7 @@ export function Stepper({ current }: { current: number }) {
                 {done ? '✓' : i + 1}
               </span>
               <span
-                className={`whitespace-nowrap text-[13px] ${here ? 'font-semibold text-k-navy' : 'text-k-text-2'}`}
+                className={`whitespace-nowrap text-k-sm ${here ? 'font-semibold text-k-navy' : 'text-k-text-2'}`}
               >
                 {/* El paso actual se anuncia, no se deduce del color. */}
                 {here && <span className="sr-only">{t('here')} </span>}
@@ -65,7 +65,7 @@ export type SaveState = 'idle' | 'saving' | 'saved';
 export function SaveIndicator({ state }: { state: SaveState }) {
   const t = useTranslations('panel.import.setup');
   return (
-    <p aria-live="polite" className="text-[13px] text-k-text-2">
+    <p aria-live="polite" className="text-k-sm text-k-text-2">
       {state === 'saving' ? (
         t('saving')
       ) : state === 'saved' ? (
@@ -98,7 +98,7 @@ function Donut({ ready, total }: { ready: number; total: number }) {
           className="stroke-k-periwinkle transition-all"
         />
       </svg>
-      <span className="absolute inset-0 flex items-center justify-center text-[16px] font-semibold tabular-nums text-k-navy">
+      <span className="absolute inset-0 flex items-center justify-center text-k-lg font-semibold tabular-nums text-k-navy">
         {ready}/{total}
       </span>
     </div>
@@ -126,10 +126,10 @@ export function StatusCard({ progress }: { progress: ConfigProgress }) {
 
   return (
     <Card>
-      <p className="text-[14px] font-medium text-k-text">{t('status')}</p>
+      <p className="text-k-base font-medium text-k-text">{t('status')}</p>
       <div className="mt-4 flex items-center gap-4">
         <Donut ready={ready} total={total} />
-        <ul className="min-w-0 space-y-1.5 text-[13px]">
+        <ul className="min-w-0 space-y-1.5 text-k-sm">
           <Line tone="success" label={t('statusReadyCount', { n: ready })} />
           {review > 0 && <Line tone="warning" label={t('statusReviewCount', { n: review })} />}
           {missing > 0 && (
@@ -138,7 +138,7 @@ export function StatusCard({ progress }: { progress: ConfigProgress }) {
         </ul>
       </div>
       <p
-        className={`mt-4 rounded-xl px-4 py-3 text-[13px] ${
+        className={`mt-4 rounded-xl px-4 py-3 text-k-sm ${
           blocking.length
             ? 'bg-k-danger-bg text-k-danger'
             : total === ready
@@ -187,13 +187,13 @@ export function Summary({ rows, children }: { rows: SummaryRow[]; children?: Rea
 
   return (
     <section aria-label={t('summary')} className="rounded-2xl border border-k-border bg-white p-5">
-      <p className="text-[14px] font-medium text-k-text">{t('summary')}</p>
+      <p className="text-k-base font-medium text-k-text">{t('summary')}</p>
       <dl className="mt-4 space-y-3">
         {rows.map((row) => (
           <div key={row.label}>
-            <dt className="text-[12px] font-semibold uppercase tracking-wide text-k-text-2">{row.label}</dt>
+            <dt className="text-k-xs font-semibold uppercase tracking-wide text-k-text-2">{row.label}</dt>
             <dd
-              className={`mt-0.5 break-words text-[13px] ${
+              className={`mt-0.5 break-words text-k-sm ${
                 row.ok === false ? 'text-k-muted' : 'font-medium text-k-text'
               }`}
             >

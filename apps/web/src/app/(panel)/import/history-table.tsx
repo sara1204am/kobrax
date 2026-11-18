@@ -88,11 +88,11 @@ export function ImportHistoryTable({
       sortable: false,
       render: (r) =>
         r.file ? (
-          <span className="block max-w-[220px] truncate text-[13px] text-k-text-2" title={r.file.name}>
+          <span className="block max-w-[220px] truncate text-k-sm text-k-text-2" title={r.file.name}>
             {r.file.name}
           </span>
         ) : (
-          <span className="text-[13px] text-k-muted">{t('noFile')}</span>
+          <span className="text-k-sm text-k-muted">{t('noFile')}</span>
         ),
     },
     { key: 'reportDate', header: t('columns.reportDate'), sortable: false, render: (r) => (r.reportDate ? dayDate(r.reportDate, locale) : '—') },

@@ -121,7 +121,7 @@ export function GeneralForm({ account }: { account: AccountInfo }) {
                     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
                     if (tz) setForm({ ...form, timezone: tz });
                   }}
-                  className="shrink-0 rounded-xl border border-k-border bg-white px-3 text-[13px] font-medium text-k-text-2 hover:bg-k-bg"
+                  className="shrink-0 rounded-xl border border-k-border bg-white px-3 text-k-sm font-medium text-k-text-2 hover:bg-k-bg"
                 >
                   {t('timezoneDetect')}
                 </button>
@@ -134,7 +134,7 @@ export function GeneralForm({ account }: { account: AccountInfo }) {
           Lo personal —foto, teléfono, QR de cobro— vive en Mi perfil, no acá: es de la persona,
           no del negocio. Sin este puente, quien busca su QR abre Cuenta y no lo encuentra.
         */}
-        <p className="border-t border-k-border pt-4 text-[13px] text-k-text-2">
+        <p className="border-t border-k-border pt-4 text-k-sm text-k-text-2">
           {t('profileHint')}{' '}
           <Link href="/settings/perfil" className="font-medium text-k-purple hover:underline">
             {t('profileLink')}

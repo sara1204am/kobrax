@@ -6,20 +6,23 @@ import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { AuthAccountOption, NotificationPayload } from '@kobrax/shared';
 import { LocaleSwitch } from './locale-switch';
+import { TOUR_MENU_EVENT, TOUR_START_EVENT, useTour } from './tour';
 import { useAccountBrand } from './account-brand';
 import { crumbsFor, type Crumb, type NavItem, type NavKey } from '@/lib/nav';
 
 const ROLE_NAME_KEYS = ['ACCOUNT_ADMIN', 'MANAGER', 'SUPERVISOR', 'COLLECTOR', 'AUDITOR', 'VIEWER'];
 import { hardNavigate, postJson } from '@/lib/client';
 import { notificationHref } from '@/lib/notifications';
+import { useWorkspace } from './workspace';
 import { publishSessionEvent } from '@/lib/session-sync';
 import { SessionWatcher } from './session-watcher';
 import { BillingAlert } from './billing-alert';
 import { SupportBanner } from './support-banner';
+import { PanelFooter } from './panel-footer';
 
 /** Fila de cualquiera de los dos menús de la topbar: 44 px de toque, ancho completo. */
 const MENU_ITEM =
-  'flex min-h-[44px] w-full items-center gap-2 px-3 text-left text-[14px] text-k-text hover:bg-k-bg disabled:opacity-60';
+  'flex min-h-[44px] w-full items-center gap-2 px-3 text-left text-k-base text-k-text hover:bg-k-bg disabled:opacity-60';
 
 export interface ShellUser {
   /** Con `sessionId`, identifican la sesión con la que se cargó la pestaña (W-LOG-54). */
@@ -74,6 +77,19 @@ export function PanelShell({
   // tapando justo la pantalla a la que fuiste.
   useEffect(() => drawer.current?.close(), [pathname]);
 
+  // F15 · P9: el recorrido con spotlight abre y cierra el cajón para enfocar los ítems del menú en pantallas chicas.
+  useEffect(() => {
+    const onMenu = (e: Event) => {
+      const wantOpen = (e as CustomEvent<{ open: boolean }>).detail?.open;
+      if (wantOpen && !drawer.current?.open) {
+        drawer.current?.showModal();
+        setMenuOpen(true);
+      } else if (!wantOpen) drawer.current?.close();
+    };
+    window.addEventListener(TOUR_MENU_EVENT, onMenu);
+    return () => window.removeEventListener(TOUR_MENU_EVENT, onMenu);
+  }, []);
+
   /*
    * Cerrarlo también al llegar al ancho de escritorio.
    *
@@ -102,6 +118,7 @@ export function PanelShell({
         <NavList items={nav} pathname={pathname} badges={badges} collapsible />
         <SidebarIdentity user={user} collapsible />
         <SidebarLogout collapsible />
+        <PanelFooter collapsible />
       </aside>
 
       {/*
@@ -124,6 +141,7 @@ export function PanelShell({
           <NavList items={nav} pathname={pathname} badges={badges} />
           <SidebarIdentity user={user} />
           <SidebarLogout />
+          <PanelFooter />
         </div>
       </dialog>
 
@@ -138,7 +156,9 @@ export function PanelShell({
           }}
         />
         <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-5 sm:px-5 md:px-6 lg:px-8">
-          <SessionWatcher session={{ userId: user.userId, accountId: user.accountId, sessionId: user.sessionId }} />
+          <SessionWatcher
+            session={{ userId: user.userId, accountId: user.accountId, sessionId: user.sessionId }}
+          />
           {supportSession && <SupportBanner expiresAt={supportSession.expiresAt} />}
           <BillingAlert missing={billingMissing ?? []} />
           {children}
@@ -152,7 +172,13 @@ function Brand({ expanded = false }: { expanded?: boolean }) {
   return (
     <div className="flex h-16 items-center gap-3 px-5">
       {/* eslint-disable-next-line @next/next/no-img-element -- 28px fijos, no necesita el optimizador */}
-      <img src="/logo.png" alt="" width={28} height={28} className="h-7 w-7 shrink-0 object-contain" />
+      <img
+        src="/logo.png"
+        alt=""
+        width={28}
+        height={28}
+        className="h-7 w-7 shrink-0 object-contain"
+      />
       <span
         className={`text-[17px] font-semibold tracking-[0.16em] text-white ${
           expanded ? '' : 'hidden xl:inline'
@@ -191,11 +217,19 @@ function NavList({
           // El borde transparente está en TODOS los ítems, no sólo en el activo: si apareciera
           // recién al activarse, la fila se correría 3 px cada vez que cambiás de pantalla.
           const base =
-            'flex min-h-[44px] items-center gap-3 rounded-xl border-l-[3px] border-transparent px-3 text-[14px] font-medium transition-colors';
+            'flex min-h-[44px] items-center gap-3 rounded-xl border-l-[3px] border-transparent px-3 text-k-base font-medium transition-colors';
 
           if (item.built && item.children) {
             return (
-              <NavGroup key={item.href} item={item} active={active} pathname={pathname} base={base} labelClass={labelClass} collapsible={collapsible} />
+              <NavGroup
+                key={item.href}
+                item={item}
+                active={active}
+                pathname={pathname}
+                base={base}
+                labelClass={labelClass}
+                collapsible={collapsible}
+              />
             );
           }
 
@@ -205,6 +239,7 @@ function NavList({
                 <Link
                   href={item.href}
                   aria-current={active ? 'page' : undefined}
+                  data-tour={`nav.${item.label}`}
                   title={t(`nav.${item.label}`)}
                   className={`${base} ${
                     active
@@ -217,7 +252,7 @@ function NavList({
                   {badges?.[item.label] && (
                     <span
                       aria-label={t('nav.pending', { n: badges[item.label]!.count })}
-                      className={`ml-auto rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white ${
+                      className={`ml-auto rounded-full px-1.5 py-0.5 text-k-2xs font-semibold tabular-nums text-white ${
                         badges[item.label]!.urgent ? 'bg-k-danger' : 'bg-white/25'
                       }`}
                     >
@@ -234,7 +269,7 @@ function NavList({
                   <Icon name={item.label} />
                   <span className={`flex-1 ${labelClass}`}>{t(`nav.${item.label}`)}</span>
                   <span
-                    className={`rounded-md bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/50 ${labelClass}`}
+                    className={`rounded-md bg-white/10 px-1.5 py-0.5 text-k-3xs font-semibold uppercase tracking-wide text-white/50 ${labelClass}`}
                   >
                     {t('soon')}
                   </span>
@@ -274,13 +309,17 @@ function NavGroup({
       <button
         type="button"
         aria-expanded={open}
+        data-tour={`nav.${item.label}`}
         title={t(`nav.${item.label}`)}
         onClick={() => setOpen((o) => !o)}
         className={`${base} w-full text-left ${active ? 'border-k-soft-periw bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'}`}
       >
         <Icon name={item.label} />
         <span className={`flex-1 ${labelClass}`}>{t(`nav.${item.label}`)}</span>
-        <Icon name="chevron" className={`h-4 w-4 shrink-0 transition-transform ${labelClass} ${open ? 'rotate-180' : ''}`} />
+        <Icon
+          name="chevron"
+          className={`h-4 w-4 shrink-0 transition-transform ${labelClass} ${open ? 'rotate-180' : ''}`}
+        />
       </button>
       {open && (
         <ul className={`mt-1 space-y-1 ${collapsible ? 'hidden xl:block' : ''}`}>
@@ -291,8 +330,10 @@ function NavGroup({
                 <Link
                   href={child.href}
                   aria-current={childActive ? 'page' : undefined}
-                  className={`flex min-h-[40px] items-center rounded-xl border-l-[3px] border-transparent pl-10 pr-3 text-[13px] font-medium transition-colors ${
-                    childActive ? 'border-k-soft-periw bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'
+                  className={`flex min-h-[40px] items-center rounded-xl border-l-[3px] border-transparent pl-10 pr-3 text-k-sm font-medium transition-colors ${
+                    childActive
+                      ? 'border-k-soft-periw bg-white/10 text-white'
+                      : 'text-white/70 hover:bg-white/5 hover:text-white'
                   }`}
                 >
                   {t(`nav.${child.label}`)}
@@ -307,11 +348,59 @@ function NavGroup({
 }
 
 /**
+ * El botón «?» de la barra superior (F15 · P9): siempre a mano para repetir el recorrido general o retomarlo. P10 le suma la
+ * guía de esta pantalla y el Centro de ayuda.
+ */
+function HelpMenu() {
+  const t = useTranslations('help');
+  const tour = useTour();
+  const ref = useRef<HTMLDivElement>(null);
+  const begin = (resume: boolean, screen = false) => {
+    // Cierra el desplegable (<details>) antes de que el spotlight tome la pantalla.
+    ref.current?.querySelector('details')?.removeAttribute('open');
+    window.dispatchEvent(new CustomEvent(TOUR_START_EVENT, { detail: { resume, screen } }));
+  };
+  return (
+    <div ref={ref} data-tour="topbar.help" onClick={() => tour.refresh()}>
+      <Dropdown
+        chevron={false}
+        label={
+          <span
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-k-border text-k-md font-semibold text-k-text-2"
+            aria-label={t('button')}
+          >
+            ?
+          </span>
+        }
+      >
+        <button type="button" className={MENU_ITEM} onClick={() => begin(false)}>
+          {t('tour')}
+        </button>
+        {tour.screenModule !== null && (
+          <button type="button" className={MENU_ITEM} onClick={() => begin(false, true)}>
+            {t('screen')}
+          </button>
+        )}
+        <Link href="/ayuda" className={MENU_ITEM}>
+          {t('center')}
+        </Link>
+        {tour.resumeAt !== null && (
+          <button type="button" className={MENU_ITEM} onClick={() => begin(true)}>
+            {t('resume')}
+          </button>
+        )}
+      </Dropdown>
+    </div>
+  );
+}
+
+/**
  * La campanita: reemplaza al avatar en la topbar, que se fue al sidebar. Pide la lista una vez al
  * montar —no hay señal de «se abrió el desplegable» en `Dropdown`, que es sobre `<details>`— y
  * son pocas notificaciones propias, así que no vale la pena esperar al primer click para pedirlas.
  */
 function NotificationBell() {
+  const workspace = useWorkspace();
   const t = useTranslations('panel.notifications');
   const [items, setItems] = useState<NotificationPayload[] | null>(null);
   const [error, setError] = useState(false);
@@ -345,12 +434,17 @@ function NotificationBell() {
   }, []);
 
   async function markRead(id: string) {
-    setItems((cur) => cur?.map((n) => (n.id === id ? { ...n, readAt: new Date().toISOString() } : n)) ?? cur);
+    setItems(
+      (cur) =>
+        cur?.map((n) => (n.id === id ? { ...n, readAt: new Date().toISOString() } : n)) ?? cur,
+    );
     await postJson(`/api/notifications/${id}/read`, {});
   }
 
   async function markAllRead() {
-    setItems((cur) => cur?.map((n) => ({ ...n, readAt: n.readAt ?? new Date().toISOString() })) ?? cur);
+    setItems(
+      (cur) => cur?.map((n) => ({ ...n, readAt: n.readAt ?? new Date().toISOString() })) ?? cur,
+    );
     await postJson('/api/notifications/read-all', {});
   }
 
@@ -362,7 +456,7 @@ function NotificationBell() {
         <span className="relative flex h-9 w-9 items-center justify-center" aria-label={t('label')}>
           <Icon name="bell" className="h-5 w-5 text-k-text-2" />
           {unread > 0 && (
-            <span className="absolute right-0.5 top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-k-danger px-1 text-[10px] font-semibold leading-none text-white">
+            <span className="absolute right-0.5 top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-k-danger px-1 text-k-3xs font-semibold leading-none text-white">
               {unread > 9 ? '9+' : unread}
             </span>
           )}
@@ -371,38 +465,63 @@ function NotificationBell() {
       panelClass="absolute right-0 z-20 mt-1 w-[320px] overflow-hidden rounded-xl border border-k-border bg-white shadow-k-card"
     >
       <div className="flex items-center justify-between border-b border-k-border px-3 py-2.5">
-        <p className="text-[13px] font-semibold text-k-text">{t('title')}</p>
+        <p className="text-k-sm font-semibold text-k-text">{t('title')}</p>
         {unread > 0 && (
-          <button type="button" onClick={() => void markAllRead()} className="text-[12px] font-medium text-k-purple hover:underline">
+          <button
+            type="button"
+            onClick={() => void markAllRead()}
+            className="text-k-xs font-medium text-k-purple hover:underline"
+          >
             {t('markAllRead')}
           </button>
         )}
       </div>
 
       <div className="max-h-[360px] overflow-y-auto">
-        {error && <p className="px-3 py-4 text-[13px] text-k-danger">{t('loadError')}</p>}
-        {!error && items?.length === 0 && <p className="px-3 py-4 text-[13px] text-k-text-2">{t('empty')}</p>}
+        {error && <p className="px-3 py-4 text-k-sm text-k-danger">{t('loadError')}</p>}
+        {!error && items?.length === 0 && (
+          <p className="px-3 py-4 text-k-sm text-k-text-2">{t('empty')}</p>
+        )}
         {(items ?? []).map((n) => {
-          const href = notificationHref(n);
+          const href = notificationHref(n, workspace);
           const cls = `flex w-full items-start gap-2 border-b border-k-border px-3 py-2.5 text-left last:border-b-0 hover:bg-k-bg ${
             n.readAt ? '' : 'bg-k-highlight/40'
           }`;
           const body = (
             <>
-              {!n.readAt && <span aria-hidden className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-k-purple" />}
+              {!n.readAt && (
+                <span
+                  aria-hidden
+                  className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-k-purple"
+                />
+              )}
               <span className={`min-w-0 flex-1 ${n.readAt ? 'pl-3.5' : ''}`}>
-                <span className="block truncate text-[13px] font-medium text-k-text">{n.title}</span>
-                {n.body && <span className="block truncate text-[12px] text-k-text-2">{n.body}</span>}
+                <span className="block truncate text-k-sm font-medium text-k-text">
+                  {n.title}
+                </span>
+                {n.body && (
+                  <span className="block truncate text-k-xs text-k-text-2">{n.body}</span>
+                )}
               </span>
             </>
           );
           // Con destino, el aviso es un enlace (y se marca leído al tocarlo); sin destino, solo se marca leído.
           return href ? (
-            <Link key={n.id} href={href} onClick={() => !n.readAt && void markRead(n.id)} className={cls}>
+            <Link
+              key={n.id}
+              href={href}
+              onClick={() => !n.readAt && void markRead(n.id)}
+              className={cls}
+            >
               {body}
             </Link>
           ) : (
-            <button key={n.id} type="button" onClick={() => !n.readAt && void markRead(n.id)} className={cls}>
+            <button
+              key={n.id}
+              type="button"
+              onClick={() => !n.readAt && void markRead(n.id)}
+              className={cls}
+            >
               {body}
             </button>
           );
@@ -429,7 +548,11 @@ function Topbar({
   const tRoles = useTranslations('permissions.roleNames');
   // El rol se muestra con su nombre traducido; un rol propio de la cuenta (clave sin traducción) va tal cual.
   const crumbText = (crumb: Crumb) =>
-    crumb.roleKey ? (ROLE_NAME_KEYS.includes(crumb.roleKey) ? tRoles(crumb.roleKey) : crumb.roleKey) : t(crumb.label);
+    crumb.roleKey
+      ? ROLE_NAME_KEYS.includes(crumb.roleKey)
+        ? tRoles(crumb.roleKey)
+        : crumb.roleKey
+      : t(crumb.label);
   const brand = useAccountBrand();
   const current = accounts.find((a) => a.id === user.accountId);
   /*
@@ -464,7 +587,7 @@ function Topbar({
         />
       )}
       <nav aria-label={t('breadcrumb')} className="min-w-0 flex-1">
-        <ol className="flex items-center gap-1.5 text-[14px]">
+        <ol className="flex items-center gap-1.5 text-k-base">
           {crumbs.map((crumb, i) => (
             <li key={crumb.label} className="flex min-w-0 items-center gap-1.5">
               {i > 0 && (
@@ -487,7 +610,7 @@ function Topbar({
       {/* Empresa e idioma viven en la topbar desde tablet vertical; en celular se mudan al
           menú de usuario, que es el único desplegable que queda. */}
       {canSwitch && (
-        <div className="hidden md:block">
+        <div data-tour="topbar.accountSwitcher" className="hidden md:block">
           <Dropdown
             label={
               <span className={`max-w-[180px] truncate ${current ? '' : 'text-k-warning-text'}`}>
@@ -499,7 +622,7 @@ function Topbar({
           </Dropdown>
         </div>
       )}
-      <div className="hidden md:block">
+      <div data-tour="topbar.language" className="hidden md:block">
         <LocaleSwitch />
       </div>
 
@@ -512,7 +635,7 @@ function Topbar({
         <Dropdown label={<Icon name="account" className="h-5 w-5 text-k-text-2" />}>
           {canSwitch && (
             <div className="border-b border-k-border py-1.5">
-              <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-k-muted">
+              <p className="px-3 pb-1 text-k-2xs font-semibold uppercase tracking-wide text-k-muted">
                 {t('company')}
               </p>
               <AccountList accounts={accounts} activeId={user.accountId} />
@@ -524,7 +647,10 @@ function Topbar({
         </Dropdown>
       </div>
 
-      <NotificationBell />
+      <HelpMenu />
+      <div data-tour="topbar.notifications">
+        <NotificationBell />
+      </div>
     </header>
   );
 }
@@ -542,7 +668,7 @@ export function Dropdown({
   label,
   children,
   chevron = true,
-  summaryClass = 'flex min-h-[44px] cursor-pointer list-none items-center gap-2 rounded-xl px-2 text-[14px] text-k-text-2 hover:bg-k-bg [&::-webkit-details-marker]:hidden',
+  summaryClass = 'flex min-h-[44px] cursor-pointer list-none items-center gap-2 rounded-xl px-2 text-k-base text-k-text-2 hover:bg-k-bg [&::-webkit-details-marker]:hidden',
   panelClass = 'absolute right-0 z-20 mt-1 w-[260px] overflow-hidden rounded-xl border border-k-border bg-white shadow-k-card',
 }: {
   label: ReactNode;
@@ -633,7 +759,7 @@ function AccountList({ accounts, activeId }: { accounts: AuthAccountOption[]; ac
             >
               <span className="min-w-0 flex-1">
                 <span className="block truncate">{account.name}</span>
-                <span className="block truncate text-[12px] text-k-text-2">{account.role}</span>
+                <span className="block truncate text-k-xs text-k-text-2">{account.role}</span>
               </span>
               {account.id === activeId && <Icon name="check" className="h-4 w-4 text-k-purple" />}
             </button>
@@ -641,7 +767,7 @@ function AccountList({ accounts, activeId }: { accounts: AuthAccountOption[]; ac
         ))}
       </ul>
       {error && (
-        <p role="alert" className="px-3 py-2 text-[12px] text-k-danger">
+        <p role="alert" className="px-3 py-2 text-k-xs text-k-danger">
           {t('switchError')}
         </p>
       )}
@@ -654,13 +780,24 @@ function AccountList({ accounts, activeId }: { accounts: AuthAccountOption[]; ac
  * «Seguridad», que YA están en el menú principal. Repetir ahí la identidad (y no sólo los
  * accesos) era la única duplicación real; se muda acá, justo arriba de cerrar sesión.
  */
-function SidebarIdentity({ user, collapsible = false }: { user: ShellUser; collapsible?: boolean }) {
+function SidebarIdentity({
+  user,
+  collapsible = false,
+}: {
+  user: ShellUser;
+  collapsible?: boolean;
+}) {
   return (
-    <div className="flex items-center gap-2.5 border-t border-white/10 px-3 pb-1 pt-3">
+    <div
+      data-tour="topbar.sessionMenu"
+      className="flex items-center gap-2.5 border-t border-white/10 px-3 pb-1 pt-3"
+    >
       <Avatar user={user} />
       <span className={`min-w-0 flex-1 ${collapsible ? 'hidden xl:block' : ''}`}>
-        <span className="block truncate text-[13px] font-medium text-white">{user.name}</span>
-        <span className="block truncate text-[11px] uppercase tracking-wide text-white/50">{user.role}</span>
+        <span className="block truncate text-k-sm font-medium text-white">{user.name}</span>
+        <span className="block truncate text-k-2xs uppercase tracking-wide text-white/50">
+          {user.role}
+        </span>
       </span>
     </div>
   );
@@ -686,7 +823,7 @@ function SidebarLogout({ collapsible = false }: { collapsible?: boolean }) {
         }}
         disabled={busy}
         title={t('logout')}
-        className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-k-danger px-3 text-[14px] font-medium text-white hover:bg-k-danger/90 disabled:opacity-60"
+        className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-k-danger px-3 text-k-base font-medium text-white hover:bg-k-danger/90 disabled:opacity-60"
       >
         <Icon name="logout" className="h-[18px] w-[18px] shrink-0" />
         <span className={collapsible ? 'hidden xl:inline' : ''}>{t('logout')}</span>
@@ -718,7 +855,7 @@ function Avatar({ user }: { user: ShellUser }) {
   }
 
   return (
-    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-k-highlight text-[13px] font-semibold text-k-purple">
+    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-k-highlight text-k-sm font-semibold text-k-purple">
       {initials(user.name)}
     </span>
   );
@@ -764,7 +901,8 @@ const ICONS: Record<
   string
 > = {
   home: 'M4 10.5 12 4l8 6.5M6.5 9.5V20h11V9.5',
-  portfolio: 'M3 8h15a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8zm0 0a2 2 0 0 1 2-2h11M16 13.5h1.5',
+  portfolio:
+    'M3 8h15a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8zm0 0a2 2 0 0 1 2-2h11M16 13.5h1.5',
   import: 'M12 3.5v9.5m0 0 3.5-3.5M12 13 8.5 9.5M4.5 15.5V18a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-2.5',
   mora: 'M3.5 7.5a2 2 0 0 1 2-2h3l2 2.5h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2z',
   agenda: 'M4.5 6.5h15v13h-15zM4.5 10.5h15M8.5 4v4M15.5 4v4',
@@ -774,26 +912,33 @@ const ICONS: Record<
   account: 'M4.5 20V5.5h9V20M13.5 10.5H20V20M7.5 9h3M7.5 12.5h3M7.5 16h3',
   // Flecha hacia abajo a una bandeja: lo opuesto de `upload`, a propósito.
   export: 'M12 4v11m0 0-3.5-3.5M12 15l3.5-3.5M5 17v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2',
-  profile: 'M12 12.2a3.6 3.6 0 1 0 0-7.2 3.6 3.6 0 0 0 0 7.2zM4.8 20.5c0-3.7 3.2-5.8 7.2-5.8s7.2 2.1 7.2 5.8',
-  organization: 'M12 4.5v4m0 0H6.5v3.5M12 8.5h5.5v3.5M4.5 12h4v4h-4zM15.5 12h4v4h-4zM10 16.5h4V20h-4z',
+  profile:
+    'M12 12.2a3.6 3.6 0 1 0 0-7.2 3.6 3.6 0 0 0 0 7.2zM4.8 20.5c0-3.7 3.2-5.8 7.2-5.8s7.2 2.1 7.2 5.8',
+  organization:
+    'M12 4.5v4m0 0H6.5v3.5M12 8.5h5.5v3.5M4.5 12h4v4h-4zM15.5 12h4v4h-4zM10 16.5h4V20h-4z',
   activity: 'M4 12h3.5l2.5-6 4 12 2.5-6H20',
-  accessSecurity: 'M12 3.5l7 2.8v5.4c0 3.9-2.9 6.8-7 8.6-4.1-1.8-7-4.7-7-8.6V6.3zM9.2 11.8l2 2 3.6-3.6',
+  accessSecurity:
+    'M12 3.5l7 2.8v5.4c0 3.9-2.9 6.8-7 8.6-4.1-1.8-7-4.7-7-8.6V6.3zM9.2 11.8l2 2 3.6-3.6',
   security: 'M12 3.5l7 2.8v5.4c0 3.9-2.9 6.8-7 8.6-4.1-1.8-7-4.7-7-8.6V6.3zM9.2 11.8l2 2 3.6-3.6',
   menu: 'M4 7h16M4 12h16M4 17h16',
   chevron: 'M7 10l5 5 5-5',
   check: 'M5 12.5l4.5 4.5L19 7.5',
-  logout: 'M15 7.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2v-1.5M10 12h10m0 0-3-3m3 3-3 3',
+  logout:
+    'M15 7.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2v-1.5M10 12h10m0 0-3-3m3 3-3 3',
   // Ojo abierto / tachado: una columna se ve o no se ve, y el ícono lo dice sin leer.
   eye: 'M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12zM12 14.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
-  eyeOff: 'M4 4l16 16M9.9 5.7A9.5 9.5 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a17 17 0 0 1-3.4 4.2M6.5 8A17 17 0 0 0 2.5 12S6 18.5 12 18.5c1 0 1.9-.2 2.7-.5M9.9 9.9a3 3 0 0 0 4.2 4.2',
+  eyeOff:
+    'M4 4l16 16M9.9 5.7A9.5 9.5 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a17 17 0 0 1-3.4 4.2M6.5 8A17 17 0 0 0 2.5 12S6 18.5 12 18.5c1 0 1.9-.2 2.7-.5M9.9 9.9a3 3 0 0 0 4.2 4.2',
   // Los seis puntitos del agarre: la señal universal de «esto se arrastra».
   grip: 'M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01',
   // Canales de contacto: el ícono dice de qué se trata antes de leer el rótulo.
-  phone: 'M6.5 3.5h3l1.5 4-2 1.5a12 12 0 0 0 6 6l1.5-2 4 1.5v3a1.5 1.5 0 0 1-1.6 1.5A16.5 16.5 0 0 1 5 5.1 1.5 1.5 0 0 1 6.5 3.5z',
+  phone:
+    'M6.5 3.5h3l1.5 4-2 1.5a12 12 0 0 0 6 6l1.5-2 4 1.5v3a1.5 1.5 0 0 1-1.6 1.5A16.5 16.5 0 0 1 5 5.1 1.5 1.5 0 0 1 6.5 3.5z',
   mail: 'M3.5 6.5h17v11h-17zM3.5 7l8.5 6 8.5-6',
   // Documentos: la hoja con la esquina doblada, y la nube con la flecha para subir.
   file: 'M13.5 3.5H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9zM13.5 3.5V9H19',
-  upload: 'M7 16.5a3.5 3.5 0 0 1-.4-7A5 5 0 0 1 16.5 9a3.5 3.5 0 0 1 .5 7M12 20v-8m0 0-2.5 2.5M12 12l2.5 2.5',
+  upload:
+    'M7 16.5a3.5 3.5 0 0 1-.4-7A5 5 0 0 1 16.5 9a3.5 3.5 0 0 1 .5 7M12 20v-8m0 0-2.5 2.5M12 12l2.5 2.5',
   // La campana: cuerpo + badajo, nada más.
   bell: 'M6 10.5a6 6 0 0 1 12 0c0 3.4 1 5 2 6H4c1-1 2-2.6 2-6zM10 19a2 2 0 0 0 4 0',
   // Controles de listado: buscar, filtrar, agregar, avisar y el menú de tres puntos de una fila.
@@ -809,7 +954,8 @@ const ICONS: Record<
   swap: 'M4 8h13m0 0-3-3m3 3-3 3M20 16H7m0 0 3-3m-3 3 3 3',
   xcircle: 'M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zM9 9l6 6M15 9l-6 6',
   tag: 'M3.5 12.5V4.5h8l9 9-8 8zM8 8.5h.01',
-  database: 'M5 6c0-1.4 3.1-2.5 7-2.5s7 1.1 7 2.5-3.1 2.5-7 2.5S5 7.4 5 6zM5 6v6c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V6M5 12v6c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-6',
+  database:
+    'M5 6c0-1.4 3.1-2.5 7-2.5s7 1.1 7 2.5-3.1 2.5-7 2.5S5 7.4 5 6zM5 6v6c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V6M5 12v6c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-6',
 };
 
 export type IconName = keyof typeof ICONS;

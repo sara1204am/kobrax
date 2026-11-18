@@ -73,6 +73,20 @@ export class PaymentsService {
     return rows.map((r) => r.id);
   }
 
+  /**
+   * S-2: el crédito sobre el que se escribe tiene que estar en el alcance de quien escribe. Los listados ya filtraban,
+   * pero registrar/solicitar/confirmar buscaban el crédito sólo por id: con un UUID ajeno un cobrador podía cobrarlo.
+   * Fuera de alcance responde como inexistente (404), igual que la lectura, para no confirmar que el id existe.
+   */
+  private async assertCreditInScope(tx: PrismaClient, creditId: string): Promise<void> {
+    const scope = moraScopeOf(this.tenant);
+    if (seesWholeAccount(scope)) return;
+    const rows = await tx.$queryRaw<{ id: string }[]>(
+      Prisma.sql`SELECT v.id FROM (${visibleCreditIdsSql(scope)}) v WHERE v.id = ${creditId} LIMIT 1`,
+    );
+    if (rows.length === 0) throw resourceNotFound();
+  }
+
   // ── Registro de pago (ledger inmutable) ──────────────────────────────────────
   async register(dto: CreatePaymentDto, idempotencyKey?: string, viaHint?: 'WEB' | 'MOBILE') {
     const run = () => this.tx(async (tx) => {
@@ -81,19 +95,10 @@ export class PaymentsService {
         if (existing) return { payment: existing, replay: true, external: false }; // reintento → no duplica
       }
       const { payment, external } = await this.applyCore(tx, { ...dto, registeredVia: dto.registeredVia ?? viaHint, idempotencyKey });
-      return { payment, replay: false, external };
-    });
-    // Dos envíos con la misma clave a la vez (el intento en vivo y la cola offline) pasan los dos el chequeo y uno
-    // choca con la unicidad (account_id, idempotency_key): su transacción se deshace y se repite UNA vez, y esta vez
-    // el chequeo encuentra el pago que registró el otro y responde igual que un reintento normal, no un 500/409.
-    const { payment, replay, external } = await run().catch((err: unknown) =>
-      idempotencyKey && isPaymentDuplicate(err) ? run() : Promise.reject(err),
-    );
-
-    if (!replay) {
-      // Qué se cobró, cuándo y por qué canal, y si fue sobre una operación externa: con esto y los
-      // snapshots del reporte se contesta «quién consiguió el pago, cuándo y cómo» (§13).
-      await this.audit.record({
+      // S-11: el rastro del cobro va EN la misma transacción: un pago sin su auditoría no queda (ni la auditoría de un pago que se deshizo).
+      // Qué se cobró, cuándo y por qué canal, y si fue sobre una operación externa: con esto y los snapshots del reporte se contesta
+      // «quién consiguió el pago, cuándo y cómo» (§13).
+      await this.audit.recordInTx(tx, {
         entity: 'payment',
         entityId: payment.id,
         action: 'CREATE',
@@ -108,6 +113,16 @@ export class PaymentsService {
           externalCredit: external,
         },
       });
+      return { payment, replay: false, external };
+    });
+    // Dos envíos con la misma clave a la vez (el intento en vivo y la cola offline) pasan los dos el chequeo y uno
+    // choca con la unicidad (account_id, idempotency_key): su transacción se deshace y se repite UNA vez, y esta vez
+    // el chequeo encuentra el pago que registró el otro y responde igual que un reintento normal, no un 500/409.
+    const { payment, replay, external } = await run().catch((err: unknown) =>
+      idempotencyKey && isPaymentDuplicate(err) ? run() : Promise.reject(err),
+    );
+
+    if (!replay) {
       this.events.emit(DomainEvent.PAYMENT_REGISTERED, { paymentId: payment.id, creditId: payment.creditId, amount: Number(payment.amount), accountId: this.tenant.accountId });
     }
     return { ...serializePayment(payment), idempotentReplay: replay };
@@ -118,6 +133,7 @@ export class PaymentsService {
     if (p.amount <= 0) throw paymentInvalid('El monto debe ser mayor a 0');
     if (p.paymentDate) assertPaymentDate(new Date(p.paymentDate));
 
+    await this.assertCreditInScope(tx, p.creditId);
     const credit = await tx.credit.findFirst({ where: { id: p.creditId, deletedAt: null }, include: { installments: true } });
     if (!credit) throw resourceNotFound();
     // El cobro dice en qué visita se hizo: esa visita tiene que existir y ser de ESTE crédito.
@@ -350,8 +366,9 @@ export class PaymentsService {
   // ── Solicitudes de pago digital (QR / link) ──────────────────────────────────
   async createRequest(dto: CreatePaymentRequestDto) {
     const reference = randomBytes(12).toString('base64url');
-    const req = await this.tx((tx) =>
-      tx.paymentRequest.create({
+    const req = await this.tx(async (tx) => {
+      if (dto.creditId) await this.assertCreditInScope(tx, dto.creditId);
+      const created = await tx.paymentRequest.create({
         data: {
           accountId: this.tenant.accountId,
           creditId: dto.creditId,
@@ -364,9 +381,10 @@ export class PaymentsService {
           expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
           createdBy: this.tenant.userId,
         },
-      }),
-    );
-    await this.audit.record({ entity: 'payment_request', entityId: req.id, action: 'CREATE', after: { amount: Number(req.amount), method: req.method } });
+      });
+      await this.audit.recordInTx(tx, { entity: 'payment_request', entityId: created.id, action: 'CREATE', after: { amount: Number(created.amount), method: created.method } });
+      return created;
+    });
     return serializePaymentRequest(req);
   }
 
@@ -435,10 +453,10 @@ export class PaymentsService {
 
       const r = await this.applyCore(tx, { creditId: req.creditId, amount: Number(req.amount), method: req.method, externalTransactionId: dto.externalTransactionId, provider: 'payment_request' });
       await tx.paymentRequest.update({ where: { id }, data: { status: 'PAID', paidPaymentId: r.payment.id } });
+      await this.audit.recordInTx(tx, { entity: 'payment', entityId: r.payment.id, action: 'CREATE', after: { creditId: r.payment.creditId, amount: Number(r.payment.amount), source: 'payment_request' } });
       return r;
     });
 
-    await this.audit.record({ entity: 'payment', entityId: payment.id, action: 'CREATE', after: { creditId: payment.creditId, amount: Number(payment.amount), source: 'payment_request' } });
     this.events.emit(DomainEvent.PAYMENT_REGISTERED, { paymentId: payment.id, creditId: payment.creditId, amount: Number(payment.amount), accountId: this.tenant.accountId });
     return serializePayment(payment);
   }

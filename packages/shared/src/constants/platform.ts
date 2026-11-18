@@ -9,10 +9,14 @@ import { Permission } from '../enums/permission.enum.js';
  */
 export enum PlatformPermission {
   ACCOUNTS_READ = 'platform:accounts:read',
+  /** Suspender o reactivar una cuenta (con motivo, auditado). Corta el inicio de sesión de toda la cuenta. */
+  ACCOUNTS_SUSPEND = 'platform:accounts:suspend',
   ROLES_WRITE = 'platform:roles:write',
   ROLES_ROLLOUT = 'platform:roles:rollout',
   SUPPORT_OPEN = 'platform:support:open',
   AUDIT_READ = 'platform:audit:read',
+  /** Atender las solicitudes de derechos de las personas usuarias de Kobrax (privacidad · B6). */
+  PRIVACY_MANAGE = 'platform:privacy:manage',
 }
 
 export const PLATFORM_PERMISSIONS: readonly string[] = Object.values(PlatformPermission);

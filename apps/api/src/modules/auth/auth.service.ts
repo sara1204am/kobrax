@@ -1,8 +1,10 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { HttpException, Inject, Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
+import type Redis from 'ioredis';
+import { REDIS } from '../../redis/redis.module';
 import { randomBytes } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 import { compare, hash } from 'bcryptjs';
-import { KOBRAX, isMobileRole, piiChannelOf, preferencesOf, type AccountPreferences, type AuthAccountOption, type AuthTokens, type LoginResult, type MeOffice } from '@kobrax/shared';
+import { KOBRAX, isMobileRole, parseOnboarding, parseWorkspace, piiChannelOf, preferencesOf, type AccountPreferences, type AuthAccountOption, type AuthTokens, type LoginResult, type MeOffice, type OnboardingStatus, type Workspace } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { TokenService } from './token.service';
@@ -47,9 +49,19 @@ interface MembershipRow {
   role_name: string;
 }
 
+/** F15 · P6: lo mínimo del asistente que necesita el panel (sin quién ni cuándo); `null` = cuenta anterior, sin asistente. */
+function onboardingOf(configuration: unknown): { status: OnboardingStatus } | null {
+  const o = parseOnboarding(configuration);
+  return o ? { status: o.status } : null;
+}
+
 const REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const GRACE_MS = 10_000;
 
+
+/** S-9: fallos de MFA tolerados por usuario en la ventana (15 min) antes de bloquear los intentos. */
+const MFA_MAX_FAILS = 5;
+const MFA_FAIL_WINDOW_SEC = 900;
 
 @Injectable()
 export class AuthService implements OnModuleInit {
@@ -66,6 +78,8 @@ export class AuthService implements OnModuleInit {
     private readonly mfa: MfaService,
     private readonly audit: AuditService,
     private readonly authz: AuthzVersionService,
+    /** Contador de fallos de MFA por usuario. Opcional: sin Redis (tests unitarios) no cuenta, y el límite por IP sigue. */
+    @Optional() @Inject(REDIS) private readonly redis?: Redis,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -128,8 +142,21 @@ export class AuthService implements OnModuleInit {
     } catch {
       throw invalidPreAuth();
     }
+    // S-9: tope de fallos POR USUARIO (el límite por IP no frena a quien rota de IP con un pre-auth token válido).
+    const failKey = `mfa:fail:${pre.sub}`;
+    const fails = this.redis ? Number((await this.redis.get(failKey)) ?? 0) : 0;
+    if (fails >= MFA_MAX_FAILS) {
+      throw new HttpException(
+        { code: 'RATE_LIMITED', message: 'Demasiados intentos de MFA, intenta más tarde', details: { retryAfterSeconds: MFA_FAIL_WINDOW_SEC } },
+        429,
+      );
+    }
     const ok = await this.mfa.challenge(pre.sub, code);
-    if (!ok) throw mfaInvalid();
+    if (!ok) {
+      if (this.redis) await this.redis.multi().incr(failKey).expire(failKey, MFA_FAIL_WINDOW_SEC).exec();
+      throw mfaInvalid();
+    }
+    if (this.redis) await this.redis.del(failKey);
     return this.proceedToAccountStep(pre.sub, meta, true);
   }
 
@@ -377,10 +404,12 @@ export class AuthService implements OnModuleInit {
     mfaEnabled: boolean;
     mfaRequired: boolean;
     requiresPasswordChange: boolean;
+    /** ¿Ya confirmó que el correo es suyo? (alta de cuenta). Quien entra por invitación nace confirmado. */
+    emailVerified?: boolean;
     /** Sesión del token: el panel la compara entre pestañas (W-LOG-54). */
     sessionId?: string;
     /** La marca del negocio activo (nombre, teléfono, logo): la lee cualquier miembro, sin `account:read`. */
-    account: { name: string; phone: string | null; logoUrl: string | null; timezone: string | null; soloUser: boolean; preferences: AccountPreferences } | null;
+    account: { name: string; phone: string | null; logoUrl: string | null; timezone: string | null; soloUser: boolean; preferences: AccountPreferences; workspace: Workspace; onboarding: { status: OnboardingStatus } | null } | null;
     /** F14 · F5: clave del rol de la cuenta. */
     roleKey?: string;
     /** F14 · F8 (D-7): las oficinas de esta persona (las de su membresía). */
@@ -442,9 +471,11 @@ export class AuthService implements OnModuleInit {
       /** El rol exige MFA (D2): el cliente no ofrece desactivarlo ni postergarlo. El servidor lo impone igual. */
       mfaRequired: await this.mfa.isCritical(dbUser.id),
       requiresPasswordChange: dbUser.requiresPasswordChange,
+      /** ¿Ya confirmó que el correo es suyo? El panel muestra un aviso mientras no. */
+      emailVerified: dbUser.emailVerifiedAt != null,
       sessionId: user.sessionId,
       account: account
-        ? { name: account.businessName, phone: account.phone, logoUrl: account.logoUrl, timezone: account.timezone ?? null, soloUser, preferences: preferencesOf(account.configuration) }
+        ? { name: account.businessName, phone: account.phone, logoUrl: account.logoUrl, timezone: account.timezone ?? null, soloUser, preferences: preferencesOf(account.configuration), workspace: parseWorkspace(account.configuration), onboarding: onboardingOf(account.configuration) }
         : null,
       roleKey: user.roleKey,
       offices,
@@ -499,7 +530,7 @@ export class AuthService implements OnModuleInit {
       mfaRequired: false,
       requiresPasswordChange: false,
       sessionId: user.sessionId,
-      account: account ? { name: account.businessName, phone: account.phone, logoUrl: account.logoUrl, timezone: account.timezone ?? null, soloUser: false, preferences: preferencesOf(account.configuration) } : null,
+      account: account ? { name: account.businessName, phone: account.phone, logoUrl: account.logoUrl, timezone: account.timezone ?? null, soloUser: false, preferences: preferencesOf(account.configuration), workspace: parseWorkspace(account.configuration), onboarding: onboardingOf(account.configuration) } : null,
       offices: [],
       supportSession,
     };

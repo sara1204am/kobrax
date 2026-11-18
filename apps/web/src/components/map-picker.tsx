@@ -152,7 +152,7 @@ export function MapPicker({
         aria-label={label}
       />
       {picking && hint && (latitude == null || longitude == null) && (
-        <span className="pointer-events-none absolute left-3 top-3 rounded-lg bg-white/95 px-3 py-1.5 text-[12px] font-medium text-k-text shadow">
+        <span className="pointer-events-none absolute left-3 top-3 rounded-lg bg-white/95 px-3 py-1.5 text-k-xs font-medium text-k-text shadow">
           {hint}
         </span>
       )}

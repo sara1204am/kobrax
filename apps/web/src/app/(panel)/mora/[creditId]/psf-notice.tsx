@@ -30,7 +30,7 @@ export function PsfNotice({
   const tSource = useTranslations('creditSource');
   if (!externalSource) return null;
 
-  const cls = 'rounded-xl border border-k-border bg-k-warning-bg px-4 py-3 text-[13px] text-k-warning-text';
+  const cls = 'rounded-xl border border-k-border bg-k-warning-bg px-4 py-3 text-k-sm text-k-warning-text';
   if (syncStatus === 'ABSENT') {
     const when = absentSince ?? reportedAsOf;
     return (

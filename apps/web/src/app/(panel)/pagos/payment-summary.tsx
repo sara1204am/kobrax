@@ -22,10 +22,10 @@ export interface PaymentTotals {
  * sobre su fondo; es lo que hace legible la etiqueta de 12 px.
  */
 const LOOK: Record<string, { box: string; value: string; label: string; hint: string }> = {
-  today: { box: 'border-[#173F63] bg-[#173F63]', value: 'text-white', label: 'text-[#CFE3F7]', hint: 'text-[#A9CBEA]' },
-  month: { box: 'border-k-border bg-[#EAF3FC]', value: 'text-[#173F63]', label: 'text-[#3F5F7F]', hint: 'text-[#4A6580]' },
-  period: { box: 'border-[#C9DDF1] bg-white', value: 'text-[#173F63]', label: 'text-[#3F5F7F]', hint: 'text-[#5B7795]' },
-  count: { box: 'border-k-border bg-[#F0F4F8]', value: 'text-[#173F63]', label: 'text-[#475D73]', hint: 'text-[#5A6F84]' },
+  today: { box: 'border-k-navy bg-k-navy', value: 'text-white', label: 'text-k-light-bg', hint: 'text-k-light-bg/80' },
+  month: { box: 'border-k-border bg-k-info-bg', value: 'text-k-navy', label: 'text-k-slate', hint: 'text-k-text-2' },
+  period: { box: 'border-k-border bg-white', value: 'text-k-navy', label: 'text-k-slate', hint: 'text-k-text-2' },
+  count: { box: 'border-k-border bg-k-bg', value: 'text-k-navy', label: 'text-k-slate', hint: 'text-k-text-2' },
 };
 
 /**
@@ -72,9 +72,9 @@ export async function PaymentSummary({
     <dl aria-label={t('title')} className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
       {cards.map((c) => (
         <div key={c.key} title={c.rule} className={`min-w-0 rounded-2xl border px-4 py-3 ${LOOK[c.key]!.box}`}>
-          <dd className={`truncate text-[22px] font-semibold leading-tight tabular-nums ${LOOK[c.key]!.value}`}>{c.value}</dd>
-          <dt className={`mt-0.5 text-[12px] font-medium ${LOOK[c.key]!.label}`}>{c.label}</dt>
-          <p className={`mt-0.5 truncate text-[12px] ${LOOK[c.key]!.hint}`}>{c.hint}</p>
+          <dd className={`truncate text-k-3xl font-semibold leading-tight tabular-nums ${LOOK[c.key]!.value}`}>{c.value}</dd>
+          <dt className={`mt-0.5 text-k-xs font-medium ${LOOK[c.key]!.label}`}>{c.label}</dt>
+          <p className={`mt-0.5 truncate text-k-xs ${LOOK[c.key]!.hint}`}>{c.hint}</p>
         </div>
       ))}
     </dl>

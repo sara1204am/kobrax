@@ -129,19 +129,19 @@ export function PlanPreview({
     <div className="space-y-4">
       <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <div className={stat}>
-          <dd className="text-[22px] font-semibold tabular-nums text-k-navy">{stops.length + extraVisits}</dd>
-          <dt className="text-[12px] text-k-text-2">{t('visits')}</dt>
+          <dd className="text-k-3xl font-semibold tabular-nums text-k-navy">{stops.length + extraVisits}</dd>
+          <dt className="text-k-xs text-k-text-2">{t('visits')}</dt>
         </div>
         <div className={stat}>
-          <dd className="text-[22px] font-semibold tabular-nums text-k-navy">{data?.distanceKm != null ? `${data.distanceKm} km` : '—'}</dd>
-          <dt className="text-[12px] text-k-text-2">{t('distance')}</dt>
+          <dd className="text-k-3xl font-semibold tabular-nums text-k-navy">{data?.distanceKm != null ? `${data.distanceKm} km` : '—'}</dd>
+          <dt className="text-k-xs text-k-text-2">{t('distance')}</dt>
         </div>
         <div className={stat}>
-          <dd className="text-[22px] font-semibold tabular-nums text-k-navy">{data?.minutes != null ? duration(data.minutes) : '—'}</dd>
-          <dt className="text-[12px] text-k-text-2">{t('duration')}</dt>
+          <dd className="text-k-3xl font-semibold tabular-nums text-k-navy">{data?.minutes != null ? duration(data.minutes) : '—'}</dd>
+          <dt className="text-k-xs text-k-text-2">{t('duration')}</dt>
         </div>
         <div className={stat}>
-          <dt className="text-[12px] text-k-text-2">
+          <dt className="text-k-xs text-k-text-2">
             <label htmlFor="plan-start">{t('start')}</label>
           </dt>
           <dd>
@@ -150,31 +150,31 @@ export function PlanPreview({
               type="time"
               value={start}
               onChange={(e) => onStart(e.target.value)}
-              className="mt-1 h-9 rounded-lg border border-k-border bg-white px-2 text-[16px] font-semibold tabular-nums text-k-navy outline-none focus:border-k-periwinkle"
+              className="mt-1 h-9 rounded-lg border border-k-border bg-white px-2 text-k-lg font-semibold tabular-nums text-k-navy outline-none focus:border-k-periwinkle"
             />
           </dd>
         </div>
         <div className={stat}>
-          <dd className="text-[22px] font-semibold tabular-nums text-k-navy">{last ?? '—'}</dd>
-          <dt className="text-[12px] text-k-text-2">{t('end')}</dt>
+          <dd className="text-k-3xl font-semibold tabular-nums text-k-navy">{last ?? '—'}</dd>
+          <dt className="text-k-xs text-k-text-2">{t('end')}</dt>
         </div>
       </dl>
 
-      {loading && <p className="text-[14px] text-k-text-2">{t('loading')}</p>}
+      {loading && <p className="text-k-base text-k-text-2">{t('loading')}</p>}
       {error && (
-        <p role="alert" className="rounded-lg border border-k-danger bg-k-danger-bg px-3 py-2 text-[13px] text-k-text">
+        <p role="alert" className="rounded-lg border border-k-danger bg-k-danger-bg px-3 py-2 text-k-sm text-k-text">
           {error}
         </p>
       )}
-      {!loading && data && data.distanceKm == null && <p className="text-[13px] text-k-text-2">{t('noEngine')}</p>}
+      {!loading && data && data.distanceKm == null && <p className="text-k-sm text-k-text-2">{t('noEngine')}</p>}
 
       {data?.suggestion && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-k-warning bg-k-warning-bg px-4 py-3">
-          <p className="text-[14px] text-k-text">{t('suggest', { km: data.suggestion.savedKm, min: data.suggestion.savedMinutes })}</p>
+          <p className="text-k-base text-k-text">{t('suggest', { km: data.suggestion.savedKm, min: data.suggestion.savedMinutes })}</p>
           <button
             type="button"
             onClick={() => onApplyOrder(data.suggestion!.order)}
-            className="h-9 rounded-lg border border-k-navy bg-white px-4 text-[13px] font-semibold text-k-navy hover:bg-k-bg"
+            className="h-9 rounded-lg border border-k-navy bg-white px-4 text-k-sm font-semibold text-k-navy hover:bg-k-bg"
           >
             {t('applyOrder')}
           </button>
@@ -182,12 +182,12 @@ export function PlanPreview({
       )}
 
       {conflicts.size > 0 && (
-        <p role="alert" className="rounded-xl border border-k-danger bg-k-danger-bg px-4 py-3 text-[13px] text-k-text">
+        <p role="alert" className="rounded-xl border border-k-danger bg-k-danger-bg px-4 py-3 text-k-sm text-k-text">
           {t('conflicts', { n: conflicts.size })}
         </p>
       )}
 
-      {extraVisits > 0 && <p className="text-[13px] text-k-text-2">{t('extraVisits', { n: extraVisits })}</p>}
+      {extraVisits > 0 && <p className="text-k-sm text-k-text-2">{t('extraVisits', { n: extraVisits })}</p>}
 
       {/*
         🔴 **El mismo mapa y la misma lista que la ficha y la edición** (F4/12): el recorrido a la izquierda sobre las

@@ -20,10 +20,12 @@ import {
 } from '@kobrax/shared';
 import { ActivityContextFields, activityContextPayload, emptyActivityContext } from '@/components/activity-context-fields';
 import type { CatalogOption } from '@/components/client-form';
+import { Checkbox } from '@/components/form-kit';
 import { Modal } from '@/components/modal';
 import { dayDate, money } from '@/lib/format';
 import { postJson } from '@/lib/client';
 import { usePaymentMethods } from '@/lib/use-payment-methods';
+import { Button, Textarea } from '@/components/ui';
 
 /** La parada sobre la que se registra: lo que el formulario necesita saber de ella. */
 export interface RecordStop {
@@ -259,8 +261,8 @@ export function RecordVisitDialog({
     onClose();
   }
 
-  const input = 'h-11 w-full rounded-xl border border-k-border bg-white px-3 text-[14px] text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus';
-  const label = 'mb-1.5 block text-[13px] font-medium text-k-text';
+  const input = 'h-11 w-full rounded-xl border border-k-border bg-white px-3 text-k-base text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus';
+  const label = 'mb-1.5 block text-k-sm font-medium text-k-text';
 
   return (
     <Modal
@@ -270,42 +272,42 @@ export function RecordVisitDialog({
       title={correctsVisitId ? t('titleFix') : t('title')}
       actions={
         warnings.length > 0 ? (
-          <button type="button" onClick={onClose} className="h-10 rounded-xl bg-k-navy px-5 text-[14px] font-semibold text-white hover:bg-k-slate">
+          <Button type="button" onClick={onClose} variant="primary" fullWidth={false} className="!h-10 !px-5 !text-k-base">
             {t('close')}
-          </button>
+          </Button>
         ) : (
           <>
-            <button
+            <Button
               type="button"
               onClick={onClose}
               disabled={busy}
-              className="h-10 rounded-xl border border-k-border bg-white px-4 text-[14px] font-medium text-k-text-2 hover:bg-k-bg disabled:opacity-50"
+              variant="ghost" fullWidth={false} className="!h-10 !px-4 !text-k-base !font-medium"
             >
               {t('cancel')}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               onClick={() => void submit()}
               disabled={!ready || busy || !stop.creditId || contextInvalid !== null}
-              className="h-10 rounded-xl bg-k-navy px-5 text-[14px] font-semibold text-white hover:bg-k-slate disabled:opacity-50"
+              variant="primary" fullWidth={false} className="!h-10 !px-5 !text-k-base"
             >
               {busy ? t('saving') : correctsVisitId ? t('submitFix') : t('submit')}
-            </button>
+            </Button>
           </>
         )
       }
     >
-      <p className="text-[13px] text-k-text-2">
+      <p className="text-k-sm text-k-text-2">
         <strong className="font-semibold text-k-text">{stop.clientName ?? '—'}</strong>
         {stop.address ? ` · ${stop.address}` : ''}
       </p>
       {!viewerIsCollector && (
-        <p className="mt-2 rounded-lg border border-k-border bg-k-bg px-3 py-2 text-[13px] text-k-text-2">{t('onBehalf', { name: collectorName })}</p>
+        <p className="mt-2 rounded-lg border border-k-border bg-k-bg px-3 py-2 text-k-sm text-k-text-2">{t('onBehalf', { name: collectorName })}</p>
       )}
-      {correctsVisitId && <p className="mt-2 rounded-lg border border-k-warning bg-k-warning-bg px-3 py-2 text-[13px] text-k-warning-text">{t('fixHint')}</p>}
+      {correctsVisitId && <p className="mt-2 rounded-lg border border-k-warning bg-k-warning-bg px-3 py-2 text-k-sm text-k-warning-text">{t('fixHint')}</p>}
 
       {warnings.length > 0 ? (
-        <p role="alert" className="mt-4 rounded-xl border border-k-warning bg-k-warning-bg px-4 py-3 text-[14px] text-k-text">
+        <p role="alert" className="mt-4 rounded-xl border border-k-warning bg-k-warning-bg px-4 py-3 text-k-base text-k-text">
           {t('partial', { what: warnings.join(` ${t('and')} `) })}
         </p>
       ) : (
@@ -324,7 +326,7 @@ export function RecordVisitDialog({
                     aria-pressed={variant === key}
                     onClick={() => setVariant(key)}
                     title={blocked ? t('noPay') : undefined}
-                    className={`flex flex-col items-center gap-2 rounded-xl border-2 px-2 py-3 text-center text-[13px] font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                    className={`flex flex-col items-center gap-2 rounded-xl border-2 px-2 py-3 text-center text-k-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
                       variant === key ? `${v.ring} bg-white shadow-k-card` : 'border-k-border bg-white hover:bg-k-bg'
                     }`}
                   >
@@ -338,7 +340,7 @@ export function RecordVisitDialog({
                 );
               })}
             </div>
-            {!canPay && <p className="mt-2 text-[12px] text-k-muted">{t('noPay')}</p>}
+            {!canPay && <p className="mt-2 text-k-xs text-k-muted">{t('noPay')}</p>}
           </fieldset>
 
           {variant && ui && (
@@ -362,7 +364,7 @@ export function RecordVisitDialog({
                       * total es solo hasta dónde se puede llegar. Sin dato de la cuota, no se muestra nada (nunca un 0).
                       */}
                     {stop.installmentAmount != null && (
-                      <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[12px] text-k-text-2">
+                      <p className="mt-1 flex flex-wrap items-center gap-x-2 text-k-xs text-k-text-2">
                         <span>
                           {t('installmentHint', { amount: money(stop.installmentAmount, currency) })}
                           {stop.nextDueDate ? ` · ${t('installmentDue', { date: dayDate(stop.nextDueDate, locale) })}` : ''}
@@ -378,7 +380,7 @@ export function RecordVisitDialog({
                         )}
                       </p>
                     )}
-                    {cap != null && variant === 'PAID' && <p className="mt-1 text-[12px] text-k-muted">{t('capHint', { max: money(cap, currency) })}</p>}
+                    {cap != null && variant === 'PAID' && <p className="mt-1 text-k-xs text-k-muted">{t('capHint', { max: money(cap, currency) })}</p>}
                   </div>
                   {variant === 'PAID' ? (
                     <div>
@@ -428,7 +430,7 @@ export function RecordVisitDialog({
                         type="button"
                         aria-pressed={form.channel === c}
                         onClick={() => set('channel', c)}
-                        className={`h-10 rounded-xl border px-4 text-[14px] ${form.channel === c ? 'border-k-navy bg-k-navy text-white' : 'border-k-border bg-white text-k-text-2 hover:bg-k-bg'}`}
+                        className={`h-10 rounded-xl border px-4 text-k-base ${form.channel === c ? 'border-k-navy bg-k-navy text-white' : 'border-k-border bg-white text-k-text-2 hover:bg-k-bg'}`}
                       >
                         {t(`channels.${c}`)}
                       </button>
@@ -438,10 +440,12 @@ export function RecordVisitDialog({
               )}
 
               {variant === 'NO_CONTACT_VISIT' && (
-                <label className="flex items-center gap-2 text-[14px] text-k-text">
-                  <input type="checkbox" checked={form.noticeLeft} onChange={(e) => set('noticeLeft', e.target.checked)} className="h-4 w-4 rounded border-k-border" />
-                  {t('noticeLeft')}
-                </label>
+                <Checkbox
+                  className="items-center"
+                  checked={form.noticeLeft}
+                  onChange={(e) => set('noticeLeft', e.target.checked)}
+                  label={t('noticeLeft')}
+                />
               )}
 
               {variant === 'SPECIAL' && (
@@ -450,7 +454,7 @@ export function RecordVisitDialog({
                     {t('category')}
                   </label>
                   {categories.length === 0 ? (
-                    <p className="text-[13px] text-k-text-2">{t('noCategories')}</p>
+                    <p className="text-k-sm text-k-text-2">{t('noCategories')}</p>
                   ) : (
                     <select id="rv-cat" value={form.categoryCode} onChange={(e) => set('categoryCode', e.target.value)} className={input}>
                       <option value="">{t('chooseCategory')}</option>
@@ -466,17 +470,19 @@ export function RecordVisitDialog({
 
               {withContext && <ActivityContextFields compact reasons={reasons} value={ctx} onChange={setCtx} disabled={busy} />}
               {contextInvalid && (
-                <p role="alert" className="rounded-lg border border-k-danger bg-k-danger-bg px-3 py-2 text-[13px] text-k-text">
+                <p role="alert" className="rounded-lg border border-k-danger bg-k-danger-bg px-3 py-2 text-k-sm text-k-text">
                   {tCtx(`errors.${contextInvalid}`)}
                 </p>
               )}
 
               {canRevisit && (
                 <div className="rounded-xl border border-k-border bg-k-bg px-4 py-3">
-                  <label className="flex items-center gap-2 text-[14px] font-medium text-k-text">
-                    <input type="checkbox" checked={revisit} onChange={(e) => setRevisit(e.target.checked)} className="h-4 w-4 rounded border-k-border" />
-                    {t('revisit')}
-                  </label>
+                  <Checkbox
+                    className="items-center font-medium"
+                    checked={revisit}
+                    onChange={(e) => setRevisit(e.target.checked)}
+                    label={t('revisit')}
+                  />
                   {revisit && (
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
                       <div>
@@ -497,7 +503,7 @@ export function RecordVisitDialog({
                           ))}
                         </select>
                       </div>
-                      <p className="text-[12px] text-k-muted sm:col-span-2">{t('revisitHint')}</p>
+                      <p className="text-k-xs text-k-muted sm:col-span-2">{t('revisitHint')}</p>
                     </div>
                   )}
                 </div>
@@ -507,13 +513,13 @@ export function RecordVisitDialog({
                 <label htmlFor="rv-notes" className={label}>
                   {variant === 'WRONG_ADDRESS' ? t('notesRequired') : t('notes')}
                 </label>
-                <textarea
+                <Textarea
                   id="rv-notes"
                   rows={3}
                   value={form.notes}
                   onChange={(e) => set('notes', e.target.value)}
                   placeholder={t('notesPlaceholder')}
-                  className="w-full rounded-xl border border-k-border bg-white px-3 py-2.5 text-[14px] text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus"
+                  className="!border !border-k-border !px-3 !text-k-base"
                 />
               </div>
 
@@ -525,12 +531,12 @@ export function RecordVisitDialog({
                     type="button"
                     disabled={uploading}
                     onClick={() => fileInput.current?.click()}
-                    className="h-10 rounded-xl border border-dashed border-k-border bg-k-bg px-4 text-[13px] font-medium text-k-text-2 hover:bg-white disabled:opacity-60"
+                    className="h-10 rounded-xl border border-dashed border-k-border bg-k-bg px-4 text-k-sm font-medium text-k-text-2 hover:bg-white disabled:opacity-60"
                   >
                     {uploading ? t('uploading') : photo ? t('photoReplace') : t('photoAdd')}
                   </button>
                   {photo && (
-                    <span className="flex items-center gap-2 text-[13px] text-k-text-2">
+                    <span className="flex items-center gap-2 text-k-sm text-k-text-2">
                       <span className="max-w-[220px] truncate">{photo.name}</span>
                       <button type="button" onClick={() => setPhoto(null)} className="text-k-danger hover:underline">
                         {t('photoRemove')}
@@ -538,7 +544,7 @@ export function RecordVisitDialog({
                     </span>
                   )}
                 </div>
-                <p className="mt-1 text-[12px] text-k-muted">{t('evidenceHint')}</p>
+                <p className="mt-1 text-k-xs text-k-muted">{t('evidenceHint')}</p>
               </div>
             </div>
           )}
@@ -546,7 +552,7 @@ export function RecordVisitDialog({
       )}
 
       {error && (
-        <p role="alert" className="mt-4 rounded-lg border border-k-danger bg-k-danger-bg px-3 py-2 text-[13px] text-k-text">
+        <p role="alert" className="mt-4 rounded-lg border border-k-danger bg-k-danger-bg px-3 py-2 text-k-sm text-k-text">
           {error}
         </p>
       )}

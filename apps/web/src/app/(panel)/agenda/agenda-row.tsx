@@ -45,17 +45,17 @@ export function AgendaRow({
     >
       <span aria-hidden className={`my-2 ml-1 w-1 shrink-0 rounded-full ${accent(item)}`} />
       <div className="flex min-w-0 flex-1 flex-col gap-2 py-3 pl-3 pr-1 md:grid md:grid-cols-[72px_minmax(0,1.6fr)_minmax(130px,1fr)_100px_minmax(90px,1fr)] md:items-center md:gap-4">
-        <span className="text-[13px] font-medium tabular-nums text-k-navy md:border-r md:border-k-border md:pr-3">
+        <span className="text-k-sm font-medium tabular-nums text-k-navy md:border-r md:border-k-border md:pr-3">
           {timeLabel ?? rowTime(item) ?? '—'}
         </span>
 
         <button type="button" onClick={() => events.onViewRequest(item.id)} className="min-w-0 text-left">
           <span className="flex items-center gap-2">
-            <span className="truncate text-[14px] font-semibold text-k-text">{t(`type.${item.type}`)}</span>
+            <span className="truncate text-k-base font-semibold text-k-text">{t(`type.${item.type}`)}</span>
             {item.isOverdue && !hecha && <Badge tone="danger">{t('overdueBadge')}</Badge>}
             {hecha && <Badge tone={AGENDA_STATUS_TONE[item.status]}>{t(`status.${item.status}`)}</Badge>}
           </span>
-          <span className="block truncate text-[12px] text-k-text-2">{sub}</span>
+          <span className="block truncate text-k-xs text-k-text-2">{sub}</span>
         </button>
 
         <span className="min-w-0">
@@ -68,11 +68,11 @@ export function AgendaRow({
           )}
         </span>
 
-        <span className="text-[13px] tabular-nums text-k-text md:text-right">
+        <span className="text-k-sm tabular-nums text-k-text md:text-right">
           {item.balance != null ? money(item.balance, item.currency) : ''}
         </span>
 
-        <span className="truncate text-[13px] text-k-text-2">{item.assigneeName ?? ''}</span>
+        <span className="truncate text-k-sm text-k-text-2">{item.assigneeName ?? ''}</span>
       </div>
       <RowMenu item={item} events={events} />
     </li>
@@ -161,7 +161,7 @@ function RowMenu({ item, events }: { item: AgendaListItem; events: AgendaEvents 
                 setOpen(false);
                 e.run();
               }}
-              className={`block w-full px-3 py-2 text-left text-[13px] hover:bg-k-bg ${e.key === 'cancel' || e.key === 'delete' ? 'text-k-danger' : 'text-k-text'}`}
+              className={`block w-full px-3 py-2 text-left text-k-sm hover:bg-k-bg ${e.key === 'cancel' || e.key === 'delete' ? 'text-k-danger' : 'text-k-text'}`}
             >
               {e.label}
             </button>

@@ -35,7 +35,7 @@ export function LocaleSwitch() {
           onClick={() => pick(locale)}
           aria-pressed={locale === active}
           title={t(locale)}
-          className={`rounded-lg px-2.5 py-1 text-[13px] font-medium uppercase transition-colors ${
+          className={`rounded-lg px-2.5 py-1 text-k-sm font-medium uppercase transition-colors ${
             locale === active ? 'bg-k-highlight text-k-purple' : 'text-k-muted hover:text-k-text-2'
           }`}
         >

@@ -174,7 +174,7 @@ export function ArrearsTable({
           <span className="block">
             <span className="block">{date(c.lastActionAt, locale)}</span>
             {c.lastActivityType && (
-              <span className="block text-[12px] text-k-muted">
+              <span className="block text-k-xs text-k-muted">
                 {t(`activityType.${c.lastActivityType}` as never)}
                 {c.lastActivityResult ? ` · ${c.lastActivityResult}` : ''}
               </span>
@@ -235,7 +235,7 @@ export function ArrearsTable({
         c.externalSource ? (
           <SourceBadge source={c.externalSource} syncStatus={c.syncStatus} reportedAsOf={c.reportedAsOf} stale={c.reportedStale} />
         ) : (
-          <span className="text-[13px] text-k-text-2">{t(`arrearsSource.${c.arrearsSource}`)}</span>
+          <span className="text-k-sm text-k-text-2">{t(`arrearsSource.${c.arrearsSource}`)}</span>
         ),
     },
     {
@@ -243,7 +243,7 @@ export function ArrearsTable({
       header: t('columns.promise'),
       visibleByDefault: false,
       // Un dato suelto, no un estado: «promesa vigente» no cambia la situación del crédito.
-      render: (c) => (c.hasActivePromise ? <span className="text-[13px] text-k-text-2">{t('activePromiseLabel')}</span> : dash),
+      render: (c) => (c.hasActivePromise ? <span className="text-k-sm text-k-text-2">{t('activePromiseLabel')}</span> : dash),
     },
   ];
 

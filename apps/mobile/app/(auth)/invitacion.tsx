@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
-import { isPasswordValid } from '@kobrax/shared';
+import { EMPTY_CHOICE, canSubmitLegal, isPasswordValid, legalPayload, type LegalChoice } from '@kobrax/shared';
+import { LegalConsents, useSignupDocuments } from '@/legal-consents';
 import {
   Button,
   Card,
@@ -36,6 +37,10 @@ export default function InvitacionScreen() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // Privacidad: quien se une por invitación también acepta los Términos y reconoce la Política antes de entrar.
+  const legalDocs = useSignupDocuments();
+  const [choice, setChoice] = useState<LegalChoice>(EMPTY_CHOICE);
+  const [stale, setStale] = useState(false);
 
   const buscar = useCallback(async (raw: string) => {
     setError(null);
@@ -61,9 +66,16 @@ export default function InvitacionScreen() {
   async function aceptar() {
     setError(null);
     setLoading(true);
-    const res = await acceptInvitation(code.trim(), password);
+    const res = await acceptInvitation(code.trim(), password, legalPayload(legalDocs.docs, choice));
     if (res.status !== 'ok') {
       setLoading(false);
+      if (res.status === 'error' && res.code === 'LEGAL_VERSION_STALE') {
+        // Cambió una versión mientras llenaba el formulario: no se consumió la invitación; se recarga y se vuelven a pedir las casillas.
+        setChoice(EMPTY_CHOICE);
+        setStale(true);
+        void legalDocs.reload();
+        return;
+      }
       setError(
         res.status === 'offline' ? 'Sin conexión: no se pudo completar.' : res.message,
       );
@@ -112,11 +124,23 @@ export default function InvitacionScreen() {
                 importantForAutofill="yes"
               />
               <PasswordChecklist password={password} />
+              <LegalConsents
+                docs={legalDocs.docs}
+                state={legalDocs.state}
+                onReload={() => void legalDocs.reload()}
+                choice={choice}
+                onChange={(next) => {
+                  setStale(false);
+                  setChoice(next);
+                }}
+                disabled={loading}
+                stale={stale}
+              />
               <Button
                 label="Entrar"
                 onPress={() => void aceptar()}
                 loading={loading}
-                disabled={!isPasswordValid(password)}
+                disabled={!isPasswordValid(password) || !canSubmitLegal(legalDocs.docs, choice)}
               />
             </>
           ) : (

@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { ArrearCategory } from '@kobrax/shared';
-import { Button, ErrorBanner } from '@/components/ui';
+import { Button, ErrorBanner, TextButton } from '@/components/ui';
 import { Section } from '@/components/panel-ui';
 import { usePermissions } from '@/components/permissions';
 import { useToast } from '@/components/toast';
@@ -20,7 +20,7 @@ import {
 } from '@/lib/arrear-categories';
 
 const CELL =
-  'h-10 w-full rounded-lg border border-k-border bg-white px-2.5 text-[13px] text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus disabled:bg-k-bg disabled:text-k-text-2';
+  'h-10 w-full rounded-lg border border-k-border bg-white px-2.5 text-k-sm text-k-text outline-none focus:border-k-periwinkle focus:shadow-k-focus disabled:bg-k-bg disabled:text-k-text-2';
 
 /**
  * Categorías de mora (A / B / C…) de la cuenta (F4/08 · D1-b).
@@ -81,12 +81,12 @@ export function ArrearCategories({ categories }: { categories: ArrearCategory[] 
 
   return (
     <Section title={t('title')} inner="p-6">
-      <p className="text-[13px] leading-relaxed text-k-text-2">{t('intro')}</p>
+      <p className="text-k-sm leading-relaxed text-k-text-2">{t('intro')}</p>
 
       <div className="mt-4 overflow-x-auto">
         <table className="w-full min-w-[640px] border-collapse text-left">
           <thead>
-            <tr className="text-[11px] font-semibold uppercase tracking-wide text-k-text-2">
+            <tr className="text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">
               <th scope="col" className="w-24 pb-2 pr-2">{t('columns.code')}</th>
               <th scope="col" className="pb-2 pr-2">{t('columns.name')}</th>
               <th scope="col" className="w-28 pb-2 pr-2">{t('columns.from')}</th>
@@ -166,7 +166,7 @@ export function ArrearCategories({ categories }: { categories: ArrearCategory[] 
                       aria-label={`${t('remove')} ${r.code || i + 1}`}
                       disabled={busy}
                       onClick={() => setRows((prev) => prev.filter((x) => x.key !== r.key))}
-                      className="h-10 w-10 rounded-lg text-[18px] text-k-danger hover:bg-k-danger-bg disabled:opacity-50"
+                      className="h-10 w-10 rounded-lg text-k-xl text-k-danger hover:bg-k-danger-bg disabled:opacity-50"
                     >
                       ×
                     </button>
@@ -180,7 +180,7 @@ export function ArrearCategories({ categories }: { categories: ArrearCategory[] 
 
       {/* La validación en vivo: cada regla rota, en sus propias palabras. */}
       {editable && errors.length > 0 && (
-        <ul role="alert" className="mt-3 space-y-1 rounded-xl bg-k-danger-bg px-4 py-3 text-[13px] text-k-danger">
+        <ul role="alert" className="mt-3 space-y-1 rounded-xl bg-k-danger-bg px-4 py-3 text-k-sm text-k-danger">
           {errors.map((code) => (
             <li key={code}>{t(`validation.${code}`)}</li>
           ))}
@@ -191,14 +191,14 @@ export function ArrearCategories({ categories }: { categories: ArrearCategory[] 
         <div className="mt-4 space-y-3">
           <ErrorBanner message={error} />
           <div className="flex flex-wrap items-center gap-3">
-            <button
+            <TextButton
               type="button"
               disabled={busy || rows.length >= 26}
               onClick={() => setRows((prev) => [...prev, blankRow(prev[prev.length - 1])])}
-              className="text-[13px] font-medium text-k-purple hover:underline disabled:opacity-50"
+              tone="purple"
             >
               {t('add')}
-            </button>
+            </TextButton>
             {!managed && (
               <span className="ml-auto sm:w-48">
                 <Button loading={busy} disabled={errors.length > 0 || !dirty} onClick={() => void save()}>
@@ -209,7 +209,7 @@ export function ArrearCategories({ categories }: { categories: ArrearCategory[] 
           </div>
         </div>
       ) : (
-        <p className="mt-4 text-[13px] text-k-text-2">{t('readOnly')}</p>
+        <p className="mt-4 text-k-sm text-k-text-2">{t('readOnly')}</p>
       )}
     </Section>
   );

@@ -6,9 +6,9 @@ import type { OfficePortfolio } from '@/lib/offices';
 function Cell({ label, hint, title, tone = 'neutral', children }: { label: string; hint?: string; title?: string; tone?: 'neutral' | 'danger' | 'navy'; children: React.ReactNode }) {
   return (
     <div title={title} className={`px-5 py-3.5 ${tone === 'navy' ? 'bg-k-navy' : ''}`}>
-      <p className={`text-[11px] font-semibold uppercase tracking-wide ${tone === 'navy' ? 'text-white/70' : 'text-k-slate'}`}>{label}</p>
-      <div className={`mt-1 space-y-0.5 text-[20px] font-semibold leading-tight tabular-nums ${tone === 'danger' ? 'text-k-danger' : tone === 'navy' ? 'text-white' : 'text-k-navy'}`}>{children}</div>
-      {hint && <p className="mt-0.5 text-[12px] text-k-text-2">{hint}</p>}
+      <p className={`text-k-2xs font-semibold uppercase tracking-wide ${tone === 'navy' ? 'text-white/70' : 'text-k-slate'}`}>{label}</p>
+      <div className={`mt-1 space-y-0.5 text-k-2xl font-semibold leading-tight tabular-nums ${tone === 'danger' ? 'text-k-danger' : tone === 'navy' ? 'text-white' : 'text-k-navy'}`}>{children}</div>
+      {hint && <p className="mt-0.5 text-k-xs text-k-text-2">{hint}</p>}
     </div>
   );
 }

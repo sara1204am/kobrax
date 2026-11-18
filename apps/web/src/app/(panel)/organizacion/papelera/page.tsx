@@ -16,7 +16,7 @@ export default async function OfficeTrashPage() {
   if (list.status !== 200 || !list.body.data) return <EmptyState title={t('detail.noAccess')} text={list.body.error?.message} />;
   return (
     <>
-      <Link href="/organizacion" className="mb-3 inline-block text-[13px] font-medium text-k-purple hover:underline">
+      <Link href="/organizacion" className="mb-3 inline-block text-k-sm font-medium text-k-purple hover:underline">
         ← {t('detail.back')}
       </Link>
       <TrashList rows={list.body.data.filter((r) => !r.active)} />

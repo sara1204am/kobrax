@@ -21,6 +21,7 @@ import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { PrismaClient } from '@prisma/client';
+import { createHash } from 'node:crypto';
 import { hash } from 'bcryptjs';
 
 const API_DIR = process.cwd(); // `pnpm test:integration` corre en apps/api
@@ -177,7 +178,21 @@ async function envelope<T>(res: Response): Promise<Envelope<T>> {
   return { status: res.status, data: body.data, error: body.error ?? undefined };
 }
 
-export async function login(email: string): Promise<string> {
+/**
+ * Las cuentas nacen con el correo SIN confirmar y eso frena invitar y exportar (403 `EMAIL_UNVERIFIED`). Lo que casi todas las suites prueban es
+ * otra cosa, así que el login de pruebas lo deja confirmado; la suite de la confirmación (`email-verification.it.ts`) pasa `keepUnverified`.
+ */
+async function markEmailVerified(email: string): Promise<void> {
+  const prisma = db();
+  try {
+    await prisma.user.updateMany({ where: { email: email.toLowerCase(), emailVerifiedAt: null }, data: { emailVerifiedAt: new Date() } });
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+export async function login(email: string, opts: { keepUnverified?: boolean } = {}): Promise<string> {
+  if (!opts.keepUnverified) await markEmailVerified(email);
   const res = await fetch(`${API}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -192,7 +207,8 @@ export async function login(email: string): Promise<string> {
  * Login de un rol CRÍTICO (ACCOUNT_ADMIN) sin enrolar TOTP: exige que la API haya arrancado con `MFA_CRITICAL_GRACE_UNTIL`
  * en el futuro (`startApi({ MFA_CRITICAL_GRACE_UNTIL: '2099-01-01' })`). Lo que se prueba no es el segundo factor.
  */
-export async function loginSkippingMfa(email: string): Promise<string> {
+export async function loginSkippingMfa(email: string, opts: { keepUnverified?: boolean } = {}): Promise<string> {
+  if (!opts.keepUnverified) await markEmailVerified(email);
   const post = async (path: string, body: unknown) =>
     (await (await fetch(`${API}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json()) as {
       data?: { step: string; accessToken?: string; preAuthToken?: string };
@@ -240,3 +256,32 @@ export function installScopePolicies(): void {
 export function uninstallScopePolicies(): void {
   psqlTest(SCOPE_TABLES.map((t) => `DROP POLICY IF EXISTS scope_${t} ON ${t};`).join(' '));
 }
+
+/**
+ * Lo que el registro y la aceptación de invitación exigen desde el cambio de privacidad: los ids de las versiones vigentes de los
+ * Términos y de la Política. Si la base de prueba aún no tiene documentos publicados, publica dos de PRUEBA (versión `0.0.1-test`);
+ * si ya los hay (los del seed), usa los vigentes. Se difunde con `...(await legalAcceptance())` en el cuerpo del alta.
+ */
+export async function legalAcceptance(): Promise<{ termsVersionId: string; privacyVersionId: string }> {
+  const prisma = db();
+  try {
+    const ids: Record<string, string> = {};
+    for (const type of ['TERMS', 'PRIVACY'] as const) {
+      let v = await prisma.legalDocumentVersion.findFirst({
+        where: { type, locale: 'es', effectiveAt: { lte: new Date() } },
+        orderBy: [{ effectiveAt: 'desc' }, { publishedAt: 'desc' }],
+      });
+      if (!v) {
+        const content = `Documento de prueba ${type}`;
+        v = await prisma.legalDocumentVersion.create({
+          data: { type, locale: 'es', version: '0.0.1-test', title: type, content, contentSha256: createHash('sha256').update(content, 'utf8').digest('hex') },
+        });
+      }
+      ids[type] = v.id;
+    }
+    return { termsVersionId: ids.TERMS!, privacyVersionId: ids.PRIVACY! };
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+

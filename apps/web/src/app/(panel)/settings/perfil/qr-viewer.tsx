@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { TextButton } from '@/components/ui';
 
 /**
  * «Ver en grande»: el mismo visor que `MiQrCobro` del móvil, para el cobro desde el escritorio.
@@ -24,13 +25,13 @@ export function QrViewer({ url }: { url: string }) {
 
   return (
     <>
-      <button
+      <TextButton
         type="button"
         onClick={() => setOpen(true)}
-        className="text-[13px] font-medium text-k-purple hover:underline"
+        tone="purple"
       >
         {t('viewQr')}
-      </button>
+      </TextButton>
 
       {open && (
         <dialog
@@ -39,15 +40,15 @@ export function QrViewer({ url }: { url: string }) {
           onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}
           className="fixed inset-0 z-50 flex h-screen w-screen max-h-none max-w-none flex-col items-center justify-center gap-6 bg-white p-6"
         >
-          <h2 className="text-[22px] font-semibold text-k-navy">{t('qrTitle')}</h2>
+          <h2 className="text-k-3xl font-semibold text-k-navy">{t('qrTitle')}</h2>
           {/* eslint-disable-next-line @next/next/no-img-element -- lo sirve el BFF con la sesión */}
           <img src={url} alt={t('paymentQr')} className="h-[min(70vh,70vw)] w-[min(70vh,70vw)] object-contain" />
-          <p className="max-w-md text-center text-[14px] text-k-text-2">{t('qrHint')}</p>
+          <p className="max-w-md text-center text-k-base text-k-text-2">{t('qrHint')}</p>
           <button
             ref={close}
             type="button"
             onClick={() => setOpen(false)}
-            className="rounded-xl border border-k-border px-6 py-2.5 text-[14px] font-medium text-k-navy hover:bg-k-bg"
+            className="rounded-xl border border-k-border px-6 py-2.5 text-k-base font-medium text-k-navy hover:bg-k-bg"
           >
             {t('close')}
           </button>

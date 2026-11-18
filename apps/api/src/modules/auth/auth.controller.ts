@@ -12,6 +12,8 @@ import {
 import type { Request } from 'express';
 import { AuthService, type SessionMeta } from './auth.service';
 import { PasswordService } from './password.service';
+import { EmailVerificationService } from './email-verification.service';
+import { EmailVerifyDto } from './dto/email-verify.dto';
 import { SessionService } from './session.service';
 import type { AuthenticatedUser } from './guards/jwt-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
@@ -29,6 +31,7 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 import { MfaDisableDto } from './dto/mfa-disable.dto';
 import { MfaSetupStartDto, MfaSetupVerifyDto } from './dto/mfa-setup.dto';
 import { AcceptInvitationDto } from './dto/accept-invitation.dto';
+import { legalRequestMeta } from '../legal/legal-request';
 import { Authenticated, Public } from './decorators/authz.decorator';
 
 @Controller('auth')
@@ -37,6 +40,7 @@ export class AuthController {
     private readonly auth: AuthService,
     private readonly passwords: PasswordService,
     private readonly sessions: SessionService,
+    private readonly emailVerification: EmailVerificationService,
   ) {}
 
   private meta(req: Request): SessionMeta {
@@ -45,6 +49,28 @@ export class AuthController {
       userAgent: req.headers['user-agent'],
       deviceType: (req.headers['x-client-type'] as string) ?? 'api',
     };
+  }
+
+  // ── Confirmar el correo de la cuenta ─────────────────────────────────────
+
+  /** La persona abrió el enlace del correo y pulsó «Confirmar». Sin sesión: el enlace es la prueba. */
+  @Post('email/verify')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @RateLimit({ limit: 20, windowSec: 3600, by: 'ip' })
+  async verifyEmail(@Body() dto: EmailVerifyDto) {
+    await this.emailVerification.confirm(dto.token);
+    return { verified: true };
+  }
+
+  /** Pide otro enlace (el aviso del panel). Con sesión; como mucho uno por minuto. */
+  @Post('email/resend')
+  @Authenticated()
+  @HttpCode(HttpStatus.OK)
+  @RateLimit({ limit: 10, windowSec: 3600, by: 'ip' })
+  async resendVerification(@CurrentUser() user: AuthenticatedUser) {
+    const sent = await this.emailVerification.send(user.userId, { respectCooldown: true });
+    return { sent };
   }
 
   // ── Login (máquina de estados) ───────────────────────────────────────────
@@ -67,6 +93,7 @@ export class AuthController {
   @Post('select-account')
   @Public()
   @HttpCode(HttpStatus.OK)
+  @RateLimit({ limit: 10, windowSec: 60, by: 'ip' })
   selectAccount(@Body() dto: SelectAccountDto, @Req() req: Request) {
     return this.auth.selectAccount(dto.preAuthToken, dto.accountId, this.meta(req));
   }
@@ -75,6 +102,7 @@ export class AuthController {
   @Post('mfa/setup/start')
   @Public()
   @HttpCode(HttpStatus.OK)
+  @RateLimit({ limit: 10, windowSec: 60, by: 'ip' })
   mfaSetupStart(@Body() dto: MfaSetupStartDto) {
     return this.auth.mfaSetupStart(dto.preAuthToken);
   }
@@ -82,6 +110,7 @@ export class AuthController {
   @Post('mfa/setup/verify')
   @Public()
   @HttpCode(HttpStatus.OK)
+  @RateLimit({ limit: 10, windowSec: 60, by: 'ip' })
   mfaSetupVerify(@Body() dto: MfaSetupVerifyDto, @Req() req: Request) {
     return this.auth.mfaSetupVerify(dto.preAuthToken, dto.code, this.meta(req));
   }
@@ -90,6 +119,7 @@ export class AuthController {
   @Post('mfa/setup/skip')
   @Public()
   @HttpCode(HttpStatus.OK)
+  @RateLimit({ limit: 10, windowSec: 60, by: 'ip' })
   mfaSetupSkip(@Body() dto: MfaSetupStartDto, @Req() req: Request) {
     return this.auth.mfaSetupSkip(dto.preAuthToken, this.meta(req));
   }
@@ -173,9 +203,11 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @RateLimit({ limit: 10, windowSec: 3600, by: 'ip' })
   acceptInvitation(@Body() dto: AcceptInvitationDto, @Req() req: Request) {
-    return this.passwords.acceptInvitation(dto.code, dto.password, {
-      ip: req.ip,
-      userAgent: req.headers['user-agent'],
+    return this.passwords.acceptInvitation(dto.code, dto.password, legalRequestMeta(req, 'invitation'), {
+      termsVersionId: dto.termsVersionId,
+      privacyVersionId: dto.privacyVersionId,
+      marketingOptIn: dto.marketingOptIn,
+      analyticsOptIn: dto.analyticsOptIn,
     });
   }
 

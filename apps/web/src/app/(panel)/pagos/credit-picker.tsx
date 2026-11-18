@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { CreditDetail } from '@kobrax/shared';
-import { Field, Input } from '@/components/ui';
+import { Button, Field, Input } from '@/components/ui';
 import { money } from '@/lib/format';
 import type { PortfolioRow } from '@/lib/portfolio';
 
@@ -67,9 +67,9 @@ export function CreditPicker({ onPick }: { onPick: (credit: CreditDetail) => voi
           <Input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('register.searchHint')} />
         </Field>
         <div className="mt-3 min-h-[80px]">
-          {searching && <p className="text-[13px] text-k-text-2">{t('register.searching')}</p>}
+          {searching && <p className="text-k-sm text-k-text-2">{t('register.searching')}</p>}
           {!searching && q.trim().length >= 3 && hits.length === 0 && (
-            <p className="text-[13px] text-k-text-2">{t('register.noClients')}</p>
+            <p className="text-k-sm text-k-text-2">{t('register.noClients')}</p>
           )}
           <ul className="space-y-1">
             {hits.map((c) => (
@@ -77,11 +77,11 @@ export function CreditPicker({ onPick }: { onPick: (credit: CreditDetail) => voi
                 <button
                   type="button"
                   onClick={() => void pickClient(c)}
-                  className="flex w-full items-center justify-between gap-3 rounded-xl border border-k-border bg-white px-3 py-2.5 text-left text-[14px] text-k-text hover:bg-k-bg"
+                  className="flex w-full items-center justify-between gap-3 rounded-xl border border-k-border bg-white px-3 py-2.5 text-left text-k-base text-k-text hover:bg-k-bg"
                 >
                   <span>{c.businessName || [c.firstName, c.lastName].filter(Boolean).join(' ') || '—'}</span>
                   {/* El carnet enmascarado: con dos homónimos es lo único que los separa. */}
-                  {c.nationalId && <span className="text-[12px] text-k-muted">{c.nationalId}</span>}
+                  {c.nationalId && <span className="text-k-xs text-k-muted">{c.nationalId}</span>}
                 </button>
               </li>
             ))}
@@ -94,16 +94,16 @@ export function CreditPicker({ onPick }: { onPick: (credit: CreditDetail) => voi
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3 rounded-xl border border-k-border bg-k-bg px-3 py-2.5">
-        <span className="text-[14px] font-medium text-k-text">{client.name}</span>
-        <button type="button" onClick={back} className="text-[13px] font-medium text-k-periwinkle hover:underline">
+        <span className="text-k-base font-medium text-k-text">{client.name}</span>
+        <Button type="button" variant="link" fullWidth={false} onClick={back} className="!text-k-sm !font-medium !text-k-periwinkle">
           {t('register.changeClient')}
-        </button>
+        </Button>
       </div>
 
-      {searching && <p className="text-[13px] text-k-text-2">{t('register.searching')}</p>}
-      {failed && <p className="text-[13px] text-k-danger">{t('register.creditsError')}</p>}
+      {searching && <p className="text-k-sm text-k-text-2">{t('register.searching')}</p>}
+      {failed && <p className="text-k-sm text-k-danger">{t('register.creditsError')}</p>}
       {!searching && !failed && credits.length === 0 && (
-        <p className="rounded-xl bg-k-warning-bg px-3 py-2.5 text-[13px] text-k-warning-text">{t('register.noCredits')}</p>
+        <p className="rounded-xl bg-k-warning-bg px-3 py-2.5 text-k-sm text-k-warning-text">{t('register.noCredits')}</p>
       )}
       <ul className="space-y-1">
         {credits.map((cr) => (
@@ -111,10 +111,10 @@ export function CreditPicker({ onPick }: { onPick: (credit: CreditDetail) => voi
             <button
               type="button"
               onClick={() => onPick(cr)}
-              className="flex w-full items-center justify-between gap-3 rounded-xl border border-k-border bg-white px-3 py-2.5 text-left text-[14px] text-k-text hover:bg-k-bg"
+              className="flex w-full items-center justify-between gap-3 rounded-xl border border-k-border bg-white px-3 py-2.5 text-left text-k-base text-k-text hover:bg-k-bg"
             >
               <span>{cr.code ?? t('register.noCode')}</span>
-              <span className="text-[13px] text-k-text-2">
+              <span className="text-k-sm text-k-text-2">
                 {money(cr.outstandingBalance, cr.currency)} ·{' '}
                 {(cr.daysPastDue ?? 0) > 0 ? t('register.inArrears', { days: cr.daysPastDue ?? 0 }) : t('register.current')}
               </span>

@@ -94,7 +94,7 @@ function RowMenu({ row, ctx }: { row: OfficeRow; ctx: TreeCtx }) {
                 setOpen(false);
                 ctx.onAction(i.action, row);
               }}
-              className={`block w-full px-4 py-2 text-left text-[13px] hover:bg-k-bg focus-visible:bg-k-bg focus-visible:outline-none ${i.danger ? 'text-k-danger' : 'text-k-text'}`}
+              className={`block w-full px-4 py-2 text-left text-k-sm hover:bg-k-bg focus-visible:bg-k-bg focus-visible:outline-none ${i.danger ? 'text-k-danger' : 'text-k-text'}`}
             >
               {i.label}
             </button>
@@ -193,18 +193,18 @@ function TreeNode({ item, ctx, level }: { item: OfficeTreeItem<OfficeRow>; ctx: 
           title={[node.fullName, node.address].filter(Boolean).join(' — ')}
         >
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className={`truncate text-[16px] font-semibold ${nameTone}`}>{node.name}</span>
-            {node.typeName && <span className="rounded-lg bg-k-light-bg px-2.5 py-0.5 text-[13px] font-medium text-k-slate">{node.typeName}</span>}
-            {node.code && <span className="rounded-lg bg-k-light-bg/60 px-2.5 py-0.5 text-[13px] font-medium text-k-slate">{node.code}</span>}
+            <span className={`truncate text-k-lg font-semibold ${nameTone}`}>{node.name}</span>
+            {node.typeName && <span className="rounded-lg bg-k-light-bg px-2.5 py-0.5 text-k-sm font-medium text-k-slate">{node.typeName}</span>}
+            {node.code && <span className="rounded-lg bg-k-light-bg/60 px-2.5 py-0.5 text-k-sm font-medium text-k-slate">{node.code}</span>}
           </span>
           {/* La ruta completa SIEMPRE visible (R10): «Central › Chuquisaca › Central» no se confunde con otra «Central». */}
-          <span className="mt-0.5 block truncate text-[13px] text-k-text-2">
+          <span className="mt-0.5 block truncate text-k-sm text-k-text-2">
             {node.isRoot ? t('tree.root') : node.fullName}
             {node.city ? ` · ${node.city}` : ''}
           </span>
         </button>
 
-        <span className="hidden shrink-0 items-center gap-6 self-stretch border-l border-k-border pl-5 pr-2 text-[15px] text-k-navy sm:flex">
+        <span className="hidden shrink-0 items-center gap-6 self-stretch border-l border-k-border pl-5 pr-2 text-k-md text-k-navy sm:flex">
           <span className="flex min-w-[3.25rem] items-center gap-2" title={t('tree.members', { n: node.members })} aria-label={t('tree.members', { n: node.members })}>
             <Icon name="team" className="h-[18px] w-[18px] text-k-text-2" />
             {node.members}
@@ -227,7 +227,7 @@ function TreeNode({ item, ctx, level }: { item: OfficeTreeItem<OfficeRow>; ctx: 
               <button
                 type="button"
                 onClick={() => setShown((n) => n + CHILDREN_PAGE)}
-                className="rounded-lg px-2 py-1.5 text-[13px] font-medium text-k-purple hover:underline"
+                className="rounded-lg px-2 py-1.5 text-k-sm font-medium text-k-purple hover:underline"
               >
                 {t('tree.showMore', { n: kids.length - shown })}
               </button>

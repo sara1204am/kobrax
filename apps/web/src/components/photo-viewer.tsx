@@ -102,11 +102,11 @@ export function PhotoViewer({
     >
       <div className="flex items-start justify-between gap-4 px-6 pt-5">
         <div className="min-w-0">
-          <h2 id={titleId} className="truncate text-[20px] font-semibold text-k-navy">
+          <h2 id={titleId} className="truncate text-k-2xl font-semibold text-k-navy">
             {title}
           </h2>
           {address && (
-            <p className="mt-1 flex items-center gap-1.5 text-[13px] text-k-text-2">
+            <p className="mt-1 flex items-center gap-1.5 text-k-sm text-k-text-2">
               <svg
                 width="15"
                 height="15"
@@ -152,7 +152,7 @@ export function PhotoViewer({
           )}
 
           {current === 0 && !caption && (
-            <span className="absolute left-3 top-3 rounded-md bg-k-purple px-2.5 py-1 text-[12px] font-semibold text-white shadow">
+            <span className="absolute left-3 top-3 rounded-md bg-k-purple px-2.5 py-1 text-k-xs font-semibold text-white shadow">
               {t('main')}
             </span>
           )}
@@ -176,7 +176,7 @@ export function PhotoViewer({
             </Tool>
           </div>
 
-          <span className="absolute bottom-3 right-3 rounded-full bg-k-navy/80 px-3 py-1 text-[12px] font-medium tabular-nums text-white">
+          <span className="absolute bottom-3 right-3 rounded-full bg-k-navy/80 px-3 py-1 text-k-xs font-medium tabular-nums text-white">
             {t('viewer.counter', { n: current + 1, total })}
           </span>
         </div>
@@ -190,8 +190,8 @@ export function PhotoViewer({
             </svg>
           </span>
           <div className="min-w-0">
-            <p className="text-[14px] font-semibold text-k-text">{caption ?? (current === 0 ? t('viewer.mainPhoto') : t('viewer.photoN', { n: current + 1 }))}</p>
-            <p className="truncate text-[13px] text-k-text-2">{evidence ?? t('viewer.evidenceClient')}</p>
+            <p className="text-k-base font-semibold text-k-text">{caption ?? (current === 0 ? t('viewer.mainPhoto') : t('viewer.photoN', { n: current + 1 }))}</p>
+            <p className="truncate text-k-sm text-k-text-2">{evidence ?? t('viewer.evidenceClient')}</p>
           </div>
         </div>
       </div>

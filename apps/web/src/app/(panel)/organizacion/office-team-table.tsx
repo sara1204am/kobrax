@@ -50,7 +50,7 @@ export function OfficeTeamTable({
       render: (r) => (
         <span className="block min-w-0">
           <span className="block truncate text-k-text">{r.name}</span>
-          <span className="block truncate text-[12px] text-k-text-2">{isKnownRole(r.roleName) ? tr(r.roleName) : r.roleName}</span>
+          <span className="block truncate text-k-xs text-k-text-2">{isKnownRole(r.roleName) ? tr(r.roleName) : r.roleName}</span>
         </span>
       ),
     },
@@ -81,7 +81,7 @@ export function OfficeTeamTable({
             numeric: true,
             render: (r: OfficeTeamRow) => (
               <span className="inline-block w-24">
-                <Button type="button" variant="ghost" disabled={busy} aria-label={t('team.takeOutOf', { name: r.name })} className="!h-9 !text-[13px] !text-k-danger" onClick={() => onTakeOut(r)}>
+                <Button type="button" variant="ghost" disabled={busy} aria-label={t('team.takeOutOf', { name: r.name })} className="!h-9 !text-k-sm !text-k-danger" onClick={() => onTakeOut(r)}>
                   {t('team.takeOut')}
                 </Button>
               </span>

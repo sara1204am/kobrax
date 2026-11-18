@@ -54,7 +54,7 @@ export function SessionsList() {
       <ErrorBanner message={error} />
 
       {loading ? (
-        <p className="text-[14px] text-k-text-2">{t('loading')}</p>
+        <p className="text-k-base text-k-text-2">{t('loading')}</p>
       ) : (
         <div className="space-y-3">
           {sessions.map((s) => (
@@ -63,15 +63,15 @@ export function SessionsList() {
               className="flex items-center justify-between rounded-2xl border border-k-border bg-white px-5 py-4 shadow-k-card"
             >
               <div>
-                <p className="text-[15px] font-medium text-k-text">
+                <p className="text-k-md font-medium text-k-text">
                   {s.deviceType ?? t('sessions.device')} · {s.accountName}
                   {s.isCurrent && (
-                    <span className="ml-2 rounded-full bg-k-success-bg px-2 py-0.5 text-[11px] font-medium text-k-success">
+                    <span className="ml-2 rounded-full bg-k-success-bg px-2 py-0.5 text-k-2xs font-medium text-k-success">
                       {t('sessions.current')}
                     </span>
                   )}
                 </p>
-                <p className="text-[12px] text-k-text-2">
+                <p className="text-k-xs text-k-text-2">
                   {[s.os, s.ip, s.lastSeenAt ? new Date(s.lastSeenAt).toLocaleString(locale) : null]
                     .filter(Boolean)
                     .join(' · ')}
@@ -81,7 +81,7 @@ export function SessionsList() {
                 <button
                   onClick={() => revoke(s.id)}
                   disabled={!!busy}
-                  className="text-[13px] font-medium text-k-danger disabled:opacity-50"
+                  className="text-k-sm font-medium text-k-danger disabled:opacity-50"
                 >
                   {busy === s.id ? '···' : t('sessions.close')}
                 </button>

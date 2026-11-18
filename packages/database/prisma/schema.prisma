@@ -101,6 +101,7 @@ model Account {
   branches                Branch[]
   branchTypes             BranchType[]
   branchAssignments       UserBranchAssignment[]
+  privacyRequests         PrivacyRequest[]
   userAccounts            UserAccount[]
   sessions                UserSession[]
   auditLogs               AuditLog[]
@@ -116,6 +117,7 @@ model Account {
   agendaItems             AgendaItem[]
   catalogItems            CatalogItem[]
   dashboards              Dashboard[]
+  userGuideStates         UserGuideState[]
   creditAssignments       CreditAssignment[]
   creditArrearEpisodes    CreditArrearEpisode[]
   creditNotes             CreditNote[]
@@ -237,6 +239,8 @@ model User {
   mfaSecret              String?    @map("mfa_secret")
   status                 UserStatus @default(PENDING) @map("user_status")
   lastLoginAt            DateTime?  @map("last_login_at")
+  /// Cuándo la persona confirmó que el correo es suyo (enlace de un solo uso). NULL = sin confirmar. Quien entra por invitación nace confirmado.
+  emailVerifiedAt        DateTime?  @map("email_verified_at")
   lastKnownLat           Decimal?   @map("last_known_lat") @db.Decimal(10, 8)
   lastKnownLng           Decimal?   @map("last_known_lng") @db.Decimal(11, 8)
   lastLocationAt         DateTime?  @map("last_location_at")
@@ -249,8 +253,12 @@ model User {
   branchAssignments   UserBranchAssignment[]
   sessions            UserSession[]
   auditLogs           AuditLog[]
+  legalAcceptances    UserLegalAcceptance[]
+  privacyRequests     PrivacyRequest[]
+  consentRecords      ConsentRecord[]
   mfaBackupCodes      MfaBackupCode[]
   passwordResetTokens PasswordResetToken[]
+  emailVerificationTokens EmailVerificationToken[]
 
   @@index([status])
   @@index([deletedAt])
@@ -300,23 +308,23 @@ model Role {
 
 /// Capacidad específica del sistema (RBAC granular). code = `{recurso}:{acción}`.
 model Permission {
-  id          String           @id @default(uuid())
+  id          String              @id @default(uuid())
   name        String
-  code        String           @unique
+  code        String              @unique
   description String?
   module      String
   action      PermissionAction
   resource    String?
-  scope       PermissionScope  @default(GLOBAL)
-  active      Boolean          @default(true)
+  scope       PermissionScope     @default(GLOBAL)
+  active      Boolean             @default(true)
   /// F14·F5: LOW | MEDIUM | HIGH | CRITICAL. Lo usa el editor de roles (F7) para pedir confirmación.
-  risk        PermissionRisk           @default(LOW)
+  risk        PermissionRisk      @default(LOW)
   /// F14·F5: NULL | PLATFORM (nunca concedible a un rol de cuenta) | ADMIN_CORE (el ACCOUNT_ADMIN no puede perderlo).
   reserved    PermissionReserved?
   /// F14·F5: permisos de los que éste depende (arreglo JSON de códigos).
-  requires    Json             @default("[]")
-  createdAt   DateTime         @default(now()) @map("created_at")
-  updatedAt   DateTime         @updatedAt @map("updated_at")
+  requires    Json                @default("[]")
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
 
   roles        RolePermission[]
   templates    RoleTemplatePermission[]
@@ -431,13 +439,13 @@ model AccountRole {
 }
 
 model AccountRolePermission {
-  accountRoleId String   @map("account_role_id")
-  permissionId  String   @map("permission_id")
-  accountId     String   @map("account_id")
+  accountRoleId String               @map("account_role_id")
+  permissionId  String               @map("permission_id")
+  accountId     String               @map("account_id")
   /// TEMPLATE | CUSTOM
-  source        RolePermissionSource   @default(TEMPLATE)
-  grantedBy     String?  @map("granted_by")
-  grantedAt     DateTime @default(now()) @map("granted_at")
+  source        RolePermissionSource @default(TEMPLATE)
+  grantedBy     String?              @map("granted_by")
+  grantedAt     DateTime             @default(now()) @map("granted_at")
 
   accountRole AccountRole @relation(fields: [accountRoleId], references: [id], onDelete: Cascade)
   permission  Permission  @relation(fields: [permissionId], references: [id], onDelete: Cascade)
@@ -450,20 +458,20 @@ model AccountRolePermission {
 
 /// F14·F5 (H-11) — la persona de plataforma: UNA sola fila (índice único), sin membresía en empresas, MFA obligatorio. Se aprovisiona por seed / CLI.
 model PlatformUser {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  passwordHash String   @map("password_hash")
+  id             String    @id @default(uuid())
+  email          String    @unique
+  passwordHash   String    @map("password_hash")
   /// Secreto TOTP cifrado en reposo. Nulo hasta enrolar.
-  mfaSecret    String?  @map("mfa_secret")
-  mfaEnabled   Boolean  @default(false) @map("mfa_enabled")
-  isActive     Boolean  @default(true) @map("is_active")
+  mfaSecret      String?   @map("mfa_secret")
+  mfaEnabled     Boolean   @default(false) @map("mfa_enabled")
+  isActive       Boolean   @default(true) @map("is_active")
   /// Intentos fallidos seguidos; al llegar al tope se bloquea hasta `lockedUntil`.
-  failedAttempts Int     @default(0) @map("failed_attempts")
-  lockedUntil  DateTime? @map("locked_until")
+  failedAttempts Int       @default(0) @map("failed_attempts")
+  lockedUntil    DateTime? @map("locked_until")
   /// Último tramo TOTP aceptado: un código ya usado no vuelve a valer.
-  mfaLastStep  BigInt?  @map("mfa_last_step")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  mfaLastStep    BigInt?   @map("mfa_last_step")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
   sessions SupportSession[]
 
@@ -473,21 +481,21 @@ model PlatformUser {
 /// F14·F5 — el acceso excepcional de plataforma a UNA cuenta: vence (≤ 240 min), lleva motivo y ticket, un subconjunto de permisos y —para escritura
 /// sensible— el consentimiento del ACCOUNT_ADMIN de esa cuenta.
 model SupportSession {
-  id             String    @id @default(uuid())
-  accountId      String    @map("account_id")
-  platformUserId String    @map("platform_user_id")
+  id             String        @id @default(uuid())
+  accountId      String        @map("account_id")
+  platformUserId String        @map("platform_user_id")
   reason         String
   ticket         String?
   permissions    String[]
-  sensitive      Boolean   @default(false)
+  sensitive      Boolean       @default(false)
   /// NOT_REQUIRED | PENDING | GRANTED | DENIED | REVOKED
-  consentStatus  ConsentStatus    @default(NOT_REQUIRED) @map("consent_status")
-  consentBy      String?   @map("consent_by")
-  consentAt      DateTime? @map("consent_at")
-  expiresAt      DateTime  @map("expires_at")
-  revokedAt      DateTime? @map("revoked_at")
-  revokedBy      String?   @map("revoked_by")
-  createdAt      DateTime  @default(now()) @map("created_at")
+  consentStatus  ConsentStatus @default(NOT_REQUIRED) @map("consent_status")
+  consentBy      String?       @map("consent_by")
+  consentAt      DateTime?     @map("consent_at")
+  expiresAt      DateTime      @map("expires_at")
+  revokedAt      DateTime?     @map("revoked_at")
+  revokedBy      String?       @map("revoked_by")
+  createdAt      DateTime      @default(now()) @map("created_at")
 
   platformUser PlatformUser @relation(fields: [platformUserId], references: [id])
 
@@ -651,25 +659,41 @@ model PasswordResetToken {
   @@map("password_reset_tokens")
 }
 
+/// Confirmación del correo de un usuario: enlace de un solo uso. Solo se guarda la huella (SHA-256), nunca el enlace.
+model EmailVerificationToken {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  tokenHash String    @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([tokenHash])
+  @@map("email_verification_tokens")
+}
+
 /// Auditoría append-only: who / when / what / before / after / ip.
 model AuditLog {
-  id        String   @id @default(uuid())
-  accountId String   @map("account_id")
+  id               String         @id @default(uuid())
+  accountId        String         @map("account_id")
   /// Nulo cuando actuó plataforma (`actorType = PLATFORM`): la persona de plataforma no es un usuario de empresa.
-  userId    String?  @map("user_id")
+  userId           String?        @map("user_id")
   /// F14·F5: USER | PLATFORM.
-  actorType AuditActorType   @default(USER) @map("actor_type")
+  actorType        AuditActorType @default(USER) @map("actor_type")
   /// Quién actuó cuando no es un usuario de empresa (id de `platform_users`).
-  actorId   String?  @map("actor_id")
-  supportSessionId String? @map("support_session_id")
-  action    String
-  entity    String
-  entityId  String   @map("entity_id")
-  before    Json?
-  after     Json?
-  ip        String?
-  userAgent String?  @map("user_agent")
-  createdAt DateTime @default(now()) @map("created_at")
+  actorId          String?        @map("actor_id")
+  supportSessionId String?        @map("support_session_id")
+  action           String
+  entity           String
+  entityId         String         @map("entity_id")
+  before           Json?
+  after            Json?
+  ip               String?
+  userAgent        String?        @map("user_agent")
+  createdAt        DateTime       @default(now()) @map("created_at")
 
   account Account @relation(fields: [accountId], references: [id])
   user    User?   @relation(fields: [userId], references: [id])
@@ -2246,4 +2270,231 @@ enum PermissionRisk {
 enum PermissionReserved {
   PLATFORM
   ADMIN_CORE
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// F15 · P6 — Estado de las guías por persona y organización
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Qué guías vio, descartó o dejó a medias cada persona **en cada organización** (D-13, D-17). Es estado de interfaz: no
+/// guarda progreso de negocio (eso se deriva de datos) y vive en una tabla propia, aparte de `user_accounts`, que lleva
+/// triggers de autorización. `state` es un jsonb versionado que valida `validateGuideStateInput` de shared.
+model UserGuideState {
+  id        String   @id @default(uuid())
+  accountId String   @map("account_id")
+  /// users.id (ref suave, como `dashboards.owner_user_id`): cada persona solo toca su fila; lo garantiza el service.
+  userId    String   @map("user_id")
+  state     Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  account Account @relation(fields: [accountId], references: [id])
+
+  @@unique([accountId, userId])
+  @@map("user_guide_states")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Legal — documentos versionados, aceptaciones y consentimientos (evidencia inmutable)
+// ─────────────────────────────────────────────────────────────────────────────
+// Tablas **globales** (por persona, como `users`): sin RLS. Son de SOLO INSERT: un trigger y un REVOKE (rls/007) impiden
+// UPDATE, DELETE y TRUNCATE incluso al rol de la aplicación. Una versión publicada nunca se edita: se publica otra.
+
+enum LegalDocumentType {
+  TERMS
+  PRIVACY
+  COOKIES
+  DPA
+  ACCEPTABLE_USE
+  AI_POLICY
+}
+
+enum LegalAcceptanceAction {
+  ACCEPTED
+  ACKNOWLEDGED
+}
+
+enum LegalAcceptanceSource {
+  SIGNUP_WEB
+  SIGNUP_MOBILE
+  INVITATION_WEB
+  INVITATION_MOBILE
+  RE_ACCEPT
+  PROFILE
+  ORGANIZATION
+}
+
+enum LegalConsentPurpose {
+  MARKETING
+  ANALYTICS
+  COOKIES_NON_ESSENTIAL
+}
+
+enum LegalConsentStatus {
+  GRANTED
+  WITHDRAWN
+}
+
+/// Una versión exacta de un documento legal en un idioma. `contentSha256` = SHA-256 (hex) del `content` en UTF-8: demuestra
+/// QUÉ texto vio la persona. `isMaterial` decide si exige nueva aceptación (un cambio editorial no).
+model LegalDocumentVersion {
+  id            String            @id @default(uuid())
+  type          LegalDocumentType
+  locale        String            @default("es")
+  /// Semver del documento (p. ej. 1.0.0). Único por tipo e idioma.
+  version       String
+  title         String
+  content       String
+  contentSha256 String            @map("content_sha256")
+  isMaterial    Boolean           @default(false) @map("is_material")
+  changeSummary String?           @map("change_summary")
+  publishedAt   DateTime          @default(now()) @map("published_at")
+  /// Desde cuándo rige. Antes de esta fecha no es la versión vigente.
+  effectiveAt   DateTime          @default(now()) @map("effective_at")
+  /// platform_users.id (ref suave): quién la publicó.
+  publishedBy   String?           @map("published_by")
+
+  acceptances UserLegalAcceptance[]
+  consents    ConsentRecord[]
+
+  @@unique([type, locale, version])
+  @@index([type, locale, effectiveAt])
+  @@map("legal_document_versions")
+}
+
+/// Constancia de que una persona aceptó o conoció una versión. `acceptedAt` lo pone la base (UTC), nunca el cliente.
+model UserLegalAcceptance {
+  id                String                @id @default(uuid())
+  userId            String                @map("user_id")
+  /// Organización en cuyo contexto ocurrió (null si fue previa a la sesión o a nivel de persona).
+  accountId         String?               @map("account_id")
+  documentVersionId String                @map("document_version_id")
+  /// Copia del hash de la versión aceptada: la prueba no depende de seguir teniendo la fila de la versión a mano.
+  contentSha256     String                @map("content_sha256")
+  action            LegalAcceptanceAction
+  source            LegalAcceptanceSource
+  acceptedAt        DateTime              @default(now()) @map("accepted_at")
+  ip                String?
+  userAgent         String?               @map("user_agent")
+  appVersion        String?               @map("app_version")
+
+  user            User                 @relation(fields: [userId], references: [id])
+  documentVersion LegalDocumentVersion @relation(fields: [documentVersionId], references: [id])
+
+  @@unique([userId, documentVersionId, action])
+  @@index([userId, acceptedAt])
+  @@map("user_legal_acceptances")
+}
+
+/// Historial de un consentimiento **opcional**. El estado vigente es la última fila por (persona, finalidad): retirar es
+/// INSERTAR una fila `WITHDRAWN`, nunca actualizar la anterior.
+model ConsentRecord {
+  id                String                @id @default(uuid())
+  userId            String                @map("user_id")
+  purpose           LegalConsentPurpose
+  status            LegalConsentStatus
+  /// Versión del documento que describía la finalidad cuando se decidió (null si no aplica).
+  documentVersionId String?               @map("document_version_id")
+  source            LegalAcceptanceSource
+  recordedAt        DateTime              @default(now()) @map("recorded_at")
+  ip                String?
+  userAgent         String?               @map("user_agent")
+  appVersion        String?               @map("app_version")
+
+  user            User                  @relation(fields: [userId], references: [id])
+  documentVersion LegalDocumentVersion? @relation(fields: [documentVersionId], references: [id])
+
+  @@index([userId, purpose, recordedAt])
+  @@map("consent_records")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Privacidad — solicitudes de derechos de las personas (acceso, rectificación, supresión…) y su seguimiento
+// ─────────────────────────────────────────────────────────────────────────────
+// Dos orígenes distintos (no se mezclan): `APP_USER` = una persona usuaria de Kobrax sobre SUS datos (sin cuenta: `account_id` NULL,
+// la procesa Kobrax); `DEBTOR_VIA_ORG` = una persona cuyos datos de cobranza administra una organización: la registra el personal
+// de esa organización (que es la RESPONSABLE) y vive en su cuenta. El administrador de una cuenta no consiente ni decide por los
+// titulares: aquí solo registra y da seguimiento. Los eventos son evidencia: solo INSERT (trigger + REVOKE en rls/005c).
+
+enum PrivacyRequestType {
+  ACCESS
+  RECTIFICATION
+  ERASURE
+  RESTRICTION
+  OBJECTION
+  PORTABILITY
+  WITHDRAW_CONSENT
+  OTHER
+  ABUSE_REPORT
+  ACCOUNT_DELETION
+}
+
+enum PrivacyRequestStatus {
+  RECEIVED
+  IN_REVIEW
+  NEEDS_INFO
+  APPROVED
+  REJECTED
+  COMPLETED
+}
+
+enum PrivacySubjectKind {
+  APP_USER
+  DEBTOR_VIA_ORG
+  /// Persona sin cuenta que escribe por el formulario público (reporte de abuso, corrección, eliminación).
+  THIRD_PARTY
+}
+
+model PrivacyRequest {
+  id              String               @id @default(uuid())
+  subjectKind     PrivacySubjectKind   @map("subject_kind")
+  type            PrivacyRequestType
+  status          PrivacyRequestStatus @default(RECEIVED)
+  /// Quién la presentó: la propia persona (APP_USER) o el integrante de la organización que la registró (DEBTOR_VIA_ORG). NULL en THIRD_PARTY (no tiene cuenta).
+  requesterUserId String?              @map("requester_user_id")
+  /// Solo THIRD_PARTY: cómo responderle a quien escribió desde el formulario público, y a quién o qué reporta.
+  contactEmail    String?              @map("contact_email")
+  contactName     String?              @map("contact_name")
+  /// Solo THIRD_PARTY: la organización, cobrador o cuenta a la que se refiere el reporte (texto libre).
+  reportedSubject String?              @map("reported_subject")
+  /// Solo THIRD_PARTY: SHA-256 del enlace de confirmación enviado al correo (un solo uso, vence). El texto del enlace nunca se guarda.
+  contactVerifyHash      String?   @map("contact_verify_hash")
+  contactVerifyExpiresAt DateTime? @map("contact_verify_expires_at")
+  /// Cuándo la persona confirmó que el correo es suyo. NULL = sin confirmar.
+  contactVerifiedAt      DateTime? @map("contact_verified_at")
+  /// NULL en APP_USER (es personal); la cuenta responsable en DEBTOR_VIA_ORG. La policy de RLS deja ver NULL + la cuenta activa.
+  accountId       String?              @map("account_id")
+  /// Identificación mínima del titular de cobranza (solo DEBTOR_VIA_ORG): texto libre que escribe quien la registra.
+  subjectLabel    String?              @map("subject_label")
+  description     String
+  rejectionReason String?              @map("rejection_reason")
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+  closedAt        DateTime?            @map("closed_at")
+
+  requester User?                 @relation(fields: [requesterUserId], references: [id])
+  account   Account?              @relation(fields: [accountId], references: [id])
+  events    PrivacyRequestEvent[]
+
+  @@index([requesterUserId, createdAt])
+  @@index([accountId, status, createdAt])
+  @@index([subjectKind, status, createdAt])
+  @@map("privacy_requests")
+}
+
+/// Cada cambio de estado de una solicitud, para siempre (solo INSERT). `actorKind`: REQUESTER | ORG | PLATFORM.
+model PrivacyRequestEvent {
+  id          String               @id @default(uuid())
+  requestId   String               @map("request_id")
+  status      PrivacyRequestStatus
+  note        String?
+  actorKind   String               @map("actor_kind")
+  /// users.id o platform_users.id según `actorKind` (ref suave).
+  actorUserId String?              @map("actor_user_id")
+  createdAt   DateTime             @default(now()) @map("created_at")
+
+  request PrivacyRequest @relation(fields: [requestId], references: [id])
+
+  @@index([requestId, createdAt])
+  @@map("privacy_request_events")
 }

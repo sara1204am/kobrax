@@ -25,7 +25,7 @@ function Panel({ title, aside, children }: { title: string; aside?: React.ReactN
   return (
     <section className="rounded-2xl border border-k-border bg-white">
       <div className="flex flex-wrap items-center justify-between gap-3 px-6 pt-5">
-        <h2 className="text-[18px] font-semibold text-k-navy">{title}</h2>
+        <h2 className="text-k-xl font-semibold text-k-navy">{title}</h2>
         {aside}
       </div>
       <div className="px-6 pb-6 pt-4">{children}</div>
@@ -35,7 +35,7 @@ function Panel({ title, aside, children }: { title: string; aside?: React.ReactN
 
 function Th({ children }: { children: React.ReactNode }) {
   return (
-    <th scope="col" className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-k-text-2">
+    <th scope="col" className="px-3 py-2.5 text-left text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">
       {children}
     </th>
   );
@@ -70,12 +70,12 @@ export async function InfoTab({ member, offices = [] }: { member: MemberDetail; 
       <dl className="grid gap-x-10 gap-y-4 sm:grid-cols-2">
         {rows.map(([label, value]) => (
           <div key={label}>
-            <dt className="text-[11px] font-semibold uppercase tracking-wide text-k-text-2">{label}</dt>
-            <dd className="mt-1 break-words text-[15px] text-k-text">{value}</dd>
+            <dt className="text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">{label}</dt>
+            <dd className="mt-1 break-words text-k-md text-k-text">{value}</dd>
           </div>
         ))}
       </dl>
-      {offices.length === 0 && <p className="mt-6 text-[12px] text-k-text-2">{t('detail.readOnly')}</p>}
+      {offices.length === 0 && <p className="mt-6 text-k-xs text-k-text-2">{t('detail.readOnly')}</p>}
     </Panel>
   );
 }
@@ -111,7 +111,7 @@ export async function ActivityTab({
               key={d}
               href={`/equipo/${userId}?tab=activity&days=${d}`}
               aria-current={activity.days === d ? 'true' : undefined}
-              className={`rounded-lg px-3 py-1.5 text-[13px] font-medium ${
+              className={`rounded-lg px-3 py-1.5 text-k-sm font-medium ${
                 activity.days === d ? 'bg-white text-k-navy shadow-sm' : 'text-k-text-2 hover:text-k-text'
               }`}
             >
@@ -128,13 +128,13 @@ export async function ActivityTab({
       >
         {METRICS[activity.kind].map((key) => (
           <div key={key} className="px-5 py-4">
-            <dd className="text-[26px] font-semibold text-k-navy">{activity.metrics[key] ?? 0}</dd>
-            <dt className="text-[13px] text-k-text-2">{t(`metrics.${key}`)}</dt>
+            <dd className="text-k-4xl font-semibold text-k-navy">{activity.metrics[key] ?? 0}</dd>
+            <dt className="text-k-sm text-k-text-2">{t(`metrics.${key}`)}</dt>
           </div>
         ))}
       </dl>
 
-      <h3 className="mb-2 mt-6 text-[15px] font-semibold text-k-text">{t('recent')}</h3>
+      <h3 className="mb-2 mt-6 text-k-md font-semibold text-k-text">{t('recent')}</h3>
       {events.items.length === 0 ? (
         <EmptyState title={t('noActivity')} text={t(activity.kind === 'admin' ? 'noActivityAdminHint' : 'noActivityHint')} />
       ) : (
@@ -155,7 +155,7 @@ export async function ConnectionsTab({ userId, connections }: { userId: string; 
       ) : (
         <ConnectionsTable userId={userId} initial={connections} />
       )}
-      <p className="mt-4 flex items-start gap-2 text-[12px] text-k-text-2">
+      <p className="mt-4 flex items-start gap-2 text-k-xs text-k-text-2">
         <TeamIcon name="user" className="mt-0.5 h-3.5 w-3.5" />
         {t('connectionsNote')}
       </p>
@@ -192,7 +192,7 @@ export async function AuditTab({ events }: { events: MemberAuditEvent[] }) {
         <EmptyState title={t('noAudit')} text={t('noAuditHint')} />
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] text-[14px]">
+          <table className="w-full min-w-[640px] text-k-base">
             <thead className="border-b border-k-border">
               <tr>
                 <Th>{t('cols.when')}</Th>

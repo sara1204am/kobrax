@@ -178,10 +178,10 @@ export function OfficesView({
           </span>
       </div>
 
-      <p className="text-[13px] leading-relaxed text-k-text-2">{t('intro')}</p>
+      <p className="text-k-sm leading-relaxed text-k-text-2">{t('intro')}</p>
 
       {atLimit && editable && (
-        <p role="note" className="rounded-xl bg-k-warning-bg px-4 py-3 text-[13px] text-k-warning-text">
+        <p role="note" className="rounded-xl bg-k-warning-bg px-4 py-3 text-k-sm text-k-warning-text">
           {t('planLimit', { used: plan.used, limit: plan.limit ?? 0 })}{' '}
           <Link href="/cuenta/plan" className="font-semibold underline">
             {t('seePlan')}
@@ -190,7 +190,7 @@ export function OfficesView({
       )}
 
       {pending && (
-        <div role="note" className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-k-warning-bg px-4 py-3 text-[13px] text-k-warning-text">
+        <div role="note" className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-k-warning-bg px-4 py-3 text-k-sm text-k-warning-text">
           <span>{t('portfolio.pending', { name: pending.name, n: pending.credits })}</span>
           {canMoveCartera ? (
             <span className="sm:w-48">
@@ -216,14 +216,14 @@ export function OfficesView({
             placeholder={t('toolbar.search')}
             aria-label={t('toolbar.search')}
             aria-keyshortcuts="/"
-            className="h-10 w-full rounded-xl border border-k-border bg-white px-3 text-[14px] text-k-text outline-none focus-visible:shadow-k-focus"
+            className="h-10 w-full rounded-xl border border-k-border bg-white px-3 text-k-base text-k-text outline-none focus-visible:shadow-k-focus"
           />
         </div>
-        <span className="text-[13px] text-k-text-2" aria-live="polite">
+        <span className="text-k-sm text-k-text-2" aria-live="polite">
           {t('toolbar.count', { n: live.length })}
         </span>
         {maxDepth > 0 && (
-          <div role="group" aria-label={t('toolbar.level')} className="flex items-center gap-1 rounded-xl border border-k-border bg-white p-0.5 text-[13px]">
+          <div role="group" aria-label={t('toolbar.level')} className="flex items-center gap-1 rounded-xl border border-k-border bg-white p-0.5 text-k-sm">
             <button type="button" aria-label={t('toolbar.collapseAll')} title={t('toolbar.collapseAll')} onClick={() => showLevels(1)} className="h-8 rounded-lg px-2 hover:bg-k-bg">
               ⇤
             </button>
@@ -242,10 +242,10 @@ export function OfficesView({
           </div>
         )}
       </div>
-      <p className="hidden text-[12px] text-k-muted sm:block">{t('toolbar.shortcuts')}</p>
+      <p className="hidden text-k-xs text-k-muted sm:block">{t('toolbar.shortcuts')}</p>
 
       {searching && (
-        <p className="rounded-lg bg-k-bg px-3 py-2 text-[13px] text-k-text-2" role="status">
+        <p className="rounded-lg bg-k-bg px-3 py-2 text-k-sm text-k-text-2" role="status">
           {matched.size === 0 ? t('toolbar.noResults', { q }) : t('toolbar.results', { n: matched.size, q })}
           {matched.size === 0 && (
             <button type="button" onClick={() => setQ('')} className="ml-2 font-medium text-k-purple hover:underline">

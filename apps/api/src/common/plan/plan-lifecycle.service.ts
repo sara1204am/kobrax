@@ -1,10 +1,13 @@
-import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy, Inject, Optional } from '@nestjs/common';
 import { NotificationType, type PrismaClient } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { AppConfigService } from '../../config/app-config.service';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../../modules/notifications/notifications.service';
 import { auditAsOwner } from './plan-tools.service';
+import type Redis from 'ioredis';
+import { startJob } from '../../common/jobs/start-job';
+import { REDIS } from '../../redis/redis.module';
 
 /** Corre más seguido que «diario» para que un reinicio no lo saltee. Es idempotente. */
 export const PLAN_LIFECYCLE_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -52,11 +55,12 @@ export class PlanLifecycleService implements OnApplicationBootstrap, OnModuleDes
     private readonly notifications: NotificationsService,
     private readonly mail: MailService,
     private readonly config: AppConfigService,
+    /** Candado entre instancias (opcional: sin Redis el job corre siempre). */
+    @Optional() @Inject(REDIS) private readonly redis?: Redis,
   ) {}
 
   onApplicationBootstrap(): void {
-    this.timer = setInterval(() => void this.run(), PLAN_LIFECYCLE_INTERVAL_MS);
-    if (typeof this.timer.unref === 'function') this.timer.unref();
+    this.timer = startJob({ name: 'plan-lifecycle', intervalMs: PLAN_LIFECYCLE_INTERVAL_MS, run: () => this.run(), redis: this.redis, logger: this.logger });
   }
 
   onModuleDestroy(): void {

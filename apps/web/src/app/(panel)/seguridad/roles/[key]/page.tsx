@@ -4,6 +4,7 @@ import { Permission, type PermissionCatalogEntry, type RoleDetail, type RoleHist
 import { apiCall } from '@/lib/bff';
 import { getMe, requirePermission } from '@/lib/authz';
 import { groupByModule, permissionKey } from '@/lib/roles';
+import { workspaceOfMe } from '@/lib/workspace';
 import { Badge, EmptyState, PageHeader, Section } from '@/components/panel-ui';
 import { NoAccess } from '@/components/no-access';
 import { RetryState } from '@/components/retry-state';
@@ -43,6 +44,8 @@ export default async function RoleDetailPage({ params, searchParams }: { params:
   const name = t.has(`roleNames.${role.key}`) ? t(`roleNames.${role.key}`) : (role.key ?? role.name);
   const base = `/seguridad/roles/${encodeURIComponent(key)}`;
   const granted = new Set(role.granted);
+  // F15 · A-5: con Equipo oculto, los nombres de las personas no son enlaces.
+  const teamShown = workspaceOfMe(me.body.data).showsModule('team');
 
   return (
     <>
@@ -55,7 +58,7 @@ export default async function RoleDetailPage({ params, searchParams }: { params:
         actions={<RoleActions role={role} catalog={entries} roleName={name} />}
       />
 
-      <p className="mb-4 text-[13px] text-k-text-2">
+      <p className="mb-4 text-k-sm text-k-text-2">
         {role.templateKey ? t('detail.summary', { granted: role.granted.length, added: role.diff.added.length, removed: role.diff.removed.length }) : t('detail.summaryNoTemplate', { granted: role.granted.length })}
       </p>
 
@@ -65,7 +68,7 @@ export default async function RoleDetailPage({ params, searchParams }: { params:
             key={x}
             href={x === 'permissions' ? base : `${base}?tab=${x}`}
             aria-current={tab === x ? 'page' : undefined}
-            className={`-mb-px whitespace-nowrap border-b-2 px-4 py-2.5 text-[14px] font-medium ${tab === x ? 'border-k-periwinkle font-semibold text-k-periwinkle' : 'border-transparent text-k-text-2 hover:text-k-navy'}`}
+            className={`-mb-px whitespace-nowrap border-b-2 px-4 py-2.5 text-k-base font-medium ${tab === x ? 'border-k-periwinkle font-semibold text-k-periwinkle' : 'border-transparent text-k-text-2 hover:text-k-navy'}`}
           >
             {t(`detail.tabs.${x}`)}
           </Link>
@@ -83,8 +86,8 @@ export default async function RoleDetailPage({ params, searchParams }: { params:
                   {on.map((p) => (
                     <li key={p.code} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-k-border px-3 py-2">
                       <div className="min-w-0">
-                        <p className="text-[14px] font-medium text-k-text">{tp(`${permissionKey(p.code)}.name`)}</p>
-                        <p className="text-[12px] text-k-text-2">{tp(`${permissionKey(p.code)}.description`)}</p>
+                        <p className="text-k-base font-medium text-k-text">{tp(`${permissionKey(p.code)}.name`)}</p>
+                        <p className="text-k-xs text-k-text-2">{tp(`${permissionKey(p.code)}.description`)}</p>
                       </div>
                       <div className="flex items-center gap-1.5">
                         {role.diff.added.includes(p.code) && <Badge tone="warning">{t('detail.addedBadge')}</Badge>}
@@ -100,7 +103,7 @@ export default async function RoleDetailPage({ params, searchParams }: { params:
             <Section title={t('detail.removedList')} inner="p-3">
               <ul className="space-y-1.5">
                 {role.diff.removed.map((c) => (
-                  <li key={c} className="flex items-center justify-between rounded-lg border border-k-border px-3 py-2 text-[14px] text-k-text-2">
+                  <li key={c} className="flex items-center justify-between rounded-lg border border-k-border px-3 py-2 text-k-base text-k-text-2">
                     {tp(`${permissionKey(c)}.name`)}
                     <Badge tone="danger">{t('detail.removedBadge')}</Badge>
                   </li>
@@ -119,10 +122,15 @@ export default async function RoleDetailPage({ params, searchParams }: { params:
             {role.people.map((p) => (
               <li key={p.userId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-k-border bg-white px-3 py-2.5">
                 <div className="min-w-0">
-                  <Link href={`/equipo/${p.userId}`} className="text-[14px] font-medium text-k-navy hover:underline">
-                    {p.name}
-                  </Link>
-                  <p className="text-[12px] text-k-text-2">{p.email}</p>
+                  {/* F15 · A-5: con Equipo oculto el nombre no es un enlace (llevaría a una pantalla que no está). */}
+                  {teamShown ? (
+                    <Link href={`/equipo/${p.userId}`} className="text-k-base font-medium text-k-navy hover:underline">
+                      {p.name}
+                    </Link>
+                  ) : (
+                    <span className="text-k-base font-medium text-k-navy">{p.name}</span>
+                  )}
+                  <p className="text-k-xs text-k-text-2">{p.email}</p>
                 </div>
                 {!p.isActive && <Badge tone="neutral">{t('detail.inactive')}</Badge>}
               </li>

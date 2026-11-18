@@ -15,21 +15,21 @@ export default function RootError({ reset }: { error: Error; reset: () => void }
   return (
     <main className="flex min-h-screen items-center justify-center bg-k-bg px-6">
       <div className="max-w-md text-center">
-        <h1 className="text-[20px] font-semibold text-k-navy">Algo salió mal</h1>
-        <p className="mt-2 text-[14px] text-k-text-2">
+        <h1 className="text-k-2xl font-semibold text-k-navy">Algo salió mal</h1>
+        <p className="mt-2 text-k-base text-k-text-2">
           No pudimos cargar esta pantalla.
         </p>
         <div className="mt-5 flex justify-center gap-3">
           <button
             type="button"
             onClick={reset}
-            className="rounded-xl bg-k-navy px-4 py-2.5 text-[14px] font-semibold text-white hover:bg-k-slate"
+            className="rounded-xl bg-k-navy px-4 py-2.5 text-k-base font-semibold text-white hover:bg-k-slate"
           >
             Reintentar
           </button>
           <a
             href="/dashboard"
-            className="rounded-xl border border-k-border bg-white px-4 py-2.5 text-[14px] font-medium text-k-text-2 hover:bg-k-bg"
+            className="rounded-xl border border-k-border bg-white px-4 py-2.5 text-k-base font-medium text-k-text-2 hover:bg-k-bg"
           >
             Ir al inicio
           </a>

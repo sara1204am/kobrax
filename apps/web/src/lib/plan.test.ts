@@ -9,6 +9,7 @@ import {
   hasPlanFilters,
   helpingOthers,
   minStops,
+  planningTargets,
   shiftDays,
   sortAvailable,
   toAvailable,
@@ -278,5 +279,34 @@ describe('addMinutes y clockConflicts · la hora fija es una restricción dura',
 
   it('llegar justo a la hora no es un choque', () => {
     expect(clockConflicts([{ id: 'a', etaMinutes: 90, scheduledTime: '10:00' }], '08:30')).toEqual([]);
+  });
+});
+
+describe('planningTargets (F15 · P-2)', () => {
+  const member = (userId: string, roleName: string, isActive = true) => ({ userId, roleName, isActive }) as never;
+  const team = [member('admin', 'ACCOUNT_ADMIN'), member('c1', 'COLLECTOR'), member('c2', 'COLLECTOR', false), member('sup', 'SUPERVISOR')];
+
+  it('los cobradores activos, como siempre', () => {
+    const t = planningTargets(team, { userId: 'sup', permissions: ['route:assign'] });
+    expect(t.map((m) => m.userId)).toEqual(['c1']);
+  });
+
+  it('🔴 el cobrador independiente (un ACCOUNT_ADMIN que ejecuta rutas) se planifica a sí mismo y va primero', () => {
+    const t = planningTargets(team, { userId: 'admin', permissions: ['route:assign', 'route:execute'] });
+    expect(t.map((m) => m.userId)).toEqual(['admin', 'c1']);
+  });
+
+  it('una cuenta de una sola persona: solo ella', () => {
+    expect(planningTargets([member('admin', 'ACCOUNT_ADMIN')], { userId: 'admin', permissions: ['route:execute'] }).map((m) => m.userId)).toEqual(['admin']);
+  });
+
+  it('sin `route:execute` no se ofrece a sí misma (un supervisor que no sale a la calle)', () => {
+    const t = planningTargets(team, { userId: 'sup', permissions: ['route:assign'] });
+    expect(t.map((m) => m.userId)).not.toContain('sup');
+  });
+
+  it('una persona inactiva no se ofrece, y un cobrador no se repite', () => {
+    expect(planningTargets([member('admin', 'ACCOUNT_ADMIN', false)], { userId: 'admin', permissions: ['route:execute'] })).toEqual([]);
+    expect(planningTargets([member('c1', 'COLLECTOR')], { userId: 'c1', permissions: ['route:execute'] }).map((m) => m.userId)).toEqual(['c1']);
   });
 });

@@ -5,6 +5,7 @@ import { getAgendaSummary } from '@/lib/agenda-summary';
 import { dayOr, monthRange } from '@/lib/agenda';
 import { EmptyState } from '@/components/panel-ui';
 import { AgendaConnector } from './agenda-connector';
+import { requirePermission } from '@/lib/authz';
 
 /** Cuántas vencidas se traen. `meta.total` dice cuántas hay de verdad. */
 const OVERDUE_LIMIT = 50;
@@ -25,6 +26,8 @@ export default async function AgendaPage({
 }: {
   searchParams: { date?: string; view?: string; gestor?: string; tipo?: string; estado?: string };
 }) {
+  const blocked = await requirePermission(Permission.AGENDA_READ);
+  if (blocked) return blocked;
   const t = await getTranslations('panel.agenda');
   // «Hoy» es el día de la EMPRESA que dice el servidor, no el UTC de este proceso (en Bolivia, desde las 20:00, UTC ya es mañana).
   const today = (await getAgendaSummary())?.date ?? todayISO();
@@ -68,6 +71,7 @@ export default async function AgendaPage({
   const supervises = canAssign && members.length > 0;
 
   return (
+    <div data-tour="screen.agenda.today">
     <AgendaConnector
       day={day}
       today={today}
@@ -79,5 +83,6 @@ export default async function AgendaPage({
       supervises={supervises}
       assign={canAssign && me.body.data ? { meId: me.body.data.userId } : undefined}
     />
+    </div>
   );
 }

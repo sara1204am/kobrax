@@ -55,12 +55,12 @@ export function ChangeRequestsPanel({
   }
 
   const kindText = (r: RouteChangeRequestItem) => t(`kind.${r.kind}`);
-  const btn = 'h-8 rounded-lg px-3 text-[13px] font-medium';
+  const btn = 'h-8 rounded-lg px-3 text-k-sm font-medium';
 
   return (
     <section aria-label={t('title')} className="rounded-2xl border border-k-border bg-white p-5 shadow-k-card">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-[16px] font-semibold text-k-navy">{t('title')}</h2>
+        <h2 className="text-k-lg font-semibold text-k-navy">{t('title')}</h2>
         {pending.length > 0 && <Badge tone="warning">{t('pending', { n: pending.length })}</Badge>}
       </div>
 
@@ -69,11 +69,11 @@ export function ChangeRequestsPanel({
           {pending.map((r) => (
             <li key={r.id} className="flex flex-wrap items-start justify-between gap-3 py-3">
               <div className="min-w-0 flex-1">
-                <p className="text-[14px] font-medium text-k-text">
+                <p className="text-k-base font-medium text-k-text">
                   {kindText(r)} <span className="font-normal text-k-text-2">· {r.requestedByName ?? t('someone')}</span>
                 </p>
-                <p className="mt-0.5 text-[13px] text-k-text-2">«{r.reason}»</p>
-                <p className="mt-0.5 text-[12px] text-k-muted">{dateTime(r.createdAt, locale)}</p>
+                <p className="mt-0.5 text-k-sm text-k-text-2">«{r.reason}»</p>
+                <p className="mt-0.5 text-k-xs text-k-muted">{dateTime(r.createdAt, locale)}</p>
               </div>
               <div className="flex shrink-0 gap-2">
                 {isOwner && (
@@ -107,10 +107,10 @@ export function ChangeRequestsPanel({
 
       {resolved.length > 0 && (
         <details className="mt-3">
-          <summary className="cursor-pointer text-[13px] text-k-text-2">{t('history', { n: resolved.length })}</summary>
+          <summary className="cursor-pointer text-k-sm text-k-text-2">{t('history', { n: resolved.length })}</summary>
           <ul className="mt-2 space-y-2">
             {resolved.map((r) => (
-              <li key={r.id} className="flex flex-wrap items-center gap-2 text-[13px] text-k-text-2">
+              <li key={r.id} className="flex flex-wrap items-center gap-2 text-k-sm text-k-text-2">
                 <Badge tone={STATUS_TONE[r.status]}>{t(`status.${r.status}`)}</Badge>
                 <span>
                   {kindText(r)} · {r.requestedByName ?? t('someone')}

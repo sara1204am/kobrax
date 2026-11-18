@@ -18,15 +18,15 @@ export function TrashList({ rows }: { rows: OfficeRow[] }) {
 
   return (
     <Section title={t('trash.title')} inner="space-y-4 p-4 sm:p-6">
-      <p className="text-[13px] text-k-text-2">{t('trash.intro')}</p>
+      <p className="text-k-sm text-k-text-2">{t('trash.intro')}</p>
       <ErrorBanner message={error} />
       {rows.length === 0 ? (
         <EmptyState title={t('trash.empty')} text={t('trash.emptyHint')} />
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-[13px]">
+          <table className="w-full text-left text-k-sm">
             <thead>
-              <tr className="border-b border-k-border text-[11px] uppercase tracking-wide text-k-text-2">
+              <tr className="border-b border-k-border text-k-2xs uppercase tracking-wide text-k-text-2">
                 <th scope="col" className="pb-2 pr-3">{t('trash.name')}</th>
                 <th scope="col" className="pb-2 pr-3">{t('form.fields.code')}</th>
                 <th scope="col" className="pb-2 pr-3">{t('form.fields.type')}</th>
@@ -42,9 +42,9 @@ export function TrashList({ rows }: { rows: OfficeRow[] }) {
                     <Link href={`/organizacion/${r.id}`} className="font-medium text-k-text hover:underline">
                       {r.name}
                     </Link>
-                    <p className="text-[12px] text-k-muted">{r.fullName}</p>
+                    <p className="text-k-xs text-k-muted">{r.fullName}</p>
                   </td>
-                  <td className="py-3 pr-3 font-mono text-[12px]">{r.code ?? '—'}</td>
+                  <td className="py-3 pr-3 font-mono text-k-xs">{r.code ?? '—'}</td>
                   <td className="py-3 pr-3">{r.typeName ? <Badge>{r.typeName}</Badge> : '—'}</td>
                   <td className="py-3 text-right">
                     {writable && (
