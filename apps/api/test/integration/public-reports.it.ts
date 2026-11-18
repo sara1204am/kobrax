@@ -9,13 +9,13 @@
  *
  *   pnpm --filter @kobrax/api build && node --import tsx --test test/integration/public-reports.it.ts
  */
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { hashSync } from 'bcryptjs';
 import type { PrismaClient } from '@prisma/client';
 import { totpNow } from '../../src/modules/auth/totp';
-import { API, call, db, freshDatabase, legalAcceptance, loginSkippingMfa, resetRateLimits, startApi, stopApi } from './harness';
+import { API, appDb, call, db, freshDatabase, legalAcceptance, loginSkippingMfa, resetRateLimits, startApi, stopApi } from './harness';
 
 const suffix = randomUUID().slice(0, 8);
 const ENROLL_KEY = `it-enroll-${suffix}-0123456789`;
@@ -23,6 +23,7 @@ const PLATFORM_EMAIL = `root-${suffix}@kobrax.test`;
 const PLATFORM_PASSWORD = 'Plataforma-clave-1';
 
 let prisma: PrismaClient;
+let app: PrismaClient;
 let platform = '';
 let adminA = '';
 let accountA = '';
@@ -43,6 +44,7 @@ before(async () => {
   await freshDatabase();
   await startApi({ MFA_CRITICAL_GRACE_UNTIL: '2099-01-01', PLATFORM_ACCESS_ENABLED: 'true', PLATFORM_ENROLLMENT_KEY: ENROLL_KEY });
   prisma = db();
+  app = appDb();
   emailA = `a-${suffix}@ejemplo.com`;
   const res = await fetch(`${API}/accounts`, {
     method: 'POST',
@@ -62,6 +64,7 @@ before(async () => {
 after(async () => {
   stopApi();
   await prisma?.$disconnect();
+  await app?.$disconnect();
 });
 
 const report = { type: 'ABUSE_REPORT', contactEmail: 'Persona@Ejemplo.com', contactName: 'Persona', reportedSubject: 'Cobranzas Sur', description: 'Me llaman a toda hora y a mi trabajo.' };
@@ -182,5 +185,95 @@ describe('consola de plataforma · cuentas', () => {
     assert.equal((await call(platform, 'POST', `/platform/accounts/${accountA}/status`, { status: 'ACTIVE', reason: 'Ya estaba activa, no corresponde' })).status, 409);
     const again = await fetch(`${API}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: emailA, password: 'Kobrax123!' }) });
     assert.notEqual(again.status, 403, 'tras reactivar ya no se rechaza por estar suspendida');
+  });
+});
+
+describe('🔴 segunda barrera (RLS): los reportes de personas sin cuenta solo se ven desde su superficie', () => {
+  let reportId = '';
+
+  it('el rol de la aplicación SIN declarar superficie no ve ni las filas ni sus eventos (aunque el código de empresa olvide un filtro)', async () => {
+    const row = await prisma.privacyRequest.findFirstOrThrow({ where: { contactEmail: 'persona@ejemplo.com' } });
+    reportId = row.id;
+    const rows = await app.$queryRaw<{ n: bigint }[]>`SELECT count(*)::bigint AS n FROM privacy_requests WHERE subject_kind::text = 'THIRD_PARTY'`;
+    assert.equal(Number(rows[0]!.n), 0);
+    const events = await app.$queryRaw<{ n: bigint }[]>`SELECT count(*)::bigint AS n FROM privacy_request_events WHERE request_id = ${reportId}`;
+    assert.equal(Number(events[0]!.n), 0);
+  });
+
+  it('con la superficie «platform» o «public» sí; con otra cualquiera, no', async () => {
+    for (const [surface, expected] of [['platform', 1], ['public', 1], ['empresa', 0]] as const) {
+      const n = await app.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT set_config('app.surface', ${surface}, true)`;
+        const r = await tx.$queryRaw<{ n: bigint }[]>`SELECT count(*)::bigint AS n FROM privacy_requests WHERE id = ${reportId}`;
+        return Number(r[0]!.n);
+      });
+      assert.equal(n, expected, surface);
+    }
+  });
+
+  it('sin superficie ni siquiera se puede INSERTAR una fila THIRD_PARTY', async () => {
+    await assert.rejects(
+      app.$executeRawUnsafe(
+        `INSERT INTO privacy_requests (id, subject_kind, type, description, contact_email, updated_at) VALUES ('rls-${suffix}', 'THIRD_PARTY', 'ABUSE_REPORT', 'intento sin superficie', 'x@y.com', now())`,
+      ),
+      /row-level security|violates/i,
+    );
+  });
+});
+
+describe('confirmación del correo (pedidos que actúan sobre la cuenta o los datos)', () => {
+  let id = '';
+  const token = `token-de-prueba-${suffix}-0123456789abcdef`;
+  const hash = createHash('sha256').update(token).digest('hex');
+
+  it('un pedido de eliminar cuenta queda pendiente de confirmar, y la plataforma lo ve así', async () => {
+    resetRateLimits();
+    const r = await post('/public/reports', null, { type: 'ACCOUNT_DELETION', contactEmail: 'titular@ejemplo.com', description: 'Quiero eliminar mi cuenta de Kobrax.' });
+    assert.equal(r.status, 201, JSON.stringify(r.error));
+    const row = await prisma.privacyRequest.findFirstOrThrow({ where: { contactEmail: 'titular@ejemplo.com' } });
+    id = row.id;
+    assert.ok(row.contactVerifyHash && row.contactVerifyHash.length === 64, 'se guarda solo la huella');
+    assert.equal(row.contactVerifiedAt, null);
+    const list = await call<{ id: string; needsVerification: boolean; contactVerified: boolean }[]>(platform, 'GET', '/platform/privacy-requests');
+    const mine = list.data!.find((x) => x.id === id)!;
+    assert.equal(mine.needsVerification, true);
+    assert.equal(mine.contactVerified, false);
+  });
+
+  it('🔴 no se puede APROBAR mientras la persona no confirme su correo', async () => {
+    assert.equal((await call(platform, 'PATCH', `/platform/privacy-requests/${id}/status`, { status: 'IN_REVIEW' })).status, 200);
+    const denied = await call(platform, 'PATCH', `/platform/privacy-requests/${id}/status`, { status: 'APPROVED' });
+    assert.equal(denied.status, 422);
+    assert.equal(denied.error?.code, 'PRIVACY_REQUEST_UNVERIFIED');
+  });
+
+  it('🔴 un token desconocido responde 404 genérico y no confirma nada', async () => {
+    const bad = await post('/public/reports/confirm', null, { token: 'x'.repeat(43) });
+    assert.equal(bad.status, 404);
+    assert.equal(bad.error?.code, 'PRIVACY_VERIFY_INVALID');
+    assert.equal((await post('/public/reports/confirm', null, { token: 'corto' })).status, 400);
+  });
+
+  it('confirmar con el token válido marca el correo, borra el token y sirve UNA sola vez; entonces sí se puede aprobar', async () => {
+    await prisma.privacyRequest.update({ where: { id }, data: { contactVerifyHash: hash } });
+    const ok = await post('/public/reports/confirm', null, { token });
+    assert.equal(ok.status, 200, JSON.stringify(ok.error));
+    assert.equal(ok.data?.reference, id.slice(0, 8).toUpperCase());
+    const row = await prisma.privacyRequest.findUniqueOrThrow({ where: { id } });
+    assert.ok(row.contactVerifiedAt);
+    assert.equal(row.contactVerifyHash, null);
+    const again = await post('/public/reports/confirm', null, { token });
+    assert.equal(again.status, 404, 'el enlace sirve una sola vez');
+    const approved = await call<{ status: string }>(platform, 'PATCH', `/platform/privacy-requests/${id}/status`, { status: 'APPROVED' });
+    assert.equal(approved.data?.status, 'APPROVED');
+  });
+
+  it('un enlace vencido no confirma', async () => {
+    const expiredToken = `vencido-${suffix}-0123456789abcdef0123456789`;
+    resetRateLimits();
+    await post('/public/reports', null, { type: 'ERASURE', contactEmail: 'otro@ejemplo.com', description: 'Quiero que borren mis datos.' });
+    const row = await prisma.privacyRequest.findFirstOrThrow({ where: { contactEmail: 'otro@ejemplo.com' } });
+    await prisma.privacyRequest.update({ where: { id: row.id }, data: { contactVerifyHash: createHash('sha256').update(expiredToken).digest('hex'), contactVerifyExpiresAt: new Date(Date.now() - 1000) } });
+    assert.equal((await post('/public/reports/confirm', null, { token: expiredToken })).status, 404);
   });
 });

@@ -4455,6 +4455,13 @@
     "symbol": "At least one symbol"
   },
   "shell": {
+    "legalLinks": {
+      "terms": "Terms",
+      "privacy": "Privacy",
+      "report": "Report a problem",
+      "deleteAccount": "Delete my account",
+      "label": "Legal information and help"
+    },
     "chipTitle": "Secure platform",
     "chipText": "Encrypted connection and data",
     "headline": "Collections in the field,<br></br>results in <accent>real time</accent>",
@@ -5074,6 +5081,9 @@
     },
     "console": {
       "brand": "PLATFORM",
+        "loadError": "The console could not be loaded: the server did not respond. Try again in a few minutes.",
+        "verified": "Email confirmed",
+        "unverified": "Email NOT confirmed: it cannot be approved yet",
       "logout": "Sign out",
       "tabs": {
         "reports": "Reports and requests",
@@ -5160,11 +5170,12 @@
     "subjectHint": "The collector's name, the company or the account, if you know it.",
     "description": "Tell us what happened",
     "descriptionHint": "Write what is needed to locate the case (at least 10 characters). Do not include passwords or bank details.",
+    "leaveEmpty": "Leave this empty",
     "privacyNote": "We will use this information only to handle your request. More details in the privacy policy.",
     "submit": "Send",
     "error": "It could not be sent. Please try again in a few minutes.",
     "sentTitle": "We received your message",
-    "sentBody": "We will review it and reply to the email you gave. If the case requires it, we may suspend the access of the account concerned.",
+    "sentBody": "We will review it and reply to the email you gave. If your request acts on your data or account, we sent you an email to confirm it is yours: check it (and your spam folder). If the case requires it, we may suspend the access of the account concerned.",
     "reference": "Tracking code: {code}",
     "deletionTitle": "Delete my Kobrax account",
     "deletionIntro": "Request here the deletion of your account and your user data, without opening the app. We will verify the request is yours before carrying it out.",
@@ -5176,6 +5187,16 @@
     "submitDeletion": "Request deletion",
     "goReport": "Want to report a problem?",
     "goDeletion": "Want to delete your account?",
+    "verify": {
+      "title": "Confirm your request",
+      "body": "Confirm that this email is yours so we can handle your request. If you did not make it, close this page: nothing will be done.",
+      "confirm": "Confirm",
+      "error": "It could not be confirmed. Please try again.",
+      "invalid": "The link is not valid. Ask for a new one by sending the request again.",
+      "doneTitle": "Done, thank you",
+      "doneBody": "We confirmed your email. We will handle your request and reply to this address.",
+      "reference": "Tracking code: {code}"
+    },
     "privacyLink": "Privacy policy"
   },
   "legal": {

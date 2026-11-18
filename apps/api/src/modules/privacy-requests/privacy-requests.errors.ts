@@ -22,6 +22,15 @@ export const privacyNoteRequired = () =>
     message: 'Indica qué información falta para poder continuar',
   });
 
+export const privacyUnverified = () =>
+  new UnprocessableEntityException({
+    code: 'PRIVACY_REQUEST_UNVERIFIED',
+    message: 'La persona todavía no confirmó que el correo es suyo: no se puede aprobar',
+  });
+
+export const privacyVerifyInvalid = () =>
+  new NotFoundException({ code: 'PRIVACY_VERIFY_INVALID', message: 'El enlace no es válido o ya venció' });
+
 export const privacyTooManyOpen = () =>
   new ConflictException({
     code: 'PRIVACY_REQUEST_TOO_MANY_OPEN',

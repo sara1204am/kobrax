@@ -23,6 +23,11 @@ export class CreatePublicReportDto {
   @IsOptional() @IsString() @MaxLength(200) website?: string;
 }
 
+export class ConfirmPublicReportDto {
+  /** El texto del enlace del correo (base64url de 32 bytes). */
+  @IsString() @Length(20, 100) token!: string;
+}
+
 function PublicReportTypeEnum(): Record<string, string> {
   return Object.fromEntries(PUBLIC_REPORT_TYPES.map((t) => [t, t]));
 }

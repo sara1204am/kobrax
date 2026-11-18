@@ -128,6 +128,6 @@ Esta sección describe la aplicación móvil de Kobrax (Android) y sirve de base
 
 **Seguridad:** la conexión a nuestros servidores está cifrada y la aplicación verifica la identidad del servidor. Las evidencias llevan una huella digital que permite comprobar que no fueron alteradas.
 
-**Eliminación de tu cuenta y de tus datos:** pídela en [/eliminar-cuenta](/eliminar-cuenta), sin abrir la aplicación, o escribe a kobraxikigai@gmail.com desde el correo de tu cuenta. [PENDIENTE TÉCNICO: Google Play exige además una opción dentro de la aplicación móvil.] [PENDIENTE DE CONFIRMACIÓN LEGAL: plazos y qué se conserva por obligación legal.]
+**Eliminación de tu cuenta y de tus datos:** pídela en [/eliminar-cuenta](/eliminar-cuenta), sin abrir la aplicación, o escribe a kobraxikigai@gmail.com desde el correo de tu cuenta. Para proteger tu cuenta, te enviaremos un correo con un enlace de un solo uso para confirmar que la solicitud es tuya antes de ejecutarla. [PENDIENTE TÉCNICO: Google Play exige además una opción dentro de la aplicación móvil.] [PENDIENTE DE CONFIRMACIÓN LEGAL: plazos y qué se conserva por obligación legal.]
 
 **Datos de terceros:** la aplicación guarda datos de personas que no la usan (deudores, garantes, referencias). Esas personas pueden pedir acceso, corrección o eliminación, o reportar un uso indebido, escribiendo al mismo correo.

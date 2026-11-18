@@ -1882,6 +1882,13 @@
     "any": []
   },
   {
+    "route": "POST /public/reports/confirm",
+    "handler": "PublicReportsController.confirm",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
     "route": "POST /public/reports",
     "handler": "PublicReportsController.create",
     "kind": "public",

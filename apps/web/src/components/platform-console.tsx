@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { Button, ErrorBanner, Field, Input, Textarea } from '@/components/ui';
 import { Modal } from '@/components/modal';
+import { PublicHeader } from '@/components/public-header';
 import { postJson, sendJson } from '@/lib/client';
 
 export interface PlatformReport {
@@ -13,6 +14,8 @@ export interface PlatformReport {
   type: string;
   status: string;
   reportedSubject: string | null;
+  needsVerification?: boolean;
+  contactVerified?: boolean;
   description: string;
   rejectionReason: string | null;
   createdAt: string;
@@ -132,14 +135,11 @@ export function PlatformConsole({ initialReports, initialAccounts }: { initialRe
 
   return (
     <div className="min-h-screen bg-k-bg">
-      <header className="border-b border-k-border bg-white">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-5 py-3">
-          <span className="text-k-md font-semibold tracking-[0.16em] text-k-navy">KOBRAX · {t('brand')}</span>
-          <Button variant="ghost" onClick={logout} size="sm" fullWidth={false}>
-            {t('logout')}
-          </Button>
-        </div>
-      </header>
+      <PublicHeader label={t('brand')}>
+        <Button variant="ghost" onClick={logout} size="sm" fullWidth={false}>
+          {t('logout')}
+        </Button>
+      </PublicHeader>
 
       <main className="mx-auto max-w-6xl px-5 py-6">
         <div role="tablist" className="mb-5 flex gap-2">
@@ -184,6 +184,11 @@ export function PlatformConsole({ initialReports, initialAccounts }: { initialRe
                       {r.requester.name ? `${r.requester.name} · ` : ''}
                       {r.requester.email}
                     </p>
+                    {r.needsVerification && (
+                      <p className={`mt-1 text-k-sm font-medium ${r.contactVerified ? 'text-k-success' : 'text-k-warning-text'}`}>
+                        {r.contactVerified ? t('verified') : t('unverified')}
+                      </p>
+                    )}
                     {r.reportedSubject && <p className="mt-1 text-k-sm text-k-text-2">{t('about', { subject: r.reportedSubject })}</p>}
                     <p className="mt-2 whitespace-pre-wrap text-k-base text-k-text">{r.description}</p>
                     {r.rejectionReason && <p className="mt-2 text-k-sm text-k-danger">{t('rejectedBecause', { reason: r.rejectionReason })}</p>}

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
+import { getTranslations } from 'next-intl/server';
 import { PlatformConsole, type PlatformAccount, type PlatformReport } from '@/components/platform-console';
 import { platformCall, platformToken } from '@/lib/platform-bff';
 
@@ -19,5 +20,16 @@ export default async function PlatformPage() {
   ]);
   if (reports.body.error?.code === 'PLATFORM_DISABLED' || accounts.body.error?.code === 'PLATFORM_DISABLED') redirect('/plataforma/login?e=disabled');
   if ([reports.status, accounts.status].some((s) => s === 401 || s === 403)) redirect('/plataforma/login?e=expired');
+  // Sin respuesta del servidor (0) o con error suyo (5xx): no se pinta una consola vacía que parezca «sin pendientes».
+  if ([reports.status, accounts.status].some((s) => s === 0 || s >= 500)) {
+    const t = await getTranslations('platform.console');
+    return (
+      <main className="mx-auto max-w-xl px-5 py-10">
+        <p role="alert" className="rounded-xl border border-k-border bg-white px-5 py-4 text-k-base text-k-danger">
+          {t('loadError')}
+        </p>
+      </main>
+    );
+  }
   return <PlatformConsole initialReports={reports.body.data ?? []} initialAccounts={accounts.body.data ?? []} />;
 }

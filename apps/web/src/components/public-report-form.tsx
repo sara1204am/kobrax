@@ -89,7 +89,7 @@ export function PublicReportForm({ mode }: { mode: 'report' | 'deletion' }) {
       {/* Trampa para robots: oculta a la vista y a los lectores de pantalla; una persona la deja vacía. */}
       <div aria-hidden="true" className="absolute -left-[9999px] h-0 w-0 overflow-hidden">
         <label>
-          website
+          {t('leaveEmpty')}
           <input type="text" tabIndex={-1} autoComplete="off" value={website} onChange={(e) => setWebsite(e.target.value)} />
         </label>
       </div>

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { LegalText } from '@/components/legal-text';
+import { PublicHeader, PublicHeaderLink } from '@/components/public-header';
 import { apiCall } from '@/lib/bff';
 import { date } from '@/lib/format';
 import { LEGAL_LOCALE, LEGAL_PAGES, isLegalPage, type LegalDocument, type LegalVersionSummary } from '@/lib/legal';
@@ -42,16 +43,9 @@ export default async function LegalDocumentPage({
 
   return (
     <div className="min-h-screen bg-k-bg">
-      <header className="border-b border-k-border bg-white">
-        <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-5 py-3">
-          <Link href="/" className="text-k-md font-semibold tracking-[0.16em] text-k-navy">
-            KOBRAX
-          </Link>
-          <Link href="/" className="text-k-sm font-medium text-k-purple hover:underline">
-            {t('backHome')}
-          </Link>
-        </div>
-      </header>
+      <PublicHeader>
+        <PublicHeaderLink href="/">{t('backHome')}</PublicHeaderLink>
+      </PublicHeader>
 
       <main className="mx-auto max-w-3xl px-5 py-8">
         <h1 className="mb-1 text-k-4xl font-semibold text-k-navy">{doc?.title ?? t(`names.${page.key}`)}</h1>

@@ -85,3 +85,49 @@ export function passwordResetBody(token: string): { subject: string; text: strin
     ].join('\n'),
   };
 }
+
+/** Correo a quien pide algo por el formulario público: confirma que el correo es suyo antes de que se actúe sobre sus datos o su cuenta. */
+export function publicReportVerifyBody(params: { link: string; kind: string }): { subject: string; text: string } {
+  return {
+    subject: 'Confirma tu solicitud en Kobrax',
+    text: [
+      `Recibimos una solicitud (${params.kind}) hecha con este correo en Kobrax.`,
+      '',
+      'Para que podamos atenderla, confirma que fuiste tú abriendo este enlace y pulsando "Confirmar":',
+      '',
+      `    ${params.link}`,
+      '',
+      'El enlace vence en 48 horas y sirve una sola vez. Si no fuiste tú, ignora este correo: no se hará nada.',
+    ].join('\n'),
+  };
+}
+
+/** Aviso interno a Kobrax: llegó un reporte o una solicitud por el formulario público. */
+export function publicReportNotifyBody(params: {
+  reference: string;
+  kind: string;
+  contactEmail: string;
+  contactName: string | null;
+  reportedSubject: string | null;
+  description: string;
+  needsVerification: boolean;
+  event: 'received' | 'verified';
+}): { subject: string; text: string } {
+  const head = params.event === 'verified' ? `Correo confirmado · ${params.kind} · ${params.reference}` : `Nuevo reporte · ${params.kind} · ${params.reference}`;
+  return {
+    subject: `[Kobrax] ${head}`,
+    text: [
+      params.event === 'verified' ? 'La persona confirmó que el correo es suyo.' : 'Llegó un reporte o solicitud por el formulario público.',
+      '',
+      `Tipo:       ${params.kind}`,
+      `Código:     ${params.reference}`,
+      `Contacto:   ${params.contactName ? `${params.contactName} <${params.contactEmail}>` : params.contactEmail}`,
+      `Se refiere: ${params.reportedSubject ?? '(no indicó)'}`,
+      `Correo:     ${params.needsVerification ? (params.event === 'verified' ? 'CONFIRMADO' : 'PENDIENTE de confirmar (no actuar hasta que confirme)') : 'no requiere confirmación'}`,
+      '',
+      params.description,
+      '',
+      'Atiéndelo desde la consola de plataforma: /plataforma',
+    ].join('\n'),
+  };
+}

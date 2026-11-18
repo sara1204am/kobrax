@@ -2438,6 +2438,11 @@ model PrivacyRequest {
   contactName     String?              @map("contact_name")
   /// Solo THIRD_PARTY: la organización, cobrador o cuenta a la que se refiere el reporte (texto libre).
   reportedSubject String?              @map("reported_subject")
+  /// Solo THIRD_PARTY: SHA-256 del enlace de confirmación enviado al correo (un solo uso, vence). El texto del enlace nunca se guarda.
+  contactVerifyHash      String?   @map("contact_verify_hash")
+  contactVerifyExpiresAt DateTime? @map("contact_verify_expires_at")
+  /// Cuándo la persona confirmó que el correo es suyo. NULL = sin confirmar.
+  contactVerifiedAt      DateTime? @map("contact_verified_at")
   /// NULL en APP_USER (es personal); la cuenta responsable en DEBTOR_VIA_ORG. La policy de RLS deja ver NULL + la cuenta activa.
   accountId       String?              @map("account_id")
   /// Identificación mínima del titular de cobranza (solo DEBTOR_VIA_ORG): texto libre que escribe quien la registra.

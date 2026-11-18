@@ -4455,6 +4455,13 @@
     "symbol": "Al menos un símbolo"
   },
   "shell": {
+    "legalLinks": {
+      "terms": "Términos",
+      "privacy": "Privacidad",
+      "report": "Reportar un problema",
+      "deleteAccount": "Eliminar mi cuenta",
+      "label": "Información legal y ayuda"
+    },
     "chipTitle": "Plataforma segura",
     "chipText": "Conexión y datos cifrados",
     "headline": "Cobranza en campo,<br></br>resultados en <accent>tiempo real</accent>",
@@ -5074,6 +5081,9 @@
     },
     "console": {
       "brand": "PLATAFORMA",
+        "loadError": "No se pudo cargar la consola: el servidor no respondió. Reintenta en unos minutos.",
+        "verified": "Correo confirmado",
+        "unverified": "Correo SIN confirmar: no se puede aprobar todavía",
       "logout": "Salir",
       "tabs": {
         "reports": "Reportes y solicitudes",
@@ -5160,11 +5170,12 @@
     "subjectHint": "El nombre del cobrador, la empresa o la cuenta, si lo sabes.",
     "description": "Cuéntanos qué pasó",
     "descriptionHint": "Escribe lo necesario para ubicar el caso (mínimo 10 caracteres). No pongas contraseñas ni datos bancarios.",
+    "leaveEmpty": "No escribas nada aquí",
     "privacyNote": "Usaremos estos datos solo para atender tu solicitud. Más información en la política de privacidad.",
     "submit": "Enviar",
     "error": "No se pudo enviar. Inténtalo de nuevo en unos minutos.",
     "sentTitle": "Recibimos tu mensaje",
-    "sentBody": "Lo revisaremos y te responderemos al correo que indicaste. Si el caso lo requiere, podemos suspender el acceso de la cuenta señalada.",
+    "sentBody": "Lo revisaremos y te responderemos al correo que indicaste. Si tu solicitud actúa sobre tus datos o tu cuenta, te enviamos un correo para que confirmes que es tuya: revísalo (y la carpeta de spam). Si el caso lo requiere, podemos suspender el acceso de la cuenta señalada.",
     "reference": "Código de seguimiento: {code}",
     "deletionTitle": "Eliminar mi cuenta de Kobrax",
     "deletionIntro": "Pide aquí la eliminación de tu cuenta y de tus datos de usuario, sin necesidad de abrir la aplicación. Verificaremos que la solicitud sea tuya antes de ejecutarla.",
@@ -5176,6 +5187,16 @@
     "submitDeletion": "Pedir la eliminación",
     "goReport": "¿Quieres reportar un problema?",
     "goDeletion": "¿Quieres eliminar tu cuenta?",
+    "verify": {
+      "title": "Confirma tu solicitud",
+      "body": "Confirma que este correo es tuyo para que podamos atender tu solicitud. Si no la hiciste tú, cierra esta página: no se hará nada.",
+      "confirm": "Confirmar",
+      "error": "No se pudo confirmar. Inténtalo de nuevo.",
+      "invalid": "El enlace no es válido. Pide uno nuevo enviando la solicitud otra vez.",
+      "doneTitle": "Listo, gracias",
+      "doneBody": "Confirmamos tu correo. Atenderemos tu solicitud y te responderemos a esta dirección.",
+      "reference": "Código de seguimiento: {code}"
+    },
     "privacyLink": "Política de privacidad"
   },
   "legal": {

@@ -37,7 +37,7 @@ export default function PlatformLoginPage() {
   const notice = why === 'expired' ? t('expired') : why === 'disabled' ? t('disabled') : null;
 
   return (
-    <AuthShell title={t('title')} subtitle={t('subtitle')}>
+    <AuthShell title={t('title')} subtitle={t('subtitle')} hideLegalLinks>
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
         {notice && (
           <p role="status" className="rounded-xl border border-k-border bg-white px-4 py-3 text-k-sm text-k-text-2">

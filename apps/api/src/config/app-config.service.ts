@@ -87,6 +87,12 @@ export class AppConfigService {
   get mailFrom() {
     return this.get('MAIL_FROM');
   }
+  get reportsNotifyEmail() {
+    return this.get('REPORTS_NOTIFY_EMAIL');
+  }
+  get appUrl() {
+    return this.get('APP_URL');
+  }
   get fcmServiceAccountB64() {
     return this.get('FCM_SERVICE_ACCOUNT_JSON_B64');
   }

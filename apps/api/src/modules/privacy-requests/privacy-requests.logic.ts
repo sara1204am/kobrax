@@ -48,3 +48,14 @@ export const MAX_OPEN_PER_USER = 10;
 
 /** Tope de pedidos abiertos por correo en el formulario público (no hay cuenta a la que atarlo): frena la inundación sin impedir un reclamo legítimo. */
 export const MAX_OPEN_PER_CONTACT = 5;
+
+/**
+ * ¿Este pedido público actúa sobre los datos o la cuenta de quien escribe? Entonces el correo tiene que confirmarse ANTES de aprobarlo: sin eso,
+ * cualquiera podría pedir el acceso, la corrección o la eliminación de los datos de otra persona escribiendo su correo. Reportar un abuso o hacer
+ * otra consulta no actúa sobre nada, así que no se exige (y se evita el roce para quien denuncia).
+ */
+const NO_VERIFICATION_TYPES: readonly string[] = ['ABUSE_REPORT', 'OTHER'];
+export const needsContactVerification = (type: string): boolean => !NO_VERIFICATION_TYPES.includes(type);
+
+/** El enlace de confirmación vive 48 horas y sirve una sola vez. */
+export const VERIFY_TTL_MS = 48 * 60 * 60 * 1000;
