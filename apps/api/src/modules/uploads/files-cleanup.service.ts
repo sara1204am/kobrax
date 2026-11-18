@@ -1,7 +1,10 @@
-import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy, Inject, Optional } from '@nestjs/common';
 import { FileStatus } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { UploadsService } from './uploads.service';
+import type Redis from 'ioredis';
+import { startJob } from '../../common/jobs/start-job';
+import { REDIS } from '../../redis/redis.module';
 
 /** Cada cuánto corre. Es idempotente: un reinicio no la saltea. */
 export const FILES_CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -28,11 +31,12 @@ export class FilesCleanupService implements OnApplicationBootstrap, OnModuleDest
   constructor(
     private readonly prisma: PrismaService,
     private readonly uploads: UploadsService,
+    /** Candado entre instancias (opcional: sin Redis el job corre siempre). */
+    @Optional() @Inject(REDIS) private readonly redis?: Redis,
   ) {}
 
   onApplicationBootstrap(): void {
-    this.timer = setInterval(() => void this.run(), FILES_CLEANUP_INTERVAL_MS);
-    if (typeof this.timer.unref === 'function') this.timer.unref();
+    this.timer = startJob({ name: 'files-cleanup', intervalMs: FILES_CLEANUP_INTERVAL_MS, run: () => this.run(), redis: this.redis, logger: this.logger });
   }
 
   onModuleDestroy(): void {
