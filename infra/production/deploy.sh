@@ -47,6 +47,11 @@ echo "==> 3. Cliente de Prisma"
 pnpm db:generate
 
 echo "==> 4. Construyendo"
+# 🔴 La cache de Next vive en apps/web/.next/cache y SOBREVIVE al `git reset --hard`. El 2026-10-13 el deploy
+# de PR #14 dejo a /rutas/[id] respondiendo `isOpenStop is not a function`: el paquete compartido ya traia la
+# funcion (dist sano), pero el bundle de la web salio de la cache de un build anterior. Borrar la cache y
+# reconstruir lo arreglo. Cuesta unos segundos de compilacion y descarta esta clase de fallo.
+rm -rf "$APP/apps/web/.next/cache"
 pnpm build
 
 echo "==> 5. Respaldo de la base ANTES de migrar"
