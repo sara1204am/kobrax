@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { DashboardDefinition, DashboardWidget } from '@kobrax/shared';
 import { Button, ErrorBanner, Field, Input } from '@/components/ui';
+import { ConfirmDialog } from '@/components/form-kit';
 import { Modal } from '@/components/modal';
 import { WidgetPreview } from './widget-preview';
 import { useToast } from '@/components/toast';
@@ -41,6 +42,7 @@ export function DashboardToolbar({
 
   const [adding, setAdding] = useState(false);
   const [renaming, setRenaming] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [name, setName] = useState(current?.name ?? '');
   const [search, setSearch] = useState('');
   const [busy, setBusy] = useState(false);
@@ -152,19 +154,32 @@ export function DashboardToolbar({
             {/* Borrar pregunta antes: para quien mira, el tablero desaparece. */}
             <Button
               variant="ghost"
-              onClick={async () => {
-                if (!window.confirm(t('deleteConfirm', { name: current.name }))) return;
+              onClick={() => setConfirmingDelete(true)}
+              className="sm:w-auto sm:px-4"
+            >
+              {t('delete')}
+            </Button>
+            <ConfirmDialog
+              open={confirmingDelete}
+              title={t('delete')}
+              description={<p className="text-k-base text-k-text">{t('deleteConfirm', { name: current.name })}</p>}
+              confirmLabel={t('delete')}
+              cancelLabel={t('cancel')}
+              danger
+              loading={busy}
+              onClose={() => setConfirmingDelete(false)}
+              onConfirm={async () => {
+                setBusy(true);
                 const res = await sendJson(`/api/dashboards/${current.id}`, {}, 'DELETE');
+                setBusy(false);
+                setConfirmingDelete(false);
                 if (res.ok) {
                   toast(t('deleted'));
                   go({ view: null, edit: null });
                   router.refresh();
                 } else toast(t('saveError'), 'danger');
               }}
-              className="sm:w-auto sm:px-4"
-            >
-              {t('delete')}
-            </Button>
+            />
           </>
         )}
         <Button onClick={() => go({ edit: editable ? null : '1' })} className="sm:w-auto sm:px-5">
