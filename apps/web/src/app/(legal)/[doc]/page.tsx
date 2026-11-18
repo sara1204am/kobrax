@@ -101,6 +101,11 @@ export default async function LegalDocumentPage({
                 </Link>
               </li>
             ))}
+            <li>
+              <Link href="/reportar" className="text-k-purple hover:underline">
+                {t('reportLink')}
+              </Link>
+            </li>
           </ul>
         </nav>
       </main>

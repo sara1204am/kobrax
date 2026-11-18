@@ -9,6 +9,8 @@ import { Permission } from '../enums/permission.enum.js';
  */
 export enum PlatformPermission {
   ACCOUNTS_READ = 'platform:accounts:read',
+  /** Suspender o reactivar una cuenta (con motivo, auditado). Corta el inicio de sesión de toda la cuenta. */
+  ACCOUNTS_SUSPEND = 'platform:accounts:suspend',
   ROLES_WRITE = 'platform:roles:write',
   ROLES_ROLLOUT = 'platform:roles:rollout',
   SUPPORT_OPEN = 'platform:support:open',

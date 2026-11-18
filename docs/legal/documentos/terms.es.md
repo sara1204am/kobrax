@@ -85,7 +85,7 @@ Procuramos que el servicio esté disponible, pero puede haber interrupciones por
 
 - Puedes pedir la baja de tu cuenta escribiéndonos o desde la opción de tu cuenta. Pedirla no borra nada de inmediato.
 - Podemos suspender un acceso que incumpla estos términos o ponga en riesgo la seguridad, avisando cuando sea posible. Esto incluye los casos en que una persona afectada o un tercero nos informe de un uso indebido (por ejemplo, hostigamiento o datos cargados sin derecho) y lo confirmemos.
-- Si usas la aplicación móvil, puedes pedir la eliminación de tu cuenta por correo a kobraxikigai@gmail.com. [PENDIENTE DE CONFIRMACIÓN LEGAL: plazos y efectos sobre los datos de cartera. PENDIENTE TÉCNICO: Google Play exige poder pedirla también desde la propia aplicación.]
+- Si usas la aplicación móvil, puedes pedir la eliminación de tu cuenta en [/eliminar-cuenta](/eliminar-cuenta) o por correo a kobraxikigai@gmail.com. [PENDIENTE DE CONFIRMACIÓN LEGAL: plazos y efectos sobre los datos de cartera. PENDIENTE TÉCNICO: Google Play exige poder pedirla también desde la propia aplicación móvil.]
 - Al terminar, la Organización cliente puede exportar sus datos. La eliminación y los plazos de conservación se rigen por la [Política de Privacidad](/privacidad) y el Acuerdo de Tratamiento de Datos. [PENDIENTE DE CONFIRMACIÓN LEGAL: procedimiento y plazos de eliminación.]
 
 ## 11. Responsabilidad

@@ -45,3 +45,6 @@ export function checkTransition(from: S, to: S, input: { note?: string | null; r
 
 /** Tope de solicitudes abiertas por persona: evita inundar el canal (y es un límite de abuso, no de derechos: cerrar una libera cupo). */
 export const MAX_OPEN_PER_USER = 10;
+
+/** Tope de pedidos abiertos por correo en el formulario público (no hay cuenta a la que atarlo): frena la inundación sin impedir un reclamo legítimo. */
+export const MAX_OPEN_PER_CONTACT = 5;

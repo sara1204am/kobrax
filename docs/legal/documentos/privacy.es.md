@@ -93,7 +93,7 @@ Conservamos los datos mientras tu cuenta esté activa y después según obligaci
 
 Puedes pedirnos acceso, corrección, actualización, eliminación (cuando corresponda), limitación del tratamiento, oposición, exportación de tus datos y retirar tus consentimientos opcionales. Escríbenos a kobraxikigai@gmail.com. [PENDIENTE DE CONFIRMACIÓN LEGAL: plazo de respuesta.]
 
-- Si eres **titular de datos de cobranza** (por ejemplo, un deudor, garante o referencia), no necesitas tener cuenta: escríbenos al mismo correo. Tu solicitud se deriva a la organización responsable de tu cartera y Kobrax la asiste. Si crees que tus datos se cargaron sin derecho, o que te están hostigando, también puedes **reportarlo** y, si se confirma, podemos suspender el acceso de esa cuenta. [PENDIENTE TÉCNICO: hoy el canal es solo por correo.]
+- Si eres **titular de datos de cobranza** (por ejemplo, un deudor, garante o referencia), no necesitas tener cuenta: escríbenos al mismo correo. Tu solicitud se deriva a la organización responsable de tu cartera y Kobrax la asiste. Si crees que tus datos se cargaron sin derecho, o que te están hostigando, también puedes **reportarlo** en [/reportar](/reportar) y, si se confirma, podemos suspender el acceso de esa cuenta.
 - Kobrax **no declara cumplir** una ley de protección de datos concreta: Bolivia no tiene una ley integral vigente y usamos buenas prácticas internacionales como guía. [PENDIENTE DE CONFIRMACIÓN LEGAL: marco aplicable.]
 - No eliminamos información sujeta a obligaciones legales, auditorías o conservación justificada; en ese caso la bloqueamos y te lo explicamos.
 - Si no estás conforme, puedes presentarnos un reclamo por el mismo canal. Mantienes tu derecho a acudir a las autoridades competentes.
@@ -128,6 +128,6 @@ Esta sección describe la aplicación móvil de Kobrax (Android) y sirve de base
 
 **Seguridad:** la conexión a nuestros servidores está cifrada y la aplicación verifica la identidad del servidor. Las evidencias llevan una huella digital que permite comprobar que no fueron alteradas.
 
-**Eliminación de tu cuenta y de tus datos:** escribe a kobraxikigai@gmail.com desde el correo de tu cuenta. [PENDIENTE TÉCNICO: Google Play exige además una opción dentro de la aplicación y una página web pública para pedirla.] [PENDIENTE DE CONFIRMACIÓN LEGAL: plazos y qué se conserva por obligación legal.]
+**Eliminación de tu cuenta y de tus datos:** pídela en [/eliminar-cuenta](/eliminar-cuenta), sin abrir la aplicación, o escribe a kobraxikigai@gmail.com desde el correo de tu cuenta. [PENDIENTE TÉCNICO: Google Play exige además una opción dentro de la aplicación móvil.] [PENDIENTE DE CONFIRMACIÓN LEGAL: plazos y qué se conserva por obligación legal.]
 
 **Datos de terceros:** la aplicación guarda datos de personas que no la usan (deudores, garantes, referencias). Esas personas pueden pedir acceso, corrección o eliminación, o reportar un uso indebido, escribiendo al mismo correo.

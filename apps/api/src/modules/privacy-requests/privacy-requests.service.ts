@@ -4,6 +4,7 @@ import { PrivacyRequestStatus as S, PrivacySubjectKind } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
 import { CreateOrgPrivacyRequestDto, CreateOwnPrivacyRequestDto, TransitionPrivacyRequestDto } from './dto/privacy-requests.dto';
+import { CreatePublicReportDto } from './dto/public-report.dto';
 import {
   privacyInvalidTransition,
   privacyNoteRequired,
@@ -11,7 +12,7 @@ import {
   privacyRequestNotFound,
   privacyTooManyOpen,
 } from './privacy-requests.errors';
-import { MAX_OPEN_PER_USER, OPEN_STATUSES, allowedNext, checkTransition, isTerminal } from './privacy-requests.logic';
+import { MAX_OPEN_PER_CONTACT, MAX_OPEN_PER_USER, OPEN_STATUSES, allowedNext, checkTransition, isTerminal } from './privacy-requests.logic';
 
 type ActorKind = 'REQUESTER' | 'ORG' | 'PLATFORM';
 
@@ -23,6 +24,9 @@ interface RequestRow {
   type: string;
   status: string;
   subjectLabel: string | null;
+  contactEmail?: string | null;
+  contactName?: string | null;
+  reportedSubject?: string | null;
   description: string;
   rejectionReason: string | null;
   createdAt: Date;
@@ -64,6 +68,7 @@ export class PrivacyRequestsService {
       type: r.type,
       status: r.status,
       subjectLabel: r.subjectLabel,
+      reportedSubject: r.reportedSubject ?? null,
       description: r.description,
       rejectionReason: r.rejectionReason,
       createdAt: r.createdAt,
@@ -102,6 +107,35 @@ export class PrivacyRequestsService {
       orderBy: { createdAt: 'desc' },
     });
     return rows.map((r) => this.view(r));
+  }
+
+  // ── Públicas (THIRD_PARTY): una persona SIN cuenta, por el formulario de la web ─────────────────────────────────────
+
+  /**
+   * Recibe un reporte o un pedido de una persona sin cuenta. Sin sesión: lo protegen el límite de peticiones del controlador, la trampa
+   * `website` (un robot la llena) y un tope de pedidos abiertos por correo. Devuelve solo un código de seguimiento, nunca datos de nadie.
+   * Una trampa llena responde igual de bien pero NO guarda nada (para que el robot no sepa que fue detectado).
+   */
+  async filePublic(dto: CreatePublicReportDto) {
+    if (dto.website && dto.website.trim() !== '') return { reference: 'recibido' };
+    const email = dto.contactEmail.trim().toLowerCase();
+    const open = await this.prisma.privacyRequest.count({
+      where: { subjectKind: PrivacySubjectKind.THIRD_PARTY, contactEmail: email, status: { in: [...OPEN_STATUSES] } },
+    });
+    if (open >= MAX_OPEN_PER_CONTACT) throw privacyTooManyOpen();
+    const row = await this.prisma.privacyRequest.create({
+      data: {
+        subjectKind: PrivacySubjectKind.THIRD_PARTY,
+        type: dto.type,
+        contactEmail: email,
+        contactName: dto.contactName?.trim() || null,
+        reportedSubject: dto.reportedSubject?.trim() || null,
+        description: dto.description.trim(),
+        events: { create: { status: S.RECEIVED, actorKind: 'REQUESTER' } },
+      },
+      select: { id: true },
+    });
+    return { reference: row.id.slice(0, 8).toUpperCase() };
   }
 
   // ── De la organización (DEBTOR_VIA_ORG) ───────────────────────────────────────────────────────────────────────────────
@@ -151,20 +185,23 @@ export class PrivacyRequestsService {
 
   async listPlatform(status?: S) {
     const rows = await this.prisma.privacyRequest.findMany({
-      where: { subjectKind: PrivacySubjectKind.APP_USER, ...(status ? { status } : {}) },
+      where: { subjectKind: { in: [PrivacySubjectKind.APP_USER, PrivacySubjectKind.THIRD_PARTY] }, ...(status ? { status } : {}) },
       include: { ...INCLUDE, requester: { select: { email: true, profile: { select: { firstName: true, lastName: true } } } } },
       orderBy: { createdAt: 'asc' },
       take: 200,
     });
     return rows.map((r) => ({
       ...this.view(r),
-      requester: { email: r.requester.email, name: r.requester.profile ? `${r.requester.profile.firstName} ${r.requester.profile.lastName}` : null },
+      // THIRD_PARTY no tiene usuario: quien escribió es el contacto del formulario público.
+      requester: r.requester
+        ? { email: r.requester.email, name: r.requester.profile ? `${r.requester.profile.firstName} ${r.requester.profile.lastName}` : null }
+        : { email: r.contactEmail ?? '', name: r.contactName ?? null },
     }));
   }
 
   async transitionPlatform(id: string, dto: TransitionPrivacyRequestDto, platformUserId: string) {
     const row = await this.prisma.$transaction((tx) =>
-      this.transition(tx as unknown as PrismaClient, { id, subjectKind: PrivacySubjectKind.APP_USER }, dto, { kind: 'PLATFORM', userId: platformUserId }),
+      this.transition(tx as unknown as PrismaClient, { id, subjectKind: { in: [PrivacySubjectKind.APP_USER, PrivacySubjectKind.THIRD_PARTY] } }, dto, { kind: 'PLATFORM', userId: platformUserId }),
     );
     return this.view(row);
   }
@@ -177,7 +214,7 @@ export class PrivacyRequestsService {
    */
   private async transition(
     tx: PrismaClient,
-    where: { id: string; accountId?: string; subjectKind: PrivacySubjectKind },
+    where: { id: string; accountId?: string; subjectKind: PrivacySubjectKind | { in: PrivacySubjectKind[] } },
     input: TransitionPrivacyRequestDto,
     actor: { kind: ActorKind; userId: string },
   ): Promise<RequestRow> {
