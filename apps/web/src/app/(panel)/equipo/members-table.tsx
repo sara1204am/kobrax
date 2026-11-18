@@ -229,6 +229,8 @@ export function MembersTable({
         rowKey={(m) => m.userId}
         meta={meta}
         filters={filters}
+        // Los filtros arrancan cerrados; si ya hay alguno aplicado (`filtered`), el panel se abre solo para que se vea.
+        filtersOpen={false}
         filtered={filtered}
         entityLabel={t('entity')}
         actions={action}
