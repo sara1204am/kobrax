@@ -109,6 +109,23 @@ describe('reportes públicos · servicio', () => {
     assert.match(sent.find((m) => m.to === NOTIFY)!.text, /PENDIENTE de confirmar/);
   });
 
+  it('🔴 el correo a la persona habla en su idioma (nunca el código interno) y aclara que confirmar no ejecuta nada', async () => {
+    const { svc, sent } = make();
+    await svc.filePublic(dto(erase));
+    const text = sent.find((m) => m.to === 'persona@ejemplo.com')!.text;
+    assert.match(text, /solicitud de eliminar tu cuenta de Kobrax/);
+    assert.ok(!text.includes('ACCOUNT_DELETION'), 'sin códigos internos');
+    assert.match(text, /no ejecuta nada por sí solo/);
+  });
+
+  it('el aviso a Kobrax trae la dirección completa de la consola y el tipo legible', async () => {
+    const { svc, sent } = make();
+    await svc.filePublic(dto(erase));
+    const staff = sent.find((m) => m.to === NOTIFY)!;
+    assert.match(staff.subject, /Eliminar cuenta/);
+    assert.match(staff.text, /https:\/\/app\.kobrax\.test\/plataforma/);
+  });
+
   it('un reporte de abuso NO manda correo de confirmación (no hay nada que confirmar)', async () => {
     const { svc, created, sent } = make();
     await svc.filePublic(dto(ok));

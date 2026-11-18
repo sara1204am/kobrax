@@ -86,16 +86,31 @@ export function passwordResetBody(token: string): { subject: string; text: strin
   };
 }
 
+/** Cómo se dice cada tipo de solicitud pública a la PERSONA (nunca el código interno) y al equipo de Kobrax. */
+const REPORT_KIND: Record<string, { person: string; staff: string }> = {
+  ACCOUNT_DELETION: { person: 'eliminar tu cuenta de Kobrax', staff: 'Eliminar cuenta' },
+  ERASURE: { person: 'eliminar tus datos', staff: 'Eliminar datos' },
+  ACCESS: { person: 'saber qué datos tuyos tiene Kobrax', staff: 'Acceso a datos' },
+  RECTIFICATION: { person: 'corregir tus datos', staff: 'Corregir datos' },
+  OBJECTION: { person: 'oponerte al uso de tus datos', staff: 'Oposición' },
+  ABUSE_REPORT: { person: 'reportar un abuso', staff: 'Reporte de abuso' },
+  OTHER: { person: 'tu consulta', staff: 'Otra consulta' },
+};
+const kindOf = (kind: string) => REPORT_KIND[kind] ?? { person: 'tu solicitud', staff: kind };
+
 /** Correo a quien pide algo por el formulario público: confirma que el correo es suyo antes de que se actúe sobre sus datos o su cuenta. */
 export function publicReportVerifyBody(params: { link: string; kind: string }): { subject: string; text: string } {
+  const what = kindOf(params.kind).person;
   return {
     subject: 'Confirma tu solicitud en Kobrax',
     text: [
-      `Recibimos una solicitud (${params.kind}) hecha con este correo en Kobrax.`,
+      `Recibimos tu solicitud de ${what}, hecha con este correo en Kobrax.`,
       '',
       'Para que podamos atenderla, confirma que fuiste tú abriendo este enlace y pulsando "Confirmar":',
       '',
       `    ${params.link}`,
+      '',
+      'Confirmar no ejecuta nada por sí solo: después revisaremos que la solicitud sea tuya y te responderemos a este correo antes de hacer cambios.',
       '',
       'El enlace vence en 48 horas y sirve una sola vez. Si no fuiste tú, ignora este correo: no se hará nada.',
     ].join('\n'),
@@ -112,14 +127,17 @@ export function publicReportNotifyBody(params: {
   description: string;
   needsVerification: boolean;
   event: 'received' | 'verified';
+  /** Dirección completa de la consola de plataforma, para abrirla desde el correo. */
+  consoleUrl: string;
 }): { subject: string; text: string } {
-  const head = params.event === 'verified' ? `Correo confirmado · ${params.kind} · ${params.reference}` : `Nuevo reporte · ${params.kind} · ${params.reference}`;
+  const label = kindOf(params.kind).staff;
+  const head = params.event === 'verified' ? `Correo confirmado · ${label} · ${params.reference}` : `Nuevo reporte · ${label} · ${params.reference}`;
   return {
     subject: `[Kobrax] ${head}`,
     text: [
       params.event === 'verified' ? 'La persona confirmó que el correo es suyo.' : 'Llegó un reporte o solicitud por el formulario público.',
       '',
-      `Tipo:       ${params.kind}`,
+      `Tipo:       ${label} (${params.kind})`,
       `Código:     ${params.reference}`,
       `Contacto:   ${params.contactName ? `${params.contactName} <${params.contactEmail}>` : params.contactEmail}`,
       `Se refiere: ${params.reportedSubject ?? '(no indicó)'}`,
@@ -127,7 +145,7 @@ export function publicReportNotifyBody(params: {
       '',
       params.description,
       '',
-      'Atiéndelo desde la consola de plataforma: /plataforma',
+      `Atiéndelo desde la consola de plataforma: ${params.consoleUrl}`,
     ].join('\n'),
   };
 }

@@ -179,6 +179,7 @@ export class PrivacyRequestsService {
         description: dto.description.trim(),
         needsVerification: verify,
         event: 'received',
+        consoleUrl: this.consoleUrl(),
       }),
     );
     return { reference };
@@ -215,9 +216,14 @@ export class PrivacyRequestsService {
         description: row.description,
         needsVerification: true,
         event: 'verified',
+        consoleUrl: this.consoleUrl(),
       }),
     );
     return { reference };
+  }
+
+  private consoleUrl(): string {
+    return `${this.config.appUrl.replace(/\/$/, '')}/plataforma`;
   }
 
   private hash(token: string): string {
