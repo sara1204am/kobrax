@@ -51,3 +51,11 @@ Hecho: botones/selects/textareas crudos que coinciden con un patrón del sistema
 Decidido dejar tal cual (no es deuda): radios (ya usan los nombres de Tailwind); `<input type="date">` nativo (es el selector de fecha del sistema, `Input` lo envuelve); tarjetas/filas clicables, pastillas, celdas de calendario y menús (botones legítimos); `window.confirm` de «cambios sin guardar» al cambiar de pestaña (guarda síncrona); formularios de cuenta sin secciones (`FormSection` no aplica); estados de carga/error (ya hay `(panel)/loading.tsx` y `error.tsx`).
 
 Pendiente, necesita ojo humano: revisión visual en navegador (modal de pago, diálogos de rutas/roles, agenda, equipo, Pagos con los tonos nuevos), `requirePermission` sin cubrir `pagos/solicitudes`, `settings` y Dashboard, y decidir si se sube como un PR o por módulo.
+
+## P4 parcial y blindaje de subidas (misma rama, sin subir)
+
+- **`startJob`** (`apps/api/src/common/jobs/start-job.ts`): los 7 `setInterval` de tareas de sistema (plan, vencidas de agenda, recordatorios de cuotas, mora, vencimiento de asignaciones, promesas, limpieza de archivos) comparten una abstracción con candado en Redis (`SET NX PX`): con varias réplicas corre UNA instancia por ciclo; no se solapa consigo mismo; si Redis falla corre igual (los jobs ya eran idempotentes). `AuthzVersionService` (sincroniza a Redis en cada instancia a propósito) se dejó con su propio intervalo. Redis es parámetro opcional del constructor: los specs no cambian.
+- **Tope de subidas** (`UploadConcurrencyInterceptor`): máx. 12 subidas en vuelo por proceso (503 `UPLOAD_003`) antes de multer en `/uploads` e `/imports`, porque multer guarda hasta 15 MB por archivo en memoria.
+- API: tsc limpio, 2212 pruebas OK.
+
+**S-11 sigue sin hacerse a propósito:** hay 109 llamadas `audit.record(` post-commit y 2 `recordInTx`; volverlas atómicas toca ~25 servicios y cambia el contrato de errores (una auditoría caída pasaría a abortar la mutación). Necesita decidir cuáles son «críticas» antes de tocar. **S-13** depende del despliegue (proxy delante del BFF).
