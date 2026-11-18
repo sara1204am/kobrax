@@ -47,3 +47,12 @@ publicados esto aparece como `[PENDIENTE DE CONFIRMACIÓN LEGAL]` (resaltado en 
 2. Se actualizan los archivos y se **sube `version` a `1.0.0`** con `material: true` (cada versión publicada es inmutable).
 3. `pnpm db:seed:legal` en cada entorno. Las personas que aceptaron `0.1.0` verán la pantalla de re-aceptación (cambio material).
 4. Se quitan los marcadores `[PENDIENTE…]` solo de lo ya confirmado.
+
+## E. Titular del servicio y Google Play (2026-11-17)
+
+Mientras no exista la sociedad, los textos nombran como titular a **Mabel Sara Acha Moya, persona natural** (no a Ikigai Tech Bolivia S.A.). Responde con su patrimonio personal.
+
+1. **Al constituirse la sociedad:** cambiar el titular en `terms`, `dpa` y `privacy` (versión nueva, material → re-aceptación) y reflejarlo en la cuenta de Google Play (una app no se mueve fácil de una cuenta personal a una de organización: decidir el identificador de paquete definitivo antes de publicar).
+2. **Preguntas para el abogado boliviano:** (a) base legal del cobrador independiente como responsable de datos de deudores; (b) alcance del D.S. 1793 y de las normas de ASFI o de consumo sobre cobranza (horarios, medios, contacto con terceros); (c) si conviene una figura intermedia (empresa unipersonal) antes de la S.A.; (d) validez de la cláusula de responsabilidad e indemnidad del usuario (`terms` §7.2).
+3. **Pendientes técnicos que los textos ya reconocen:** formulario público de reportes de abuso o corrección (hoy solo correo); botón de suspensión de cuenta (hoy solo CLI `account:suspend`); eliminación de cuenta dentro de la app móvil y página web pública para pedirla (exigencia de Google Play).
+4. **Google Play:** `privacy` §16 es la base para la ficha de Seguridad de los datos. Bloqueo técnico aparte: migrar Expo SDK 51 para apuntar a API 36 y soportar páginas de 16 KB (ver análisis de publicación en Play).

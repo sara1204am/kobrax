@@ -4,15 +4,16 @@ version: 0.1.0
 title: Acuerdo de Tratamiento de Datos (DPA)
 material: true
 ---
-# Acuerdo de Tratamiento de Datos entre la Organización cliente e Ikigai Tech Bolivia S.A.
+# Acuerdo de Tratamiento de Datos entre la Organización cliente y Kobrax
 
 [PENDIENTE DE CONFIRMACIÓN LEGAL] Borrador sin revisión de un abogado. Aplica a clientes empresariales; es independiente de la aceptación individual al crear una cuenta.
 
 ## 1. Partes y roles
 
 - **Responsable**: la Organización cliente que contrata Kobrax. Decide las finalidades y las bases legales del tratamiento de los datos de sus carteras.
-- **Encargado**: Ikigai Tech Bolivia S.A. (Kobrax), que trata esos datos por cuenta del Responsable para prestar el servicio.
-- Representante legal de Ikigai Tech Bolivia S.A.: Mabel Sara Acha Moya. NIT y domicilio: [PENDIENTE DE CONFIRMACIÓN LEGAL].
+- **Encargado**: Mabel Sara Acha Moya, persona natural, titular de Kobrax, que trata esos datos por cuenta del Responsable para prestar el servicio.
+- Hoy no existe una sociedad: el Encargado es una persona natural. Documento de identidad / NIT y domicilio: [PENDIENTE DE CONFIRMACIÓN LEGAL]. Si el servicio se traspasa a una sociedad, este acuerdo se actualizará y el Responsable deberá aceptarlo de nuevo.
+- **Profesional independiente**: si el Responsable es una persona que cobra por su cuenta, es el Responsable en este acuerdo. Si además cobra **por encargo de un acreedor**, la relación entre ambos (quién decide los fines y la base legal) la regulan ellos entre sí; Kobrax sigue siendo encargado del Responsable que lo contrató. [PENDIENTE DE CONFIRMACIÓN LEGAL: cómo documentar la cadena acreedor, cobrador y Kobrax.]
 
 ## 2. Objeto
 
@@ -29,6 +30,7 @@ Regular el tratamiento de los datos personales de los **titulares de datos de co
 - Informar a los titulares y atender sus solicitudes.
 - Definir qué personas de su organización acceden y con qué rol. El administrador de una cuenta **no tiene autoridad automática para consentir por los titulares**.
 - No cargar datos que no pueda tratar legalmente.
+- Ser capaz de acreditar, si Kobrax o una autoridad se lo piden, su derecho a tratar los datos de cada cartera (por ejemplo, su relación con el acreedor).
 
 ## 5. Obligaciones del Encargado (Kobrax)
 
@@ -37,6 +39,9 @@ Regular el tratamiento de los datos personales de los **titulares de datos de co
 - Mantener la confidencialidad del personal con acceso.
 - Aplicar las medidas de seguridad descritas en la [Política de Privacidad](/privacidad).
 - No acceder a los datos del Responsable salvo mediante una sesión de soporte con su consentimiento, limitada en el tiempo y registrada.
+- **No leer la agenda de contactos, el registro de llamadas ni los archivos del teléfono** de quienes usan la aplicación móvil.
+- Atender los reportes de uso indebido que reciba de titulares o terceros, y suspender el acceso cuando corresponda, aunque el Responsable no lo haya pedido. Kobrax puede informar al Responsable del reporte.
+- Estas obligaciones del Encargado existen por sí mismas, y no se reducen porque el Responsable sea quien responde por la licitud de los datos que carga.
 
 ## 6. Subencargados
 
