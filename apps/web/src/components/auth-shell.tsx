@@ -62,7 +62,6 @@ export function AuthShell({
         </section>
       </div>
 
-      <TrustBar />
     </main>
   );
 }
@@ -167,40 +166,6 @@ function Feature({ icon, title, text }: { icon: ReactNode; title: string; text: 
   );
 }
 
-/**
- * Barra de confianza del pie. El diseño traía «Cumplimiento normativo · 99,9% de disponibilidad ·
- * Soporte 24/7»: los tres son promesas que hoy nadie puede sostener, y el 99,9% es la misma cifra
- * inventada que ya salió del panel. Estos cuatro son verificables contra el código.
- */
-function TrustBar() {
-  const t = useTranslations('shell.trust');
-
-  return (
-    <footer className="border-t border-k-border bg-white">
-      <ul className="mx-auto grid max-w-6xl gap-5 px-6 py-5 sm:grid-cols-2 lg:grid-cols-4">
-        <TrustItem icon={<IconLock />} title={t('tlsTitle')} text={t('tlsText')} />
-        <TrustItem icon={<IconShield />} title={t('dbTitle')} text={t('dbText')} />
-        <TrustItem icon={<IconEye />} title={t('auditTitle')} text={t('auditText')} />
-        <TrustItem icon={<IconBuilding />} title={t('tenantTitle')} text={t('tenantText')} />
-      </ul>
-    </footer>
-  );
-}
-
-function TrustItem({ icon, title, text }: { icon: ReactNode; title: string; text: string }) {
-  return (
-    <li className="flex items-center gap-3">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-k-highlight text-k-purple">
-        {icon}
-      </span>
-      <span className="leading-tight">
-        <span className="block text-k-sm font-medium text-k-text">{title}</span>
-        <span className="block text-k-xs text-k-muted">{text}</span>
-      </span>
-    </li>
-  );
-}
-
 // ── Íconos ───────────────────────────────────────────────────────────────────
 // Inline y no una librería: son seis trazos. Heredan `currentColor` y el tamaño del contenedor.
 
@@ -244,31 +209,6 @@ function IconChart() {
   return (
     <svg {...svg} aria-hidden>
       <path d="M5 20V11M12 20V5M19 20v-6" />
-    </svg>
-  );
-}
-function IconLock() {
-  return (
-    <svg {...svg} aria-hidden>
-      <rect x="5" y="11" width="14" height="9" rx="2" />
-      <path d="M8 11V7.5a4 4 0 0 1 8 0V11" />
-    </svg>
-  );
-}
-function IconEye() {
-  return (
-    <svg {...svg} aria-hidden>
-      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
-      <circle cx="12" cy="12" r="2.5" />
-    </svg>
-  );
-}
-function IconBuilding() {
-  return (
-    <svg {...svg} aria-hidden>
-      <rect x="4" y="4" width="8" height="16" rx="1.5" />
-      <rect x="14" y="9" width="6" height="11" rx="1.5" />
-      <path d="M7 8h2M7 12h2M7 16h2" />
     </svg>
   );
 }
