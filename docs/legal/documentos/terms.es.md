@@ -35,6 +35,7 @@ Al crear tu acceso marcas, de forma expresa y separada, que has leído y aceptas
 
 - Debes tener capacidad legal para obligarte. [PENDIENTE DE CONFIRMACIÓN LEGAL: edad mínima.]
 - Los datos que nos des deben ser veraces y estar actualizados.
+- Al crear la cuenta te enviamos un enlace para **confirmar que el correo es tuyo**. Puedes entrar y trabajar sin confirmarlo, pero hasta que lo hagas no podrás invitar personas ni exportar datos. Quien entra por una invitación ya llega con el correo confirmado.
 - Eres responsable de custodiar tus credenciales y de lo que ocurra con tu acceso. Los administradores deben activar la verificación en dos pasos.
 - Avísanos de inmediato si crees que alguien accedió a tu cuenta sin permiso.
 

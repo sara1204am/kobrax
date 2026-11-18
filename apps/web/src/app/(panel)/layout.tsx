@@ -14,6 +14,7 @@ import { HiddenModuleNotice } from '@/components/hidden-module-notice';
 import { ToastProvider } from '@/components/toast';
 import { OnboardingWizard } from '@/components/onboarding-wizard';
 import { LegalReacceptGate } from '@/components/legal-reaccept-gate';
+import { EmailVerifyBanner } from '@/components/email-verify-banner';
 import type { LegalOverview } from '@/lib/legal';
 import { OnboardingCards } from '@/components/onboarding-cards';
 import { TourProvider } from '@/components/tour';
@@ -127,6 +128,8 @@ export default async function PanelLayout({ children }: { children: ReactNode })
               <ToastProvider>
                 {/* Privacidad (B5): pantalla bloqueante si cambió algo material en los Términos o la Política. Se puede cerrar sesión. */}
                 {legalPending.length > 0 && <LegalReacceptGate key={legalPending.map((p) => p.versionId).join()} pending={legalPending} />}
+                {/* Correo sin confirmar: aviso no bloqueante (solo invitar y exportar lo piden). `undefined` = la API aún no lo informa. */}
+                {user.emailVerified === false && <EmailVerifyBanner email={user.email} />}
                 {/* F15: el aviso de «ese módulo está oculto» (`?oculto=`), en la pantalla a la que se volvió. */}
                 <HiddenModuleNotice
                   canManage={user.permissions.includes(Permission.ACCOUNT_WRITE)}

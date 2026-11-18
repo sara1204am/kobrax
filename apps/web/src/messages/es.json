@@ -5151,6 +5151,26 @@
       "error": "No se pudo completar la acción"
     }
   },
+  "emailVerify": {
+    "banner": {
+      "title": "Confirma tu correo.",
+      "text": "Te enviamos un enlace a {email}. Hasta que lo confirmes no podrás invitar personas ni exportar datos.",
+      "resend": "Reenviar correo",
+      "sent": "Te enviamos otro enlace a {email}.",
+      "wait": "Ya te enviamos un enlace hace un momento. Revisa tu correo (y la carpeta de spam) o espera un minuto.",
+      "error": "No se pudo reenviar el correo. Inténtalo de nuevo."
+    },
+    "page": {
+      "title": "Confirma tu correo",
+      "body": "Confirma que este correo es tuyo para terminar de activar tu cuenta. Si no creaste la cuenta, cierra esta página: no se hará nada.",
+      "confirm": "Confirmar",
+      "error": "No se pudo confirmar. Inténtalo de nuevo.",
+      "invalid": "El enlace no es válido. Pide uno nuevo desde el aviso del panel.",
+      "doneTitle": "Correo confirmado",
+      "doneBody": "Listo, tu correo quedó confirmado. Ya puedes invitar personas y exportar datos.",
+      "goPanel": "Ir al panel"
+    }
+  },
   "report": {
     "title": "Reportar un problema o pedir tus derechos",
     "intro": "Si crees que te están hostigando, que tus datos se cargaron en Kobrax sin derecho, o quieres pedir acceso, corrección o eliminación de tus datos, escríbenos aquí. No necesitas tener cuenta.",

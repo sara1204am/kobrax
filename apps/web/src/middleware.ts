@@ -193,6 +193,7 @@ export const config = {
     '/pagos/:path*',
     '/exportar/:path*',
     '/api/auth/me',
+    '/api/auth/email/resend', // reenviar el correo de confirmación (con sesión); `/api/auth/email/verify` es público
     '/api/exports/:path*',
     '/api/notifications/:path*',
     '/api/auth/switch-account',

@@ -239,6 +239,8 @@ model User {
   mfaSecret              String?    @map("mfa_secret")
   status                 UserStatus @default(PENDING) @map("user_status")
   lastLoginAt            DateTime?  @map("last_login_at")
+  /// Cuándo la persona confirmó que el correo es suyo (enlace de un solo uso). NULL = sin confirmar. Quien entra por invitación nace confirmado.
+  emailVerifiedAt        DateTime?  @map("email_verified_at")
   lastKnownLat           Decimal?   @map("last_known_lat") @db.Decimal(10, 8)
   lastKnownLng           Decimal?   @map("last_known_lng") @db.Decimal(11, 8)
   lastLocationAt         DateTime?  @map("last_location_at")
@@ -256,6 +258,7 @@ model User {
   consentRecords      ConsentRecord[]
   mfaBackupCodes      MfaBackupCode[]
   passwordResetTokens PasswordResetToken[]
+  emailVerificationTokens EmailVerificationToken[]
 
   @@index([status])
   @@index([deletedAt])
@@ -654,6 +657,22 @@ model PasswordResetToken {
   @@index([userId])
   @@index([tokenHash])
   @@map("password_reset_tokens")
+}
+
+/// Confirmación del correo de un usuario: enlace de un solo uso. Solo se guarda la huella (SHA-256), nunca el enlace.
+model EmailVerificationToken {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  tokenHash String    @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([tokenHash])
+  @@map("email_verification_tokens")
 }
 
 /// Auditoría append-only: who / when / what / before / after / ip.

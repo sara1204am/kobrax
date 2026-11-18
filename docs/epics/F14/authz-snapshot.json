@@ -1396,6 +1396,20 @@
     "any": []
   },
   {
+    "route": "POST /auth/email/resend",
+    "handler": "AuthController.resendVerification",
+    "kind": "authenticated",
+    "all": [],
+    "any": []
+  },
+  {
+    "route": "POST /auth/email/verify",
+    "handler": "AuthController.verifyEmail",
+    "kind": "public",
+    "all": [],
+    "any": []
+  },
+  {
     "route": "POST /auth/forgot-password",
     "handler": "AuthController.forgotPassword",
     "kind": "public",

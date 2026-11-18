@@ -178,7 +178,21 @@ async function envelope<T>(res: Response): Promise<Envelope<T>> {
   return { status: res.status, data: body.data, error: body.error ?? undefined };
 }
 
-export async function login(email: string): Promise<string> {
+/**
+ * Las cuentas nacen con el correo SIN confirmar y eso frena invitar y exportar (403 `EMAIL_UNVERIFIED`). Lo que casi todas las suites prueban es
+ * otra cosa, así que el login de pruebas lo deja confirmado; la suite de la confirmación (`email-verification.it.ts`) pasa `keepUnverified`.
+ */
+async function markEmailVerified(email: string): Promise<void> {
+  const prisma = db();
+  try {
+    await prisma.user.updateMany({ where: { email: email.toLowerCase(), emailVerifiedAt: null }, data: { emailVerifiedAt: new Date() } });
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+export async function login(email: string, opts: { keepUnverified?: boolean } = {}): Promise<string> {
+  if (!opts.keepUnverified) await markEmailVerified(email);
   const res = await fetch(`${API}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -193,7 +207,8 @@ export async function login(email: string): Promise<string> {
  * Login de un rol CRÍTICO (ACCOUNT_ADMIN) sin enrolar TOTP: exige que la API haya arrancado con `MFA_CRITICAL_GRACE_UNTIL`
  * en el futuro (`startApi({ MFA_CRITICAL_GRACE_UNTIL: '2099-01-01' })`). Lo que se prueba no es el segundo factor.
  */
-export async function loginSkippingMfa(email: string): Promise<string> {
+export async function loginSkippingMfa(email: string, opts: { keepUnverified?: boolean } = {}): Promise<string> {
+  if (!opts.keepUnverified) await markEmailVerified(email);
   const post = async (path: string, body: unknown) =>
     (await (await fetch(`${API}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json()) as {
       data?: { step: string; accessToken?: string; preAuthToken?: string };

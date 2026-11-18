@@ -404,6 +404,8 @@ export class AuthService implements OnModuleInit {
     mfaEnabled: boolean;
     mfaRequired: boolean;
     requiresPasswordChange: boolean;
+    /** ¿Ya confirmó que el correo es suyo? (alta de cuenta). Quien entra por invitación nace confirmado. */
+    emailVerified?: boolean;
     /** Sesión del token: el panel la compara entre pestañas (W-LOG-54). */
     sessionId?: string;
     /** La marca del negocio activo (nombre, teléfono, logo): la lee cualquier miembro, sin `account:read`. */
@@ -469,6 +471,8 @@ export class AuthService implements OnModuleInit {
       /** El rol exige MFA (D2): el cliente no ofrece desactivarlo ni postergarlo. El servidor lo impone igual. */
       mfaRequired: await this.mfa.isCritical(dbUser.id),
       requiresPasswordChange: dbUser.requiresPasswordChange,
+      /** ¿Ya confirmó que el correo es suyo? El panel muestra un aviso mientras no. */
+      emailVerified: dbUser.emailVerifiedAt != null,
       sessionId: user.sessionId,
       account: account
         ? { name: account.businessName, phone: account.phone, logoUrl: account.logoUrl, timezone: account.timezone ?? null, soloUser, preferences: preferencesOf(account.configuration), workspace: parseWorkspace(account.configuration), onboarding: onboardingOf(account.configuration) }

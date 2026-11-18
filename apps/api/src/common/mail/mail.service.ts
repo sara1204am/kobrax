@@ -131,3 +131,19 @@ export function publicReportNotifyBody(params: {
     ].join('\n'),
   };
 }
+
+/** Correo al crear la cuenta: confirma que el correo es de quien se registró. */
+export function emailVerificationBody(link: string): { subject: string; text: string } {
+  return {
+    subject: 'Confirma tu correo en Kobrax',
+    text: [
+      'Creaste una cuenta en Kobrax con este correo.',
+      '',
+      'Confirma que es tuyo abriendo este enlace y pulsando "Confirmar":',
+      '',
+      `    ${link}`,
+      '',
+      'El enlace vence en 48 horas y sirve una sola vez. Si no creaste la cuenta, ignora este correo.',
+    ].join('\n'),
+  };
+}

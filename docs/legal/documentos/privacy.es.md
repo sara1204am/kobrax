@@ -24,6 +24,7 @@ material: true
 - Nombre, apellido, correo electrónico, teléfono, foto y datos laborales que completes (por ejemplo, código de empleado).
 - Número de documento, si lo registras en tu perfil.
 - Contraseña (se guarda únicamente su huella cifrada) y datos de verificación en dos pasos.
+- Si el correo ya fue confirmado y cuándo. El enlace de confirmación vence a las 48 horas, sirve una sola vez y de él solo se guarda su huella.
 
 **De tu organización**
 - Razón social, NIT, teléfono, correo, dirección y plan.

@@ -5151,6 +5151,26 @@
       "error": "The action could not be completed"
     }
   },
+  "emailVerify": {
+    "banner": {
+      "title": "Confirm your email.",
+      "text": "We sent a link to {email}. Until you confirm it you cannot invite people or export data.",
+      "resend": "Resend email",
+      "sent": "We sent you another link at {email}.",
+      "wait": "We just sent you a link. Check your email (and your spam folder) or wait a minute.",
+      "error": "The email could not be resent. Please try again."
+    },
+    "page": {
+      "title": "Confirm your email",
+      "body": "Confirm that this email is yours to finish activating your account. If you did not create the account, close this page: nothing will be done.",
+      "confirm": "Confirm",
+      "error": "It could not be confirmed. Please try again.",
+      "invalid": "The link is not valid. Ask for a new one from the notice in the panel.",
+      "doneTitle": "Email confirmed",
+      "doneBody": "Done, your email is confirmed. You can now invite people and export data.",
+      "goPanel": "Go to the panel"
+    }
+  },
   "report": {
     "title": "Report a problem or exercise your rights",
     "intro": "If you think you are being harassed, that your data was loaded into Kobrax without the right to do so, or you want to ask for access, correction or deletion of your data, write to us here. You do not need an account.",
