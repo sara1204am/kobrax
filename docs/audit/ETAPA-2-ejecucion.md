@@ -43,3 +43,11 @@ Resultado final: API tsc limpio y 2182 pruebas OK; Web tsc limpio y 1544 pruebas
 2. La migración `20261117000000_evidence_immutability` + correr `pnpm db:rls` (el script `005c`) en producción.
 3. Revisar el diff de `docs/epics/F14/authz-snapshot.json` (puertas de `routes`).
 4. Las cabeceras de seguridad de la Web: probar que cámara/ubicación siguen funcionando.
+
+## P2-B — migración de pantallas (rama `feat/web-p2b-pagos`, sin subir)
+
+Hecho: botones/selects/textareas crudos que coinciden con un patrón del sistema → `Button`/`TextButton`/`Select`/`Textarea` (ratchet 228/31/13 → 173/24/2); `LinkTabs` único para las pestañas de ruta de Cuenta y Mi perfil; 4 `Checkbox`; Pagos sin hex propios (tokens `k-*`); `requirePermission` en agenda, mora, import, exportar, pagos y rutas (el mismo permiso que el menú); escala tipográfica `text-k-*` (11 tamaños exactos, el lint impide nuevos `text-[Npx]`; quedan 27 atípicos fijados); borrar tablero con `ConfirmDialog`.
+
+Decidido dejar tal cual (no es deuda): radios (ya usan los nombres de Tailwind); `<input type="date">` nativo (es el selector de fecha del sistema, `Input` lo envuelve); tarjetas/filas clicables, pastillas, celdas de calendario y menús (botones legítimos); `window.confirm` de «cambios sin guardar» al cambiar de pestaña (guarda síncrona); formularios de cuenta sin secciones (`FormSection` no aplica); estados de carga/error (ya hay `(panel)/loading.tsx` y `error.tsx`).
+
+Pendiente, necesita ojo humano: revisión visual en navegador (modal de pago, diálogos de rutas/roles, agenda, equipo, Pagos con los tonos nuevos), `requirePermission` sin cubrir `pagos/solicitudes`, `settings` y Dashboard, y decidir si se sube como un PR o por módulo.
