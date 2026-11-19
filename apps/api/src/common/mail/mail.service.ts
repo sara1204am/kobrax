@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { createTransport, type Transporter } from 'nodemailer';
 import { AppConfigService } from '../../config/app-config.service';
 import { formatInvitationCode } from '../../modules/auth/invitation-code';
+import { mailBlockReason } from './mail-guard';
 
 /**
  * Envío de correo (CUENTA · S2-D1). Un transport, un `sendMail`, y los cuerpos como
@@ -29,6 +30,12 @@ export class MailService {
    */
   async send(to: string, subject: string, text: string): Promise<void> {
     const { smtpUser, smtpPass, mailFrom } = this.config;
+    // Guardia: a direcciones de prueba, o desde un entorno de pruebas, **nunca** se envía de verdad (ver `mail-guard.ts`).
+    const blocked = mailBlockReason(to, process.env);
+    if (blocked) {
+      this.logger.warn(`[ENVÍO BLOQUEADO: ${blocked}] Para: ${to} · ${subject}`);
+      return;
+    }
     if (!smtpUser || !smtpPass) {
       this.logger.warn(`[SIN SMTP] Para: ${to} · ${subject}\n${text}`);
       return;
