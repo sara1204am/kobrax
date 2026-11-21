@@ -4,15 +4,16 @@ import { useRef, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
-import { PAYMENT_CHANNELS, type CreditDetail, type PaymentChannel } from '@kobrax/shared';
+import { PAYMENT_BACKDATE_DAYS, PAYMENT_CHANNELS, type CreditDetail, type PaymentChannel } from '@kobrax/shared';
 import { usePaymentMethods } from '@/lib/use-payment-methods';
 import { Button, ErrorBanner, Field, Input, Select } from '@/components/ui';
 import { Modal } from '@/components/modal';
 import { usePermissions } from '@/components/permissions';
 import { useToast } from '@/components/toast';
+import { notifyCreditChanged } from '@/components/credit-sync';
 import { errorText } from '@/lib/api-error';
 import { sendJson } from '@/lib/client';
-import { money } from '@/lib/format';
+import { money, todayIso } from '@/lib/format';
 import { PAYMENT_REQUESTS_ENABLED } from '@/lib/features';
 import { CreditPicker } from './credit-picker';
 
@@ -104,6 +105,8 @@ export function PaymentModal({
    * lo que tiene que llegar con la misma clave.
    */
   const [key, setKey] = useState('');
+  /** El día del cobro: hoy por defecto; se puede cargar un pago de un día anterior (hasta `PAYMENT_BACKDATE_DAYS`), nunca uno futuro. */
+  const [payDate, setPayDate] = useState(todayIso);
   const [amount, setAmount] = useState('');
   const methods = usePaymentMethods(open);
   const [methodCode, setMethodCode] = useState('CASH');
@@ -133,6 +136,7 @@ export function PaymentModal({
     if (open) {
       setPicked(null);
       setKey(crypto.randomUUID());
+      setPayDate(todayIso());
       setAmount(credit?.suggestedAmount !== undefined ? String(credit.suggestedAmount) : '');
       setMethodCode('CASH');
       setChannel('KOBRAX_COLLECTED');
@@ -180,7 +184,11 @@ export function PaymentModal({
    * se topa**: su saldo es el del último reporte y puede ir atrasado, y el pago no lo toca.
    */
   const over = !!active && !active.external && active.balance !== undefined && value > active.balance + 0.005;
-  const valid = amount.trim() !== '' && Number.isFinite(value) && value > 0 && !over;
+  /** Hoy a lo sumo, y no más atrás de lo que acepta la API (al mediodía del día elegido, un día de margen). */
+  const today = todayIso();
+  const earliest = shiftDay(today, -(PAYMENT_BACKDATE_DAYS - 1));
+  const dateOk = /^\d{4}-\d{2}-\d{2}$/.test(payDate) && payDate <= today && payDate >= earliest;
+  const valid = dateOk && amount.trim() !== '' && Number.isFinite(value) && value > 0 && !over;
 
   /** Al elegir un crédito se vuelve a leer con su cronograma: la lista no trae las cuotas, y de ellas sale la que toca. */
   async function pick(c: CreditDetail) {
@@ -203,6 +211,8 @@ export function PaymentModal({
       '/api/payments',
       {
         creditId: active.id,
+        // Hoy = «ahora» (no se manda); un día anterior viaja como el mediodía de ese día (ninguna zona horaria lo corre de día).
+        ...(payDate !== today ? { paymentDate: new Date(`${payDate}T12:00:00`).toISOString() } : {}),
         amount: value,
         method: methods.ledgerOf(methodCode) ?? 'CASH',
         // Sólo lo que no es el default: el cuerpo mínimo es el de siempre.
@@ -225,6 +235,8 @@ export function PaymentModal({
     toast(t('register.done'));
     // Vuelve a leer sólo los datos del servidor de esta ruta; no recarga la página.
     router.refresh();
+    // Y avisa a las demás pestañas que tengan este crédito abierto (Cartera, Mora, su historial).
+    notifyCreditChanged(active.id);
   }
 
   return (
@@ -254,6 +266,10 @@ export function PaymentModal({
           <p className="text-k-warning-text">{t('register.immutable')}</p>
           {active.external && <p className="mt-2 text-k-base text-k-text-2">{t('register.externalHint')}</p>}
           <div className="mt-4 space-y-4">
+            {/* Lo PRIMERO: cuándo se cobró. Hoy ya viene elegido; se puede ir hacia atrás, no hacia adelante. */}
+            <Field label={t('register.date')} hint={t('register.dateHint', { days: PAYMENT_BACKDATE_DAYS })} error={dateOk ? undefined : t('register.dateInvalid', { days: PAYMENT_BACKDATE_DAYS })}>
+              <Input type="date" min={earliest} max={today} value={payDate} onChange={(e) => setPayDate(e.target.value)} disabled={busy} />
+            </Field>
             <Field label={t('register.credit')}>
               <Input value={active.code ?? active.id} readOnly disabled />
             </Field>
@@ -408,3 +424,11 @@ export function PaymentModal({
     </Modal>
   );
 }
+
+/** `YYYY-MM-DD` ± días, en el calendario (sin pasar por la zona horaria). */
+function shiftDay(day: string, delta: number): string {
+  const d = new Date(`${day}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+

@@ -295,7 +295,7 @@ export class ClientsService {
        */
       for (const g of dto.collaterals ?? []) {
         const row = await tx.collateral.create({
-          data: { accountId: acc, clientId: client.id, type: g.type, description: g.description, estimatedValue: g.estimatedValue, currency: g.currency, photoUrls: (g.photoUrls ?? []) as Prisma.InputJsonValue },
+          data: { accountId: acc, clientId: client.id, type: g.type, typeOther: g.type === 'OTHER' ? g.typeOther?.trim() || null : null, description: g.description?.trim() ?? '', estimatedValue: g.estimatedValue, currency: g.currency, photoUrls: (g.photoUrls ?? []) as Prisma.InputJsonValue },
         });
         audits.push({ kind: 'collateral', id: row.id, after: row });
         await this.linkCollateral(tx, client.id, row.id, g.creditIds);
@@ -1245,7 +1245,8 @@ export class ClientsService {
           accountId: this.tenant.accountId,
           clientId,
           type: dto.type,
-          description: dto.description,
+          typeOther: dto.type === 'OTHER' ? dto.typeOther?.trim() || null : null,
+          description: dto.description?.trim() ?? '',
           estimatedValue: dto.estimatedValue,
           currency: dto.currency,
           photoUrls: (dto.photoUrls ?? []) as Prisma.InputJsonValue,
@@ -1259,13 +1260,17 @@ export class ClientsService {
   async updateCollateral(clientId: string, collateralId: string, dto: UpdateCollateralDto) {
     const updated = await this.tx(async (tx) => {
       await this.assertClientVisible(tx, clientId);
-      const found = await tx.collateral.findFirst({ where: { id: collateralId, clientId }, select: { id: true } });
+      const found = await tx.collateral.findFirst({ where: { id: collateralId, clientId }, select: { id: true, type: true } });
       if (!found) throw resourceNotFound();
       await this.linkCollateral(tx, clientId, collateralId, dto.creditIds);
       return tx.collateral.update({
         where: { id: collateralId },
         data: {
           ...(dto.type !== undefined && { type: dto.type }),
+          // «Otro»: se guarda qué es; al cambiar a cualquier otro tipo se borra.
+          ...((dto.type !== undefined || dto.typeOther !== undefined) && {
+            typeOther: (dto.type ?? found.type) === 'OTHER' ? dto.typeOther?.trim() || null : null,
+          }),
           ...(dto.description !== undefined && { description: dto.description }),
           ...(dto.estimatedValue !== undefined && { estimatedValue: dto.estimatedValue }),
           ...(dto.currency !== undefined && { currency: dto.currency }),

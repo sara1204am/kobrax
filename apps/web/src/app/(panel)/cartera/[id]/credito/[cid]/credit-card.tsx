@@ -62,6 +62,7 @@ export function CreditCard({
   const { can } = usePermissions();
   const canWrite = can('credit:write');
   const canPay = can('payment:write');
+  const canSeePayments = can('payment:read');
   const [paying, setPaying] = useState(false);
   const block = termsEditBlock(credit);
 
@@ -161,11 +162,14 @@ export function CreditCard({
                     </Button>
                   </span>
                 )}
-                <span className="w-44">
-                  <Button type="button" variant="ghost" onClick={() => router.push(`/pagos?creditId=${credit.id}`)}>
-                    {t('creditPayments')}
-                  </Button>
-                </span>
+                {/* El historial de ESTE crédito (con la imputación de cada pago), sin salir de su contexto: no el ledger general. */}
+                {canSeePayments && (
+                  <span className="w-44">
+                    <Button type="button" variant="ghost" onClick={() => router.push(`/cartera/${clientId}/credito/${credit.id}/pagos`)}>
+                      {t('creditPayments')}
+                    </Button>
+                  </span>
+                )}
                 <span className="w-44">
                   <Button type="button" variant="ghost" onClick={() => router.push(`/cartera/${clientId}`)}>
                     {t('backToClient')}

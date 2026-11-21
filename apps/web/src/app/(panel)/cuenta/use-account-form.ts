@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { ArrearsMethod, diffAccount, hasChanges, type AccountForm, type AccountInfo } from '@kobrax/shared';
+import { ArrearsMethod, DEFAULT_CREDIT_CODE_MASK, diffAccount, hasChanges, type AccountForm, type AccountInfo } from '@kobrax/shared';
 import { usePermissions } from '@/components/permissions';
 import { useToast } from '@/components/toast';
 import { sendJson } from '@/lib/client';
@@ -17,6 +17,7 @@ const formOf = (a: AccountInfo): AccountForm => ({
   timezone: a.timezone ?? '',
   currencyDecimals: String(a.currencyDecimals ?? 2),
   arrearsMethod: a.arrearsMethod ?? ArrearsMethod.OLDEST_UNPAID,
+  creditCodeMask: a.creditCodeMask ?? DEFAULT_CREDIT_CODE_MASK,
   logoUrl: a.logoUrl ?? '',
   phone: a.phone ?? '',
   email: a.email ?? '',

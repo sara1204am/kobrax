@@ -47,7 +47,8 @@ export default async function PanelLayout({ children }: { children: ReactNode })
   // La API no contestó: no es que la sesión se venció, es que del otro lado no hay nadie.
   // Mandar a `/login` sería mentir —ahí tampoco va a poder entrar— y además esconde el
   // problema real.
-  if (me.status === 0) {
+  // Sin respuesta (0) o con la API caída/reiniciándose (5xx): no es «sesión terminada». Se avisa y se reintenta; al login sólo se va con un 401.
+  if (me.status === 0 || me.status >= 500) {
     const t = await getTranslations('panel.offline');
     return (
       <main className="flex min-h-screen items-center justify-center bg-k-bg px-6">

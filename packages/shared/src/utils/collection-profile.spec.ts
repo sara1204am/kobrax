@@ -70,7 +70,7 @@ describe('formulario ↔ perfil', () => {
   });
 
   it('ida y vuelta conserva todo, con los días ordenados', () => {
-    const profile = { modality: 'PICK_UP', frequency: 'DAILY' as const, window: { from: '07:00', to: '09:00' }, days: [3, 1, 2], handoverBy: 'FAMILY' as const, note: 'Con su hijo' };
+    const profile = { modality: 'PICK_UP', frequency: 'WEEKLY' as const, window: { from: '07:00', to: '09:00' }, days: [3, 1, 2], handoverBy: 'FAMILY' as const, note: 'Con su hijo' };
     const form = collectionFormFromProfile(profile);
     expect(collectionProfileFromForm(form)).toEqual({ ...profile, days: [1, 2, 3] });
   });
@@ -169,5 +169,18 @@ describe('filas anteriores al campo (borradores, cachés)', () => {
     expect(collectionProfileFromForm(undefined)).toBeUndefined();
     expect(sameCollection(undefined, emptyCollectionForm())).toBe(true);
     expect(collectionFormError(undefined)).toBeNull();
+  });
+});
+
+describe('«Todos los días» guarda los siete días', () => {
+  it('aunque el formulario traiga menos, o ninguno', () => {
+    expect(collectionProfileFromForm({ ...emptyCollectionForm(), frequency: 'DAILY' })?.days).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(collectionProfileFromForm({ ...emptyCollectionForm(), frequency: 'DAILY', days: [2] })?.days).toEqual([1, 2, 3, 4, 5, 6, 7]);
+  });
+  it('con otra frecuencia respeta los días elegidos', () => {
+    expect(collectionProfileFromForm({ ...emptyCollectionForm(), frequency: 'WEEKLY', days: [3] })?.days).toEqual([3]);
+  });
+  it('«Según el calendario de cuotas» no guarda días', () => {
+    expect(collectionProfileFromForm({ ...emptyCollectionForm(), frequency: 'PER_INSTALLMENT', days: [1, 2] })).toEqual({ frequency: 'PER_INSTALLMENT' });
   });
 });

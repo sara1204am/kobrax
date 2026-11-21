@@ -180,3 +180,28 @@ function validateCore(input: RecoveryActivityInput, today: string): RecoveryActi
   if (!paymentMethodCode?.trim()) return 'PROMISE_METHOD_REQUIRED';
   return null;
 }
+
+// ── A quién / por dónde: la dirección de una visita y el canal de un mensaje ───────────────────────────────────
+
+/** Por dónde se mandó un mensaje. */
+export const ACTIVITY_CHANNELS = ['WHATSAPP', 'EMAIL', 'SMS'] as const;
+export type ActivityChannel = (typeof ACTIVITY_CHANNELS)[number];
+
+export type ActivityTargetError = 'LOCATION_NOT_ALLOWED' | 'CONTACT_NOT_ALLOWED' | 'CHANNEL_INVALID' | 'CHANNEL_NOT_ALLOWED';
+
+/**
+ * La dirección visitada es de una **visita**; el teléfono o correo, de una **llamada** o un **mensaje**; el canal, de un **mensaje**. Ambos opcionales (las gestiones anteriores y las del móvil
+ * no los traen). Función aparte de `validateRecoveryActivity` para no ampliar sus códigos de error, que el móvil enumera.
+ *
+ * `type` es el de la bitácora (`VISIT`, `MESSAGE`…): la agenda mapea su `WHATSAPP` a `MESSAGE` antes de llamar.
+ */
+export function validateActivityTarget(target: { locationId?: string; contactId?: string; channel?: string }, type: string): ActivityTargetError | null {
+  if (target.locationId !== undefined && type !== 'VISIT') return 'LOCATION_NOT_ALLOWED';
+  // El teléfono o correo es de una llamada o un mensaje (lo mismo que pide el alta de la agenda).
+  if (target.contactId !== undefined && type !== 'CALL' && type !== 'MESSAGE') return 'CONTACT_NOT_ALLOWED';
+  if (target.channel !== undefined) {
+    if (!(ACTIVITY_CHANNELS as readonly string[]).includes(target.channel)) return 'CHANNEL_INVALID';
+    if (type !== 'MESSAGE') return 'CHANNEL_NOT_ALLOWED';
+  }
+  return null;
+}

@@ -124,6 +124,7 @@ const sameRelation = (a: RelationRow, b: RelationRow) =>
 
 const sameCollateral = (a: CollateralRow, b: CollateralRow) =>
   a.type === b.type &&
+  (a.typeOther ?? '').trim() === (b.typeOther ?? '').trim() &&
   a.description.trim() === b.description.trim() &&
   a.estimatedValue.trim() === b.estimatedValue.trim() &&
   a.currency === b.currency &&

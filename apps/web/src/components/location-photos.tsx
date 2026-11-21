@@ -20,10 +20,15 @@ export function LocationPhotos({
   value,
   onChange,
   disabled,
+  title,
+  hint,
 }: {
   value: string[];
   onChange: (urls: string[]) => void;
   disabled?: boolean;
+  /** Otro rótulo y otra ayuda (las garantías reusan este componente). Sin ellos: los de la vivienda. */
+  title?: string;
+  hint?: string;
 }) {
   const t = useTranslations('portfolio.photos');
   const input = useRef<HTMLInputElement>(null);
@@ -56,8 +61,8 @@ export function LocationPhotos({
 
   return (
     <div>
-      <p className="mb-1 text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">{t('title')}</p>
-      <p className="mb-2 text-k-xs text-k-text-2">{t('hint')}</p>
+      <p className="mb-1 text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">{title ?? t('title')}</p>
+      <p className="mb-2 text-k-xs text-k-text-2">{hint ?? t('hint')}</p>
       <ul className="flex flex-wrap gap-3">
         {value.map((url, i) => (
           <li key={url} className="w-[104px]">

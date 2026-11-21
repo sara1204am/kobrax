@@ -12,8 +12,10 @@ import {
   type MoraCreditListItem,
   type OverdueSource,
   type PortfolioLocation,
+  overdueAmountFromBalance,
 } from '@kobrax/shared';
 import { clientDisplayName } from '../clients/clients.serializer';
+import { planSourceOf } from '../payments/payment-apply';
 import { nameOf, type NameMap } from './mora-names';
 
 /** Lo que `MoraService` trae de Prisma por crédito. */
@@ -42,7 +44,7 @@ export interface MoraCreditRow {
   /** El responsable (`credits.assigned_manager_id`). */
   assignedManagerId: string | null;
   /** El episodio de mora ABIERTO (a lo sumo uno). Ninguno = al día. De él salen la situación y la prioridad. */
-  arrearEpisodes: { priority: string | null; priorityPinnedAt: Date | null }[];
+  arrearEpisodes: { priority: string | null; priorityPinnedAt: Date | null; startedAt?: Date }[];
   /** La última gestión del crédito (a lo sumo una). */
   activities: { type: string; result: string | null }[];
   /** El último pago registrado en Kobrax (a lo sumo uno). */
@@ -105,6 +107,14 @@ export function serializeMoraCredit(
   } else if (arrearsSource === 'CALCULATED' && c.installments.length > 0) {
     overdueAmount = overdueFromSchedule(c.installments, now);
     overdueSource = 'SCHEDULE';
+  } else if (arrearsSource === 'CALCULATED' && meta.balanceBasis === 'total') {
+    // Con condiciones y sin cronograma guardado (cuota fija): el plan sale de las condiciones y lo cubierto, del saldo. Antes quedaba sin dato
+    // («—») aunque tuviera cuotas vencidas, y la lista de Mora no coincidía con Cartera.
+    const source = planSourceOf({ metadata: c.metadata, origin: c.origin, installments: [] });
+    if (source) {
+      overdueAmount = overdueAmountFromBalance({ rows: source.rows, balance: Number(c.outstandingBalance), asOf: now });
+      overdueSource = 'SCHEDULE';
+    }
   }
 
   // El último pago: el mayor entre lo que reportó el archivo y lo cobrado en Kobrax.
@@ -145,7 +155,9 @@ export function serializeMoraCredit(
     daysPastDue: c.daysPastDue,
     arrearsSource,
     // Un importado sólo trae días: no se estima el inicio restándolos al corte.
-    moraSince: arrearsSource === 'IMPORTED' ? undefined : (meta.moraSince ?? meta.arrearsSince),
+    // La marca a mano o el primer atraso guardado; si no hay, el inicio del episodio de mora abierto (con el método «cuota impaga más
+    // antigua» no se guarda ninguna fecha: el episodio es quien la sabe).
+    moraSince: arrearsSource === 'IMPORTED' ? undefined : (meta.moraSince ?? meta.arrearsSince ?? (episode?.startedAt ? iso(episode.startedAt) : undefined)),
     externalSource: c.externalSource ?? undefined,
     syncStatus: (c.syncStatus ?? undefined) as MoraCreditListItem['syncStatus'],
     reportedAsOf: c.reportedAsOf ? iso(c.reportedAsOf) : undefined,

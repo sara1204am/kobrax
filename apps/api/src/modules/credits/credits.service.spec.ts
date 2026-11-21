@@ -40,6 +40,8 @@ function makeService(
     creditManyUpdates: [] as Record<string, unknown>[],
   };
   const tx = {
+    // `nextCreditCode`: el candado y el siguiente número de la cuenta (aquí siempre el primero).
+    $queryRaw: async () => [{ n: 1 }],
     client: { findFirst: async () => opts.client ?? null },
     // F13: la auditoría de `reassignOffice` se escribe en la MISMA transacción.
     auditLog: { createMany: async (a: { data: { action: string; entity: string }[] }) => void calls.audit.push(...a.data) },
@@ -167,6 +169,24 @@ describe('CreditsService.create — idempotencia del alta offline', () => {
     const { service, calls } = makeService({ client: { id: 'c1' } });
     await service.create({ ...(BASE as object), id: 'id-propuesto' } as never);
     assert.equal(calls.creditCreate[0]!.id, 'id-propuesto');
+  });
+
+  it('sin Nº de crédito, el servidor asigna el siguiente de la cuenta', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create({ ...(BASE as object), code: undefined } as never);
+    assert.equal(calls.creditCreate[0]!.code, 'CR-000001');
+  });
+
+  it('usa la máscara de la cuenta para formar el Nº', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' }, settings: { creditCodeMask: 'PRE-####' } });
+    await service.create({ ...(BASE as object), code: undefined } as never);
+    assert.equal(calls.creditCreate[0]!.code, 'PRE-0001');
+  });
+
+  it('con Nº de crédito propio, lo respeta', async () => {
+    const { service, calls } = makeService({ client: { id: 'c1' } });
+    await service.create({ ...(BASE as object), code: ' ABC-9 ' } as never);
+    assert.equal(calls.creditCreate[0]!.code, 'ABC-9');
   });
 });
 

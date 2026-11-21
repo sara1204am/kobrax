@@ -129,7 +129,7 @@ function makeMora() {
   const { userAccount, lookups } = nameTable();
   const tx = {
     $queryRaw: async () => [{ id: CREDIT, client_id: 'cl1' }],
-    credit: { findMany: async () => [creditRow] },
+    credit: { findMany: async () => [creditRow], findUnique: async () => ({ payerParty: null, id: CREDIT, metadata: {}, origin: 'MANUAL', installments: [] }) },
     account: { findUnique: async () => ({ configuration: {} }) },
     arrearCategory: { findMany: async () => [] },
     agendaItem: {

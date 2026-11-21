@@ -9,11 +9,11 @@ export function paidPercent(principal: number | undefined, balance: number | und
 }
 
 /** Una celda de la cuadrícula: rótulo chico arriba, valor abajo. `danger` pinta el valor de rojo (la mora). */
-function Cell({ label, value, danger }: { label: string; value: string; danger?: boolean }) {
+function Cell({ label, value, danger, wide }: { label: string; value: ReactNode; danger?: boolean; wide?: boolean }) {
   return (
-    <div className="bg-white px-4 py-3.5">
+    <div className={`bg-white px-4 py-3.5 ${wide ? 'col-span-2 sm:col-span-3' : ''}`}>
       <dt className="text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">{label}</dt>
-      <dd className={`mt-1 text-k-lg font-semibold tabular-nums ${danger ? 'text-k-danger' : 'text-k-text'}`}>{value}</dd>
+      <dd className={`mt-1 text-k-base font-semibold tabular-nums ${danger ? 'text-k-danger' : 'text-k-text'}`}>{value}</dd>
     </div>
   );
 }
@@ -39,6 +39,7 @@ export function FichaSummary({
   activePromise,
   assignee,
   branch,
+  payer,
   clientHref,
   creditHref,
   amount,
@@ -59,6 +60,8 @@ export function FichaSummary({
   activePromise: string;
   assignee: string;
   branch: string | undefined;
+  /** «Quién responde por el crédito»: un dato del crédito, editable en la propia tarjeta (ver `PayerEditor`). */
+  payer?: ReactNode;
   clientHref: string;
   creditHref: string;
   /** Formatea un monto ya con la moneda del crédito; `undefined` → «—». */
@@ -116,9 +119,8 @@ export function FichaSummary({
             <Cell label={t('activePromiseLabel')} value={activePromise} />
             <Cell label={t('columns.responsible')} value={assignee} />
             <Cell label={t('columns.branch')} value={branch ?? '—'} />
-            {/* 10 celdas en 3 columnas dejan huecos: se pintan blancos para que no asome el fondo del divisor. */}
-            <div aria-hidden className="hidden bg-white sm:block" />
-            <div aria-hidden className="hidden bg-white sm:block" />
+            {/* Ocupa todo el largo de la grilla: al editar necesita espacio para el desplegable y sus botones. */}
+            {payer !== undefined && <Cell wide label={t('detail.payerLabel')} value={payer} />}
           </dl>
         </div>
 

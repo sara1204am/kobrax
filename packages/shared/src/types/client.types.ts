@@ -5,6 +5,7 @@
  * los **mismos** clientes contra los **mismos** endpoints. Los valores son los enums de la API
  * (Prisma) escritos como uniones, no como enums propios: son el contrato del DTO.
  */
+import type { UpdatedPlan } from '../utils/payment-plan.js';
 import type { ArrearsMethod, CreditOrigin, ExternalSyncStatus, EffectiveBalanceBasis, InterestBase, PaymentFrequency } from '../enums/credit.enum.js';
 import type { CreditTerms } from '../utils/credit-engine.js';
 import type { CreditInitialState } from '../utils/credit-edit.js';
@@ -109,6 +110,8 @@ export interface NewRelationInput {
 export interface NewCollateralInput {
   /** Código del catálogo `COLLATERAL_TYPE` del tenant. Vacío = sin clasificar. */
   type?: string;
+  /** Si `type` es `OTHER`: qué es exactamente. */
+  typeOther?: string;
   /** Qué es. Texto libre: es lo que le sirve a quien va a buscarla. */
   description: string;
   estimatedValue?: number;
@@ -315,6 +318,8 @@ export interface ClientTimelineEntry {
 export interface CollateralDetail {
   id: string;
   type?: string;
+  /** Si `type` es `OTHER`: qué es exactamente. */
+  typeOther?: string;
   description: string;
   estimatedValue?: number;
   currency?: string;
@@ -512,6 +517,25 @@ export interface CreditDetail {
   disbursedAt?: string;
   assignedManagerId?: string;
   installments?: CreditInstallmentDetail[];
+  /**
+   * El plan ACTUALIZADO: el plan original con lo pagado encima (imputación a cuotas), vencido, próximo pago y situación. Una sola
+   * fuente para Cartera y Mora. Ausente sin plan (préstamo abierto) y en operaciones de una fuente externa. Sólo en `GET /credits/:id`.
+   */
+  plan?: UpdatedPlan;
+  /**
+   * La política de mora con que nació el crédito (versión SELLADA, inmutable): `NONE` = sin cargos adicionales, sólo se mide el atraso.
+   * Un cambio posterior de la política de la cuenta no la modifica. Sólo en `GET /credits/:id`.
+   */
+  latePolicy?: {
+    kind: 'NONE' | 'ANNUAL_RATE';
+    scope: 'ACCOUNT' | 'PRODUCT';
+    version: number;
+    graceDays: number;
+    /** Sólo `ANNUAL_RATE`. */
+    annualRate?: number;
+    dayCount?: number;
+    effectiveFrom: string;
+  };
 }
 
 /**
@@ -617,6 +641,8 @@ export interface RelationRow extends RowFromServer {
 export interface CollateralRow extends RowFromServer {
   id: string;
   type: string;
+  /** Si `type` es `OTHER`: qué es exactamente. */
+  typeOther?: string;
   description: string;
   estimatedValue: string;
   currency: string;

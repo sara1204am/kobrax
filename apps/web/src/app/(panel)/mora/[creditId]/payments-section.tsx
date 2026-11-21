@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
-import { memberName, type Member, type PaymentItem } from '@kobrax/shared';
+import { memberName, type Member, type PaymentImputation, type PaymentItem } from '@kobrax/shared';
 import { Badge, Section } from '@/components/panel-ui';
 import { date, money } from '@/lib/format';
 import { ToneTile, TONES, type Tone } from '@/components/tone-tile';
@@ -17,13 +17,19 @@ import { ToneTile, TONES, type Tone } from '@/components/tone-tile';
  */
 export function PaymentsSection({
   creditId,
+  clientId,
   payments,
+  prepaidAmount,
   members,
   currency,
   external,
 }: {
   creditId: string;
-  payments: PaymentItem[] | null;
+  /** Con el cliente, «Ver todos» va al historial del crédito en Cartera (con su imputación); sin él, al ledger general filtrado. */
+  clientId?: string;
+  payments: (PaymentItem & { imputation?: PaymentImputation })[] | null;
+  /** Lo pagado antes de registrar el crédito en Kobrax (`plan.prepaidAmount`). No es cobranza de Kobrax: se muestra aparte. */
+  prepaidAmount?: number;
   members: Member[];
   currency: string;
   /** El crédito es de una fuente externa (PSF). */
@@ -46,7 +52,7 @@ export function PaymentsSection({
       collapsible={{ count: payments?.length, scroll: false }}
       headerAction={
         payments && payments.length > 0 ? (
-          <Link href={`/pagos?creditId=${creditId}`} className="hover:underline">
+          <Link href={clientId ? `/cartera/${clientId}/credito/${creditId}/pagos` : `/pagos?creditId=${creditId}`} className="hover:underline">
             {t('seeAll')}
           </Link>
         ) : undefined
@@ -62,6 +68,19 @@ export function PaymentsSection({
             {t('count', { n: payments.length })}
             {' · '}
             <span className="font-semibold text-k-navy">{t('collected', { amount: money(collected, currency) })}</span>
+            {/* Todo lo pagado desde que está en Kobrax (cualquier canal) y, aparte, lo que ya venía pagado al registrarlo. */}
+            {prepaidAmount !== undefined && (
+              <>
+                {' · '}
+                <span>{t('totalPaid', { amount: money(payments.reduce((s, p) => s + p.amount, 0), currency) })}</span>
+                {prepaidAmount > 0 && (
+                  <>
+                    {' · '}
+                    <span>{t('beforeKobrax', { amount: money(prepaidAmount, currency) })}</span>
+                  </>
+                )}
+              </>
+            )}
           </p>
           {/* Alto fijo (unas 3 tarjetas) con scroll adentro. */}
           <ul className="max-h-[21rem] space-y-2.5 overflow-y-auto overscroll-contain pr-1">
@@ -83,6 +102,20 @@ export function PaymentsSection({
                       {p.registeredBy && <span>{t('by', { name: byId.get(p.registeredBy) ?? t('unknownUser') })}</span>}
                     </p>
                     {p.notes && <p className="mt-0.5 text-k-sm text-k-text">{p.notes}</p>}
+                    {/* A qué cuotas fue este pago (lo persistido): una por línea de «Aplicado a». */}
+                    {p.imputation &&
+                      (p.imputation.unrecorded ? (
+                        <p className="mt-1 text-k-xs text-k-muted">{t('unrecorded')}</p>
+                      ) : (
+                        <p className="mt-1 text-k-sm text-k-text-2">
+                          {t('appliedTo')}{' '}
+                          {p.imputation.allocations
+                            .map((a) => `${t(a.coversInstallment ? 'installmentFull' : 'installmentPartial', { n: a.installmentNumber })} ${money(a.amount, currency)}`)
+                            .join(' · ')}
+                          {' · '}
+                          {t('balanceAfter', { amount: money(p.imputation.balanceAfter, currency) })}
+                        </p>
+                      ))}
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1.5">
                     <span className={`rounded-md px-2.5 py-1 text-k-xs font-medium ${pill}`}>{tMethod(p.method)}</span>

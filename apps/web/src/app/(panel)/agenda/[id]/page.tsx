@@ -249,6 +249,8 @@ export default async function GestionPage({
             <ItemActions
               itemId={item.id}
               type={item.type}
+              clientId={item.clientId}
+              details={item.details}
               initialAction={INITIAL_ACTIONS[searchParams.accion ?? '']}
               today={(await getAgendaSummary())?.date ?? todayISO()}
               cancelReasons={cancelReasons?.body.data ?? []}

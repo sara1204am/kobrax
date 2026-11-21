@@ -78,8 +78,13 @@ export interface ArrearParams {
   graceDays: number;
 }
 
+/**
+ * 🔴 **Sin cargos por mora por defecto.** Antes `dailyMoratoriumRate` arrancaba en 0,001 (36,5 % anual): la API calculaba y exponía (`arrears.interest`)
+ * un interés moratorio que nadie configuró ni consta en ningún contrato. Un cargo así sólo puede existir si la cuenta lo definió de forma explícita
+ * (la política de mora por cuenta/producto, que se sella en cada crédito). Hasta entonces el atraso se mide y se muestra, sin cargos adicionales.
+ */
 export const DEFAULT_ARREAR_PARAMS: ArrearParams = {
-  dailyMoratoriumRate: 0.001,
+  dailyMoratoriumRate: 0,
   penaltyRate: 0,
   graceDays: 0,
 };

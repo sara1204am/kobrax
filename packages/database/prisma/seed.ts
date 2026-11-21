@@ -646,6 +646,18 @@ async function flushPayments(ctx: Ctx): Promise<number> {
   const rows = [...ctx.payments].sort((a, b) => (a.paymentDate as Date).getTime() - (b.paymentDate as Date).getTime());
   rows.forEach((r, i) => ((r as { receiptNumber?: number }).receiptNumber = i + 1));
   if (rows.length > 0) await prisma.payment.createMany({ data: rows });
+
+  // Imputación a cuotas (`payment_applications`): el seed escribe los pagos directo, sin pasar por el servicio, así que deja también el reparto.
+  // Cada pago de la app nace ligado a SU cuota (`installmentId`): esa es la imputación, tal cual, sin reproducir nada. Los de PSF no tienen cuotas.
+  const numberOf = new Map<string, number>();
+  for (const c of Object.values(ctx.credits)) for (const i of c.installments) numberOf.set(i.id, i.number);
+  const applications: Prisma.PaymentApplicationCreateManyInput[] = [];
+  for (const r of rows) {
+    const installmentNumber = r.installmentId ? numberOf.get(r.installmentId) : undefined;
+    if (installmentNumber === undefined || !r.id) continue;
+    applications.push({ accountId: r.accountId, paymentId: r.id, creditId: r.creditId, installmentNumber, amount: Number(r.amount) });
+  }
+  if (applications.length > 0) await prisma.paymentApplication.createMany({ data: applications });
   return rows.length;
 }
 
@@ -1832,7 +1844,7 @@ async function wipeDataset(accountIds: string[]): Promise<void> {
   // Hijos primero.
   const tables = [
     'field_evidences', 'field_visits', 'route_stops', 'route_plans', 'notifications', 'agenda_items', 'credit_activities', 'credit_notes',
-    'payment_requests', 'payments', 'credit_guarantors', 'collateral_credits', 'collaterals',
+    'payment_requests', 'payment_applications', 'payments', 'credit_guarantors', 'collateral_credits', 'collaterals',
     'credit_installments', 'arrears', 'credit_external_snapshots', 'credit_arrear_episodes', 'credit_assignments',
     'client_import_run_items', 'client_import_runs', 'client_external_keys', 'client_contacts', 'client_locations', 'client_relations',
     'client_attachments', 'client_income_profiles', 'credits', 'clients',

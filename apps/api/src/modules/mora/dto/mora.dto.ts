@@ -1,7 +1,9 @@
 import { Type } from 'class-transformer';
 import { IsBoolean, ValidateIf, ValidateNested } from 'class-validator';
-import { IsDateString, IsIn, IsInt, IsNotEmpty, IsNumber, IsPositive, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { IsDateString, IsIn, IsInt, IsNotEmpty, IsNumber, IsPositive, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
 import {
+  ACTIVITY_CHANNELS,
+  PAYER_PARTIES,
   ARREARS_SOURCES,
   CREDIT_SOURCES,
   MORA_NOTE_COLORS,
@@ -148,6 +150,11 @@ export class CreateMoraActivityDto {
   @IsIn(RECOVERY_ACTIVITY_TYPES as unknown as string[]) type!: string;
   @IsOptional() @IsString() @MaxLength(40) result?: string;
   @IsOptional() @IsString() @MaxLength(MORA_NOTE_MAX_LENGTH + 200) notes?: string;
+  /**
+   * El DÍA en que se hizo la gestión (`YYYY-MM-DD`, civil de la empresa). Sirve para cargar una gestión de un día anterior; **nunca una futura**
+   * (400). Ausente o igual a hoy = ahora, como siempre: el móvil y las gestiones sin fecha no cambian.
+   */
+  @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/) activityDate?: string;
   @IsOptional() @ValidateNested() @Type(() => ActivityPromiseDto) promise?: ActivityPromiseDto;
   /**
    * Contexto de la gestión (F4/13 · E4). **Todo opcional**: una gestión anterior o encolada sin señal no lo trae. La regla
@@ -161,6 +168,22 @@ export class CreateMoraActivityDto {
   @IsOptional() @IsString() @MaxLength(40) templateCode?: string;
   /** Si viene, esa gestión agendada (SCHEDULED, del mismo crédito) se marca ejecutada con esta actividad, en la misma transacción. */
   @IsOptional() @IsUUID() agendaItemId?: string;
+  /** Visita: la dirección visitada (de las del cliente). */
+  @IsOptional() @IsUUID() locationId?: string;
+  /** Llamada o mensaje: a qué teléfono o correo del cliente. */
+  @IsOptional() @IsUUID() contactId?: string;
+  /** Mensaje: por dónde se mandó. */
+  @IsOptional() @IsIn(ACTIVITY_CHANNELS as unknown as string[]) channel?: string;
+}
+
+/**
+ * Fijar quién responde por el crédito (`PATCH /mora/:creditId/payer`). `{ payerParty: null }` lo borra.
+ * Es un dato del crédito, no de una gestión.
+ */
+export class SetMoraPayerDto {
+  @ValidateIf((o: SetMoraPayerDto) => o.payerParty !== null)
+  @IsIn(PAYER_PARTIES as unknown as string[])
+  payerParty!: string | null;
 }
 
 /**

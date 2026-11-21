@@ -12,7 +12,7 @@
 DO $$
 DECLARE t text;
 BEGIN
-  FOREACH t IN ARRAY ARRAY['credits','clients','payments','agenda_items','route_plans'] LOOP
+  FOREACH t IN ARRAY ARRAY['credits','clients','payments','payment_applications','agenda_items','route_plans'] LOOP
     IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = t AND policyname = 'scope_' || t AND permissive = 'RESTRICTIVE' AND cmd = 'SELECT' AND roles = '{kobrax_scoped}') THEN
       RAISE EXCEPTION 'falta la policy RESTRICTIVE scope_% en %', t, t;
     END IF;
@@ -110,7 +110,7 @@ BEGIN;
     FOR acc IN SELECT id FROM _verify_accounts LOOP
       cuentas := cuentas + 1;
       PERFORM set_config('app.current_account_id', acc, true);
-      FOREACH t IN ARRAY ARRAY['credits','clients','payments','agenda_items','route_plans'] LOOP
+      FOREACH t IN ARRAY ARRAY['credits','clients','payments','payment_applications','agenda_items','route_plans'] LOOP
         EXECUTE format('SELECT count(*) FROM %I', t) INTO n;
         IF n <> 0 THEN RAISE EXCEPTION 'sin alcance, % deja ver % filas de la cuenta %', t, n, acc; END IF;
       END LOOP;

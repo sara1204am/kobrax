@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildSchedule, computeArrears, scheduleIsBalanced } from './credit-math';
+import { buildSchedule, computeArrears, DEFAULT_ARREAR_PARAMS, scheduleIsBalanced } from './credit-math';
 
 const FIRST_DUE = new Date('2026-01-15T00:00:00Z');
 const sum = (arr: number[]) => Math.round(arr.reduce((s, x) => s + x, 0) * 100) / 100;
@@ -47,6 +47,15 @@ describe('buildSchedule', () => {
 
 describe('computeArrears', () => {
   const params = { dailyMoratoriumRate: 0.001, penaltyRate: 0.02, graceDays: 0 };
+
+  it('🔴 sin configuración la mora NO genera cargos: ni interés moratorio ni penalidad inventados', () => {
+    assert.deepEqual(DEFAULT_ARREAR_PARAMS, { dailyMoratoriumRate: 0, penaltyRate: 0, graceDays: 0 });
+    const r = computeArrears([{ id: 'a', dueDate: new Date('2026-06-01'), amount: 100, paidAmount: 0, status: 'PENDING' }], DEFAULT_ARREAR_PARAMS, new Date('2026-06-11'));
+    assert.equal(r.daysOverdue, 10, 'el atraso sí se mide');
+    assert.equal(r.interest, 0);
+    assert.equal(r.penalty, 0);
+  });
+
 
   it('sin cuotas vencidas → todo en cero', () => {
     const r = computeArrears(

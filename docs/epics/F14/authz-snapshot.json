@@ -469,6 +469,15 @@
     "any": []
   },
   {
+    "route": "GET /credits/:creditId/payments",
+    "handler": "PaymentsController.forCredit",
+    "kind": "permissions",
+    "all": [
+      "payment:read"
+    ],
+    "any": []
+  },
+  {
     "route": "GET /credits/:id/schedule",
     "handler": "CreditsController.schedule",
     "kind": "permissions",
@@ -1191,6 +1200,15 @@
   {
     "route": "PATCH /mora/:creditId/notes/:noteId",
     "handler": "MoraController.updateNote",
+    "kind": "permissions",
+    "all": [
+      "collection:write"
+    ],
+    "any": []
+  },
+  {
+    "route": "PATCH /mora/:creditId/payer",
+    "handler": "MoraController.setPayer",
     "kind": "permissions",
     "all": [
       "collection:write"

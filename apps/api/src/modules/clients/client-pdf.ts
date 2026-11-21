@@ -175,7 +175,8 @@ export async function buildClientPdf(bundle: ClientPdfBundle, ctx: ClientPdfCont
         }),
         ...garantias.map((g) => {
           const valor = g.estimatedValue != null ? ` — ${r.fmtMoney(g.estimatedValue)}` : '';
-          return `${g.description}${valor}`;
+          const que = g.type === 'OTHER' && g.typeOther ? g.typeOther : (g.type ?? '');
+          return `${que && g.description ? `${que}: ` : ''}${g.description || que || '—'}${valor}`;
         }),
       ],
       'Sin garantes ni garantías registradas.',

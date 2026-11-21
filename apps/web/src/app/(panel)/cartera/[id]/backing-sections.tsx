@@ -2,11 +2,12 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import type { ClientDetail, ClientRelationDetail } from '@kobrax/shared';
+import type { ClientDetail, ClientRelationDetail, CollateralDetail, CreditOption } from '@kobrax/shared';
 import type { CatalogOption } from '@/components/client-form';
 import { Icon } from '@/components/panel-shell';
 import { Section } from '@/components/panel-ui';
 import { Modal } from '@/components/modal';
+import { PhotoViewer } from '@/components/photo-viewer';
 import { money } from '@/lib/format';
 import { ContactDetail, Dato, EyeButton, LocationDetail } from './client-contacts';
 import { TextButton } from '@/components/ui';
@@ -202,11 +203,14 @@ export function CollateralsSection({
   client,
   currency,
   types,
+  credits = [],
   canWrite,
   onEdit,
 }: {
   client: ClientDetail;
   currency: string;
+  /** Los préstamos del cliente, para decir CUÁLES respalda cada garantía (no sólo cuántos). */
+  credits?: CreditOption[];
   /** Catálogo `COLLATERAL_TYPE`. Un tipo que no esté en la lista se muestra tal cual vino. */
   types: CatalogOption[];
   canWrite: boolean;
@@ -214,8 +218,13 @@ export function CollateralsSection({
 }) {
   const t = useTranslations('portfolio');
   const rows = client.collaterals ?? [];
+  const [viendo, setViendo] = useState<string | null>(null);
+  const actual = rows.find((g) => g.id === viendo) ?? null;
+  const tipoDe = (g: CollateralDetail) =>
+    g.type === 'OTHER' && g.typeOther ? g.typeOther : g.type ? (types.find((c) => c.code === g.type)?.label || g.type) : null;
 
   return (
+    <>
     <Section
       title={t('sections.collaterals')}
       inner=""
@@ -230,23 +239,110 @@ export function CollateralsSection({
       ) : (
         <ul className="divide-y divide-k-border">
           {rows.map((g) => (
-            <li key={g.id} className="px-4 py-3">
-              <p className="text-k-base font-medium text-k-text">{g.description}</p>
-              <p className="text-k-xs text-k-muted">
-                {[
-                  g.type ? (types.find((c) => c.code === g.type)?.label || g.type) : null,
-                  g.estimatedValue != null ? money(g.estimatedValue, g.currency ?? currency) : null,
-                ]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </p>
-              {g.creditIds && g.creditIds.length > 0 && (
-                <p className="mt-1 text-k-xs text-k-text-2">{t('backsCount', { count: g.creditIds.length })}</p>
-              )}
+            <li key={g.id} className="flex items-start gap-3 px-4 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-k-base font-medium text-k-text">{g.description || tipoDe(g) || '—'}</p>
+                <p className="text-k-xs text-k-muted">
+                  {[tipoDe(g), g.estimatedValue != null ? money(g.estimatedValue, g.currency ?? currency) : null]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
+                {g.creditIds && g.creditIds.length > 0 && (
+                  <p className="mt-1 text-k-xs text-k-text-2">{t('backsCount', { count: g.creditIds.length })}</p>
+                )}
+              </div>
+              {/* La foto principal, chica, y el ojo: igual que en las direcciones. */}
+              <span className="flex shrink-0 items-center gap-2">
+                {g.photoUrls?.[0] && (
+                  <button type="button" onClick={() => setViendo(g.id)} aria-label={t('form.collateralPhotos')} className="shrink-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- la sirve el BFF con la sesión */}
+                    <img src={g.photoUrls[0]} alt="" loading="lazy" className="h-9 w-9 rounded-md border border-k-border object-cover" />
+                  </button>
+                )}
+                <EyeButton onClick={() => setViendo(g.id)} />
+              </span>
             </li>
           ))}
         </ul>
       )}
     </Section>
+
+    <Modal wide open={actual !== null} onClose={() => setViendo(null)} title={actual ? (actual.description || tipoDe(actual) || t('sections.collaterals')) : t('sections.collaterals')}>
+      {actual && <CollateralDetailView collateral={actual} typeLabel={tipoDe(actual)} currency={currency} credits={credits} />}
+    </Modal>
+    </>
+  );
+}
+
+/**
+ * Todo lo de una garantía, lo MISMO que se edita: tipo (y qué es si es «Otro»), descripción, valor y moneda, fotos y a qué
+ * préstamos respalda (por código y saldo, no sólo cuántos).
+ */
+function CollateralDetailView({
+  collateral: g,
+  typeLabel,
+  currency,
+  credits,
+}: {
+  collateral: CollateralDetail;
+  typeLabel: string | null;
+  currency: string;
+  credits: CreditOption[];
+}) {
+  const t = useTranslations('portfolio');
+  const fotos = g.photoUrls ?? [];
+  const [foto, setFoto] = useState<number | null>(null);
+  const respalda = (g.creditIds ?? []).map((id) => credits.find((c) => c.id === id)).filter((c): c is CreditOption => Boolean(c));
+
+  return (
+    <div className="space-y-4">
+      {fotos.length > 0 && (
+        <section>
+          <h3 className="mb-2 text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">{t('form.collateralPhotos')}</h3>
+          <ul className="flex flex-wrap gap-3">
+            {fotos.map((url, i) => (
+              <li key={url} className="relative">
+                <button type="button" onClick={() => setFoto(i)} aria-label={t('photos.alt', { n: i + 1 })}>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- la sirve el BFF con la sesión */}
+                  <img src={url} alt="" loading="lazy" className={`h-24 w-32 rounded-lg border-2 object-cover ${i === 0 ? 'border-k-purple' : 'border-k-border'}`} />
+                </button>
+                {i === 0 && (
+                  <span className="absolute left-1 top-1 rounded bg-k-purple px-1.5 py-0.5 text-k-3xs font-semibold text-white">{t('photos.main')}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      <PhotoViewer
+        open={foto !== null}
+        onClose={() => setFoto(null)}
+        title={typeLabel ?? t('sections.collaterals')}
+        address={g.description || undefined}
+        photos={fotos}
+        initialIndex={foto ?? 0}
+      />
+      <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+        <Dato label={t('form.collateralType')} value={g.type === 'OTHER' ? t('form.collateralOtherType') : (typeLabel ?? '—')} />
+        {g.type === 'OTHER' && <Dato label={t('form.collateralTypeOther')} value={g.typeOther || '—'} />}
+        <Dato label={t('form.collateralDescription')} value={g.description || '—'} wide />
+        <Dato label={t('form.collateralValue')} value={g.estimatedValue != null ? money(g.estimatedValue, g.currency ?? currency) : '—'} />
+        <Dato label={t('form.collateralCurrency')} value={g.currency ?? currency} />
+      </dl>
+      <section className="border-t border-k-border pt-3">
+        <h3 className="mb-2 text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">{t('form.appliesTo')}</h3>
+        {respalda.length === 0 ? (
+          <p className="text-k-sm text-k-muted">{t('form.noCreditsBacked')}</p>
+        ) : (
+          <ul className="space-y-1 text-k-sm text-k-text">
+            {respalda.map((c) => (
+              <li key={c.id}>
+                {c.code ?? t('form.creditNoCode')} · {money(c.outstandingBalance, c.currency)}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
   );
 }

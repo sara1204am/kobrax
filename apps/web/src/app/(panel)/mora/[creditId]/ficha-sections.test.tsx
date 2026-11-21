@@ -353,6 +353,30 @@ describe('PaymentsSection', () => {
     expect(screen.getByText('Pagó por un canal de la entidad')).toBeInTheDocument();
   });
 
+  it('con la imputación: cada pago dice a qué cuotas fue, el total pagado en Kobrax suma TODOS los canales y lo previo va aparte', () => {
+    render(
+      <PaymentsSection
+        creditId="c1"
+        clientId="cl1"
+        members={MEMBERS}
+        currency="BOB"
+        external={false}
+        prepaidAmount={5208.33}
+        payments={[
+          { ...payment({ id: 'a', amount: 3000, channel: 'EXTERNAL_CONFIRMED' }), imputation: { allocations: [{ installmentNumber: 1, amount: 3000, coversInstallment: false }], applied: 3000, unapplied: 0, balanceAfter: 122000, unrecorded: false } },
+          { ...payment({ id: 'b', amount: 3000 }), imputation: { allocations: [{ installmentNumber: 1, amount: 2208.33, coversInstallment: true }, { installmentNumber: 2, amount: 791.67, coversInstallment: false }], applied: 3000, unapplied: 0, balanceAfter: 119000, unrecorded: false } },
+          { ...payment({ id: 'c', amount: 100 }), imputation: { allocations: [], applied: 0, unapplied: 0, balanceAfter: 125000, unrecorded: true } },
+        ]}
+      />,
+    );
+    expect(screen.getByText(/Pagado en Kobrax: Bs\s?6\.100,00/)).toBeInTheDocument();
+    expect(screen.getByText(/Antes de Kobrax: Bs\s?5\.208,33/)).toBeInTheDocument();
+    expect(screen.getByText(/cuota 2 \(parcial\) Bs\s?791,67/)).toBeInTheDocument();
+    expect(screen.getByText(/Sin imputación registrada/)).toBeInTheDocument();
+    // «Ver todos» lleva al historial del crédito en Cartera, no al ledger general.
+    expect(screen.getByRole('link', { name: 'Ver en Pagos' })).toHaveAttribute('href', '/cartera/cl1/credito/c1/pagos');
+  });
+
   it('🔴 en un crédito de PSF avisa que el pago no cambia el saldo reportado; en uno propio, no', () => {
     const { unmount } = render(<PaymentsSection creditId="c1" payments={[payment()]} members={MEMBERS} currency="BOB" external />);
     expect(screen.getByText(/no cambia el saldo ni la mora que reportó el archivo/)).toBeInTheDocument();

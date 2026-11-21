@@ -9,6 +9,7 @@ import {
   computeRecoveryMetrics,
   resolvePagination,
   ResponseDto,
+  validateActivityTarget,
   validateRecoveryActivity,
   type RecoveryActivityError,
   staleAfterDaysOf,
@@ -30,14 +31,16 @@ import { TenantContextService } from '../../common/context/tenant-context.servic
 import { AgendaService } from '../agenda/agenda.service';
 import { agendaNotSchedulable } from '../agenda/agenda.errors';
 import { ArrearsPriorityService } from '../arrears/arrears-priority.service';
-import type { CreateMoraActivityDto, CreateMoraNoteDto, ListMoraQueryDto, SetMoraPriorityDto, UpdateMoraNoteDto } from './dto/mora.dto';
+import type { CreateMoraActivityDto, CreateMoraNoteDto, ListMoraQueryDto, SetMoraPayerDto, SetMoraPriorityDto, UpdateMoraNoteDto } from './dto/mora.dto';
 import { activityPeople, recordCreditActivity, serializeCreditActivity } from './credit-activity';
+import { civilDayStartInstant, civilTodayUTC, timezoneOf } from '../../common/context/tenant-clock.service';
 import { loadNames, type NameMap } from './mora-names';
 import { buildMoraOrder, buildMoraWhere, MORA_ACCESS_FROM, MORA_FROM, moraAccessConditions, moraScopeOf, type MoraCategoryRange, type MoraScope } from './mora-query';
 import { serializeEpisodes } from './mora-episodes';
 import { serializeNote } from './mora-notes';
 import { serializePromises } from './mora-promises';
 import { serializeMoraCredit, type MoraCreditRow } from './mora.serializer';
+import { loadCreditPlan } from '../credits/credit-plan';
 import { AuthorizationService } from '../../common/authz/authorization.service';
 
 /** Lo que se le dice a quien registra una gestión inválida (el panel valida antes con la misma regla). */
@@ -63,6 +66,14 @@ const ACTIVITY_ERRORS: Record<RecoveryActivityError, string> = {
   ORIGIN_INVALID: 'El origen de la gestión no es válido.',
   TEMPLATE_INVALID: 'La plantilla de mensaje no es válida.',
   TEMPLATE_NOT_ALLOWED: 'Solo un mensaje lleva plantilla.',
+};
+
+/** La dirección visitada, el teléfono/correo y el canal (`validateActivityTarget`). */
+const TARGET_ERRORS: Record<string, string> = {
+  LOCATION_NOT_ALLOWED: 'Solo una visita lleva dirección visitada.',
+  CONTACT_NOT_ALLOWED: 'Solo una llamada o un mensaje lleva teléfono o correo.',
+  CHANNEL_INVALID: 'El canal del mensaje no es válido.',
+  CHANNEL_NOT_ALLOWED: 'Solo un mensaje lleva canal.',
 };
 
 /** Cuántas gestiones trae la ficha. Es la bitácora del crédito; el completo llega con la sección de gestiones. */
@@ -202,8 +213,21 @@ export class MoraService {
       const activities = await tx.creditActivity.findMany({ where: { creditId }, orderBy: { createdAt: 'desc' }, take: DETAIL_ACTIVITIES });
       const assignments = await this.loadAssignments(tx, creditId, item.responsibleId, now);
       const names = await this.names(tx, [item.responsibleId, ...activities.flatMap(activityPeople), ...assignments.map((a) => a.userId)]);
+      const own = await tx.credit.findUnique({ where: { id: creditId }, include: { installments: true } });
+      // El MISMO plan actualizado que la ficha de Cartera (una sola función, lo persistido): vencido, próximo pago y desglose por pago.
+      const plan = own ? await loadCreditPlan(tx, this.tenant.accountId, own) : null;
       return {
         ...item,
+        payerParty: own?.payerParty ?? undefined,
+        plan: plan ?? undefined,
+        // Con plan, lo vencido y el monto con que arranca el pago son los del plan actualizado (los mismos números que Cartera), no una cuenta aparte.
+        ...(plan
+          ? {
+              overdueAmount: plan.overdueAmount,
+              overdueSource: 'SCHEDULE' as const,
+              ...(plan.nextPayment ? { suggestedPaymentAmount: Math.min(plan.nextPayment.amount, Number(own?.outstandingBalance ?? plan.nextPayment.amount)) } : {}),
+            }
+          : {}),
         responsibleName: names.get(item.responsibleId ?? '') ?? undefined,
         activities: activities.map((a) => serializeCreditActivity(a, names)),
         assignments: assignments.map((a) => ({ ...a, userName: names.get(a.userId) })),
@@ -309,6 +333,23 @@ export class MoraService {
   }
 
   /**
+   * El instante de una gestión con fecha propia. **Hoy (o sin fecha) = ahora**; un día pasado = mediodía de ese día en la zona de la empresa
+   * (así ninguna zona horaria la corre de día); **uno futuro no se acepta**: se registra lo que pasó, no lo que va a pasar (eso es la agenda).
+   */
+  private async activityInstant(tx: PrismaClient, day: string): Promise<Date | undefined> {
+    const parsed = new Date(`${day}T00:00:00.000Z`);
+    if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== day) {
+      throw new BadRequestException({ code: 'MORA_ACTIVITY_DATE_INVALID', message: 'La fecha de la gestión no es válida.' });
+    }
+    const account = await tx.account.findFirst({ where: { id: this.tenant.accountId }, select: { timezone: true, countryCode: true } });
+    const tz = timezoneOf(account);
+    const today = civilTodayUTC(tz).toISOString().slice(0, 10);
+    if (day > today) throw new BadRequestException({ code: 'MORA_ACTIVITY_DATE_FUTURE', message: 'La fecha de la gestión no puede ser futura.' });
+    if (day === today) return undefined;
+    return new Date(civilDayStartInstant(day, tz).getTime() + 12 * 3_600_000);
+  }
+
+  /**
    * Registrar una gestión (llamada, visita, mensaje o nota) con su resultado y, si prometió pagar, su promesa.
    * **Por crédito, esté al día o en mora: ya no abre ni usa un caso** (F4/08).
    *
@@ -340,6 +381,8 @@ export class MoraService {
     const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
     const invalid = validateRecoveryActivity(dto, yesterday);
     if (invalid) throw new BadRequestException({ code: `MORA_${invalid}`, message: ACTIVITY_ERRORS[invalid] });
+    const badTarget = validateActivityTarget(dto, dto.type);
+    if (badTarget) throw new BadRequestException({ code: `MORA_${badTarget}`, message: TARGET_ERRORS[badTarget] });
 
     try {
       const done = await this.tx(async (tx) => {
@@ -361,7 +404,18 @@ export class MoraService {
           }
         }
 
+        // La dirección y el teléfono tienen que ser DEL CLIENTE de este crédito: un id de otro cliente no se guarda.
+        if (dto.locationId && !(await tx.clientLocation.findFirst({ where: { id: dto.locationId, clientId: credit.clientId }, select: { id: true } }))) {
+          throw new BadRequestException({ code: 'MORA_LOCATION_INVALID', message: 'Esa dirección no es del cliente de este crédito.' });
+        }
+        if (dto.contactId && !(await tx.clientContact.findFirst({ where: { id: dto.contactId, clientId: credit.clientId }, select: { id: true } }))) {
+          throw new BadRequestException({ code: 'MORA_CONTACT_INVALID', message: 'Ese teléfono o correo no es del cliente de este crédito.' });
+        }
+
+        // Fecha de la gestión: hoy o una pasada; una futura se rechaza ANTES de escribir nada.
+        const at = dto.activityDate ? await this.activityInstant(tx, dto.activityDate) : undefined;
         const activity = await recordCreditActivity(tx, {
+          at,
           id: dto.id,
           accountId: this.tenant.accountId,
           creditId,
@@ -375,7 +429,12 @@ export class MoraService {
           payerParty: dto.payerParty as PayerParty | undefined,
           origin: dto.origin as DataOrigin | undefined,
           templateCode: dto.templateCode,
+          locationId: dto.locationId,
+          contactId: dto.contactId,
+          channel: dto.channel,
         });
+        // Compatibilidad (móvil): si la gestión trae quién responde, también queda en el crédito, que es donde vive ese dato.
+        if (dto.payerParty) await tx.credit.update({ where: { id: creditId }, data: { payerParty: dto.payerParty as PayerParty } });
         const promise = dto.promise
           ? await this.agenda.createPromiseItem(tx, { creditId, details: { amount: dto.promise.amount, promiseDate: dto.promise.promiseDate, paymentMethodCode: dto.promise.paymentMethodCode, bankCode: dto.promise.bankCode } })
           : null;
@@ -386,7 +445,7 @@ export class MoraService {
       });
 
       // F4/13 · E4: solo se audita cuando trae contexto, y **sin el texto libre**: las notas pueden traer datos personales.
-      if (dto.reasonCode || dto.expectedIncomeDate || dto.payerParty || dto.origin || dto.templateCode) {
+      if (dto.reasonCode || dto.expectedIncomeDate || dto.payerParty || dto.origin || dto.templateCode || dto.activityDate) {
         await this.audit.record({
           entity: 'credit_activity',
           entityId: done.activity.id,
@@ -398,6 +457,7 @@ export class MoraService {
             result: dto.result ?? null,
             reasonCode: dto.reasonCode ?? null,
             expectedIncomeDate: dto.expectedIncomeDate ?? null,
+            activityDate: dto.activityDate ?? null,
             payerParty: dto.payerParty ?? null,
             origin: dto.origin ?? null,
             templateCode: dto.templateCode ?? null,
@@ -415,6 +475,21 @@ export class MoraService {
       }
       throw err;
     }
+  }
+
+  /**
+   * Quién responde por el crédito: dato del **crédito** (antes viajaba dentro de cada gestión). Mismo alcance que la ficha
+   * (404 si no se ve) y se audita antes/después.
+   */
+  async setPayer(creditId: string, dto: SetMoraPayerDto): Promise<ApiResponse<{ creditId: string; payerParty: string | null }>> {
+    const before = await this.tx(async (tx) => {
+      if (!(await this.visible(tx, creditId))) throw new NotFoundException('Crédito no encontrado');
+      const prev = await tx.credit.findUnique({ where: { id: creditId }, select: { payerParty: true } });
+      await tx.credit.update({ where: { id: creditId }, data: { payerParty: (dto.payerParty as PayerParty | null) ?? null } });
+      return prev?.payerParty ?? null;
+    });
+    await this.audit.record({ entity: 'credit', entityId: creditId, action: 'UPDATE', before: { payerParty: before }, after: { payerParty: dto.payerParty ?? null } });
+    return ResponseDto.ok({ creditId, payerParty: dto.payerParty ?? null });
   }
 
   /**
@@ -657,7 +732,7 @@ export class MoraService {
           client: { select: { firstName: true, lastName: true, businessName: true } },
           installments: { select: { number: true, dueDate: true, amount: true, paidAmount: true, status: true } },
           // El episodio ABIERTO (único por crédito): de él salen la situación y la prioridad.
-          arrearEpisodes: { where: { endedAt: null }, take: 1, select: { priority: true, priorityPinnedAt: true } },
+          arrearEpisodes: { where: { endedAt: null }, take: 1, select: { priority: true, priorityPinnedAt: true, startedAt: true } },
           activities: { orderBy: { createdAt: 'desc' }, take: 1, select: { type: true, result: true } },
           payments: { orderBy: { paymentDate: 'desc' }, take: 1, select: { paymentDate: true } },
         },

@@ -118,7 +118,11 @@ export function collectionProfileFromForm(f: CollectionProfileForm | null | unde
   if (f.modality) p.modality = f.modality;
   if (f.frequency) p.frequency = f.frequency as CollectionFrequency;
   if (f.windowFrom && f.windowTo) p.window = { from: f.windowFrom, to: f.windowTo };
-  if ((f.days?.length ?? 0) > 0) p.days = [...f.days].sort((a, b) => a - b);
+  // «Todos los días» son los siete: no se guarda a medias (el formulario los marca solo y no deja desmarcar).
+  if (f.frequency === 'DAILY') p.days = [1, 2, 3, 4, 5, 6, 7];
+  // «Según el calendario de cuotas»: los días los pone el calendario, no se guardan.
+  else if (f.frequency === 'PER_INSTALLMENT') delete p.days;
+  else if ((f.days?.length ?? 0) > 0) p.days = [...f.days].sort((a, b) => a - b);
   if (f.handoverBy) p.handoverBy = f.handoverBy as HandoverParty;
   const note = (f.note ?? '').trim();
   if (note) p.note = note;

@@ -12,6 +12,8 @@ function metrics(over: Partial<RecoveryMetrics> = {}): RecoveryMetrics {
     recoveredAmount: 0,
     paymentsCount: 0,
     recoveredAllTime: 0,
+    collectedByKobrax: 0,
+    collectedByOthers: 0,
     activities: { total: 0, calls: 0, visits: 0, messages: 0 },
     notes: 0,
     contacts: 0,
@@ -187,3 +189,13 @@ describe('RecoveryMetricsSection — la recuperación de un crédito', () => {
   });
 });
 
+describe('RecoveryMetricsSection — lo cobrado por otro canal', () => {
+  it('cuenta todo lo pagado y dice cuánto fue por otro canal', () => {
+    render(<RecoveryMetricsSection metrics={metrics({ recoveredAmount: 6000, paymentsCount: 2, collectedByKobrax: 3000, collectedByOthers: 3000 })} currency="BOB" />);
+    expect(screen.getByText(/Por otro canal/)).toBeInTheDocument();
+  });
+  it('sin pagos de otros no agrega la línea', () => {
+    render(<RecoveryMetricsSection metrics={metrics({ recoveredAmount: 100, paymentsCount: 1, collectedByKobrax: 100 })} currency="BOB" />);
+    expect(screen.queryByText(/Por otro canal/)).toBeNull();
+  });
+});

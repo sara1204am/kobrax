@@ -19,7 +19,7 @@ import {
   ValidateIf,
 } from 'class-validator';
 import { AgendaItemType, ContactType, LocationType, ScheduleTimeMode } from '@prisma/client';
-import { AGENDA_POSTPONE_STEPS, AgendaOutcome, AgendaTimeSlot } from '@kobrax/shared';
+import { ACTIVITY_CHANNELS, AGENDA_POSTPONE_STEPS, AgendaOutcome, AgendaTimeSlot } from '@kobrax/shared';
 
 /**
  * Agendados de un día concreto (la pantalla principal). Mismo regex estricto que el alta: con
@@ -157,6 +157,12 @@ export class CompleteAgendaItemDto {
   @IsOptional() @IsString() @MaxLength(20) origin?: string;
   /** Plantilla de mensaje elegida (F4/13 · E5). Solo en una gestión de WhatsApp. */
   @IsOptional() @IsString() @MaxLength(40) templateCode?: string;
+  /** Visita: dirección realmente visitada. Sin él, la que se agendó. */
+  @IsOptional() @IsUUID() locationId?: string;
+  /** Llamada o mensaje: teléfono o correo realmente usado. Sin él, el que se agendó. */
+  @IsOptional() @IsUUID() contactId?: string;
+  /** Mensaje: por dónde se mandó. Sin él, WhatsApp (el canal de una gestión de WhatsApp). */
+  @IsOptional() @IsIn(ACTIVITY_CHANNELS as unknown as string[]) channel?: string;
 }
 
 /** Posponer una gestión en pasos fijos (Figma: +15 / +30 / +1h). */

@@ -22,6 +22,13 @@ export class PaymentsController {
     return this.payments.list(query);
   }
 
+  /** Historial de UN crédito con la imputación de cada pago. Va antes de `payments/:id` por claridad: son rutas distintas. */
+  @Get('credits/:creditId/payments')
+  @Roles(Permission.PAYMENT_READ)
+  forCredit(@Param('creditId', ParseUUIDPipe) creditId: string) {
+    return this.payments.forCredit(creditId);
+  }
+
   @Get('payments/:id')
   @Roles(Permission.PAYMENT_READ)
   findOne(@Param('id', ParseUUIDPipe) id: string) {

@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, StreamableFile } from '@nestjs/common';
 import { Permission } from '@kobrax/shared';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { CreateMoraActivityDto, CreateMoraNoteDto, ListMoraQueryDto, SetMoraPriorityDto, UpdateMoraNoteDto } from './dto/mora.dto';
+import { CreateMoraActivityDto, CreateMoraNoteDto, ListMoraQueryDto, SetMoraPayerDto, SetMoraPriorityDto, UpdateMoraNoteDto } from './dto/mora.dto';
 import { MoraExportService } from './mora-export.service';
 import { MoraService } from './mora.service';
 
@@ -90,6 +90,16 @@ export class MoraController {
   @Roles(Permission.COLLECTION_WRITE)
   setPriority(@Param('creditId', ParseUUIDPipe) creditId: string, @Body() dto: SetMoraPriorityDto) {
     return this.mora.setPriority(creditId, dto);
+  }
+
+  /**
+   * Quién responde por el crédito (`{ payerParty }`, o `null` para borrarlo). Es un dato del crédito y se corrige desde su card.
+   * `collection:write`, y sólo sobre un crédito que se vea.
+   */
+  @Patch(':creditId/payer')
+  @Roles(Permission.COLLECTION_WRITE)
+  setPayer(@Param('creditId', ParseUUIDPipe) creditId: string, @Body() dto: SetMoraPayerDto) {
+    return this.mora.setPayer(creditId, dto);
   }
 
   /** Escribir una nota: `collection:write` (el cobrador la tiene), y sólo sobre un crédito que pueda ver. */

@@ -53,6 +53,8 @@ export interface AccountInfo {
    * el alta; cada crédito guarda el suyo. Vive en `settings`. `oldest_unpaid` si la cuenta no lo eligió.
    */
   arrearsMethod: ArrearsMethod;
+  /** Máscara del Nº de crédito automático (`CR-######`). Vive en `settings`; ver `credit-code.ts`. */
+  creditCodeMask: string;
   /**
    * Los topes que rigen para esta cuenta: los del plan con su excepción ya aplicada.
    *
@@ -109,6 +111,8 @@ export interface AccountPatch {
   currencyDecimals?: string;
   /** Método de mora por defecto de los créditos nuevos (D20). */
   arrearsMethod?: string;
+  /** Máscara del Nº de crédito automático. */
+  creditCodeMask?: string;
 }
 
 /** `GET /users/me/profile`. */
@@ -147,6 +151,8 @@ export interface AccountForm {
   currencyDecimals: string;
   /** Método de mora por defecto (D20). La edita la web; el móvil sólo la lee. */
   arrearsMethod: string;
+  /** Máscara del Nº de crédito automático (la edita la web; el móvil no la maneja). */
+  creditCodeMask?: string;
   /** Identidad y contacto del negocio. `''` = no tiene; quitarlo viaja como `null`. */
   logoUrl: string;
   phone: string;

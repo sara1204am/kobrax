@@ -2,6 +2,7 @@
 
 import { useLocale, useTranslations } from 'next-intl';
 import {
+  CreditDefinition,
   EDITABLE_CREDIT_STATUSES,
   memberName,
   registrationSituation,
@@ -119,6 +120,7 @@ export function CreditEditor({
                 )}
                 <PaymentPlanTable
                   rows={schedule}
+                  informal={state.terms.definition !== CreditDefinition.CALCULATED}
                   currency={cur}
                   paidCount={paidCount}
                   onPaidChange={schedule.length > 1 ? setPaid : undefined}

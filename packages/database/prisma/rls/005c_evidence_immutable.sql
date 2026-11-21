@@ -4,11 +4,17 @@
 -- 🔴 Va ANTES de `006_scope_policies.sql` (copia los permisos de kobrax_app a kobrax_scoped al final). Idempotente.
 REVOKE UPDATE, DELETE, TRUNCATE ON audit_logs, field_evidences FROM kobrax_app;
 REVOKE DELETE, TRUNCATE ON payments FROM kobrax_app;
+-- `payment_applications`: sólo INSERT y SELECT (el trigger de la migración 20261120230000 deja además actualizar las copias de alcance).
+REVOKE UPDATE, DELETE, TRUNCATE ON payment_applications FROM kobrax_app;
+-- `late_policy_versions`: una política nueva es una versión nueva; nunca se edita ni se borra una.
+REVOKE UPDATE, DELETE, TRUNCATE ON late_policy_versions FROM kobrax_app;
 
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'kobrax_scoped') THEN
     EXECUTE 'REVOKE UPDATE, DELETE, TRUNCATE ON audit_logs, field_evidences FROM kobrax_scoped';
     EXECUTE 'REVOKE DELETE, TRUNCATE ON payments FROM kobrax_scoped';
+    EXECUTE 'REVOKE UPDATE, DELETE, TRUNCATE ON payment_applications FROM kobrax_scoped';
+    EXECUTE 'REVOKE UPDATE, DELETE, TRUNCATE ON late_policy_versions FROM kobrax_scoped';
   END IF;
 END $$;

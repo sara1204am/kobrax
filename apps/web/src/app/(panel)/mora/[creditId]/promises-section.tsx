@@ -2,6 +2,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { memberName, summarizePromises, type Member, type MoraPromise, type MoraPromiseStatus } from '@kobrax/shared';
 import { Badge, Section } from '@/components/panel-ui';
 import { dayDate, money } from '@/lib/format';
+import { PromiseActions } from './promise-actions';
 
 type Tone = 'neutral' | 'success' | 'warning' | 'danger';
 
@@ -32,10 +33,13 @@ export function PromisesSection({
   promises,
   members,
   currency,
+  canWrite = false,
 }: {
   promises: MoraPromise[] | null;
   members: Member[];
   currency: string;
+  /** `collection:write`: puede cerrar una promesa pendiente a mano. */
+  canWrite?: boolean;
 }) {
   const t = useTranslations('panel.mora.ficha.promises');
   const locale = useLocale();
@@ -79,6 +83,12 @@ export function PromisesSection({
                     {p.assigneeId && p.observations ? ' · ' : ''}
                     {p.observations}
                   </p>
+                )}
+                {/* Una promesa pendiente (vigente o vencida sin cerrar) se puede cerrar con un botón, además de cerrarse sola con los pagos. */}
+                {canWrite && (p.status === 'ACTIVE' || p.status === 'OVERDUE') && (
+                  <div className="mt-1.5">
+                    <PromiseActions promiseId={p.id} />
+                  </div>
                 )}
               </li>
             ))}

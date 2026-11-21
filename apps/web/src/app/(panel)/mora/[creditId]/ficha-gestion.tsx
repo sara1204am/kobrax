@@ -13,7 +13,7 @@ import {
   type MoraCreditDetail,
   type MoraEpisode,
   type MoraPromise,
-  type PaymentItem,
+  type CreditPaymentsView,
   type RecoveryMetrics,
   CatalogType,
 } from '@kobrax/shared';
@@ -32,7 +32,9 @@ import { SendWhatsappButton } from '@/components/send-whatsapp-dialog';
 import { RegisterActivityButton } from './activity-form';
 import { ArrearsHistory } from './arrears-history';
 import { FichaSummary } from './ficha-summary';
+import { PayerEditor } from './payer-editor';
 import { NotesSection } from './notes-section';
+import { OverdueInstallmentsSection } from './overdue-installments-section';
 import { PaymentsSection } from './payments-section';
 import { PersonSections } from './person-sections';
 import { PromisesSection } from './promises-section';
@@ -41,6 +43,7 @@ import { RecoveryMetricsSection } from './recovery-metrics';
 import { ResponsiblesSection } from './responsibles-section';
 import { WriteOffButton } from './write-off-button';
 import { PriorityCell } from '../priority-cell';
+import { CreditSync } from '@/components/credit-sync';
 
 
 /**
@@ -77,7 +80,8 @@ export async function FichaGestion({
     apiCall<RecoveryMetrics>(`/mora/${creditId}/metrics`, { method: 'GET', auth: true }),
     apiCall<MoraPromise[]>(`/mora/${creditId}/promises`, { method: 'GET', auth: true }),
     apiCall<CreditNote[]>(`/mora/${creditId}/notes`, { method: 'GET', auth: true }),
-    apiCall<PaymentItem[]>(`/payments?creditId=${creditId}&limit=50`, { method: 'GET', auth: true }),
+    // El historial del crédito CON la imputación de cada pago (lo persistido): la misma fuente que la ficha de Cartera.
+    apiCall<CreditPaymentsView>(`/credits/${creditId}/payments`, { method: 'GET', auth: true }),
     apiCall<{ code: string; label: string }[]>(`/catalogs/${CatalogType.PAYMENT_METHOD}`, { method: 'GET', auth: true }),
     apiCall<{ code: string; label: string }[]>(`/catalogs/${CatalogType.BANK}`, { method: 'GET', auth: true }),
     // F4/13 · E4: motivos de no pago. Si falla o está vacío, el formulario no ofrece el bloque y sigue igual.
@@ -136,11 +140,13 @@ export async function FichaGestion({
       {canWrite && (
         <RegisterActivityButton
           creditId={item.creditId}
+          clientId={item.clientId}
           suggestedAmount={item.suggestedPaymentAmount}
           methods={methods.body.data ?? []}
           banks={banks.body.data ?? []}
           reasons={reasons.status === 200 ? (reasons.body.data ?? []) : []}
           incomeSource={client?.status === 200 ? (client.body.data?.incomeProfile?.incomeSourceCode ?? undefined) : undefined}
+          templates={templates.status === 200 ? (templates.body.data ?? []) : []}
         />
       )}
       {/* Escribirle por WhatsApp con una plantilla; se registra como gestión de mensaje. */}
@@ -168,6 +174,7 @@ export async function FichaGestion({
 
   return (
     <>
+      <CreditSync creditId={item.creditId} />
       {withHeader ? (
         <PageHeader
           title={t('gestion.title')}
@@ -206,6 +213,7 @@ export async function FichaGestion({
           // Sin nombre no es sin responsable: `/users` da 403 sin `user:read`.
           assignee={responsibleName}
           branch={item.branchName}
+          payer={<PayerEditor creditId={item.creditId} value={item.payerParty} canWrite={canWrite} />}
           clientHref={`/cartera/${item.clientId}`}
           creditHref={`/cartera/${item.clientId}/credito/${item.creditId}`}
           amount={amount}
@@ -262,7 +270,7 @@ export async function FichaGestion({
             )}
           </Section>
 
-          <PromisesSection promises={promises.status === 200 ? (promises.body.data ?? []) : null} members={members} currency={currency} />
+          <PromisesSection promises={promises.status === 200 ? (promises.body.data ?? []) : null} members={members} currency={currency} canWrite={canWrite} />
 
           {/* Las notas, con su tablero de post-its. */}
           <NotesSection
@@ -274,9 +282,14 @@ export async function FichaGestion({
             canAssign={canAssign}
           />
 
+          {/* Cuotas vencidas, cada una con SUS días: la mora es por cuota. Mismo plan que Cartera. */}
+          <OverdueInstallmentsSection plan={item.plan} currency={currency} />
+
           <PaymentsSection
             creditId={item.creditId}
-            payments={payments.status === 200 ? (payments.body.data ?? []) : null}
+            clientId={item.clientId}
+            payments={payments.status === 200 ? (payments.body.data?.payments ?? []) : null}
+            prepaidAmount={payments.status === 200 ? payments.body.data?.plan?.prepaidAmount : undefined}
             members={members}
             currency={currency}
             external={!!item.externalSource}
