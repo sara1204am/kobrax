@@ -26,7 +26,7 @@ export async function loadCreditPlan(
   if (!source) return null;
 
   const [applications, payments] = await Promise.all([
-    tx.paymentApplication.findMany({ where: { accountId, creditId: credit.id }, select: { paymentId: true, installmentNumber: true, amount: true } }),
+    tx.paymentApplication.findMany({ where: { accountId, creditId: credit.id, component: 'SCHEDULED' }, select: { paymentId: true, installmentNumber: true, amount: true } }),
     tx.payment.findMany({ where: { accountId, creditId: credit.id }, select: { id: true, amount: true, createdAt: true }, orderBy: { createdAt: 'asc' } }),
   ]);
   const allocations: PlanAllocation[] = applications.map((a) => ({ paymentId: a.paymentId, installmentNumber: a.installmentNumber, amount: Number(a.amount) }));

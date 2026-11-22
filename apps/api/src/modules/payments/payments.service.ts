@@ -2,14 +2,15 @@ import { Injectable } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import type { Payment, PaymentChannel, PaymentMethod, PrismaClient } from '@prisma/client';
 import { CreditStatus, InstallmentStatus, Prisma } from '@prisma/client';
-import { PAYMENT_BACKDATE_DAYS, allocatePayments, buildUpdatedPlan, isExternalOrigin, readCreditMetadata, resolvePagination, type ApiResponse, ResponseDto } from '@kobrax/shared';
+import { PAYMENT_BACKDATE_DAYS, allocatePayments, allocateWithLateInterest, type PlanAllocation, buildUpdatedPlan, isExternalOrigin, readCreditMetadata, resolvePagination, type ApiResponse, ResponseDto } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
-import { TenantClockService, accountToday, civilDayStartInstant, civilMonthStartUTC, civilTodayUTC } from '../../common/context/tenant-clock.service';
+import { TenantClockService, accountTimezone, accountToday, civilDayOf, civilDayStartInstant, civilMonthStartUTC, civilTodayUTC } from '../../common/context/tenant-clock.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { EventBusService, DomainEvent } from '../../common/events/event-bus.service';
 import { creditPatchAfterPayment, creditPatchFromPlan, planSourceOf } from './payment-apply';
 import { settlePromisesFromPayments } from './settle-promises';
+import { lateParamsOf, loadLateContext } from './late-context';
 import { loadNames } from '../mora/mora-names';
 import { moraScopeOf, seesWholeAccount, visibleCreditIdsSql } from '../mora/mora-query';
 import { serializePayment, serializePaymentRequest } from './payments.serializer';
@@ -156,7 +157,7 @@ export class PaymentsService {
       const existing = await tx.payment.findFirst({ where: { idempotencyKey: p.idempotencyKey } });
       if (existing) return { payment: existing, creditPaid: false, external: false, replay: true, allocations: [] };
     }
-    const credit = await tx.credit.findFirst({ where: { id: p.creditId, deletedAt: null }, include: { installments: true } });
+    const credit = await tx.credit.findFirst({ where: { id: p.creditId, deletedAt: null }, include: { installments: true, latePolicyVersion: true } });
     if (!credit) throw resourceNotFound();
     // El cobro dice en qué visita se hizo: esa visita tiene que existir y ser de ESTE crédito.
     if (p.visitId) {
@@ -180,17 +181,46 @@ export class PaymentsService {
     if (credit.status !== CreditStatus.ACTIVE) throw creditNotActive();
 
     const balance = Number(credit.outstandingBalance);
-    if (p.amount > balance + 0.005) throw paymentInvalid('El monto excede el saldo pendiente');
-
-    // El pago SIEMPRE descuenta el saldo (spec §5.4). El plan dice a qué cuota imputar, no cuánto vale el pago.
     const now = new Date();
     // Los días de atraso se cuentan contra el día civil de la cuenta, no contra el instante UTC (`now` queda para `paidAt`).
     const today = await accountToday(tx, this.tenant.accountId, now);
-    const newBalance = round2(Math.max(0, balance - p.amount));
-    const creditPaid = newBalance <= 0.005;
+    const source = planSourceOf(credit);
+
+    /*
+     * F17 · F3-c — interés moratorio. SÓLO si el crédito nació con una política `ANNUAL_RATE` sellada y tiene plan con partición capital/interés.
+     * Sin política (la cuenta lo tiene apagado, o el crédito es anterior) `late` queda en `null` y TODO lo de abajo es el camino de siempre.
+     * La mora se calcula a la fecha de cobro del pago (D4), acotada a hoy; el pago puede cubrir saldo del plan + mora pendiente.
+     */
+    const lateParams = source ? lateParamsOf(credit.latePolicyVersion) : null;
+    let late: { ctx: Awaited<ReturnType<typeof loadLateContext>>; result: ReturnType<typeof allocateWithLateInterest> } | null = null;
+    if (source && lateParams) {
+      const tz = await accountTimezone(tx, this.tenant.accountId);
+      const todayIso = today.toISOString().slice(0, 10);
+      const payDay = p.paymentDate ? civilDayOf(new Date(p.paymentDate), tz) : todayIso;
+      const ctx = await loadLateContext(tx, {
+        accountId: this.tenant.accountId,
+        creditId: credit.id,
+        tz,
+        rows: source.rows,
+        policy: lateParams,
+        // D7: castigado ⇒ el devengo se congela en el día del castigo.
+        stopAt: credit.writtenOffAt ? civilDayOf(credit.writtenOffAt, tz) : null,
+        prepaidInstallments: source.prepaidInstallments,
+        storedPaid: source.stored ? Object.fromEntries(credit.installments.map((i) => [i.number, Number(i.paidAmount)])) : undefined,
+      });
+      const result = allocateWithLateInterest({ ...ctx, amount: p.amount, date: payDay > todayIso ? todayIso : payDay });
+      if (p.amount > result.payable + 0.005) throw paymentInvalid('El monto excede el saldo pendiente más el interés moratorio');
+      late = { ctx, result };
+    } else if (p.amount > balance + 0.005) {
+      throw paymentInvalid('El monto excede el saldo pendiente');
+    }
+
+    // El pago descuenta el saldo del PLAN (spec §5.4); con mora, sólo lo que fue a cuotas (la mora no es parte del plan, P5).
+    // D6: con mora pendiente el crédito no pasa a `PAID` aunque el plan esté saldado.
+    const newBalance = round2(Math.max(0, balance - (late ? late.result.scheduledApplied : p.amount)));
+    const creditPaid = newBalance <= 0.005 && (late ? late.result.latePendingAfter <= 0.005 : true);
 
     const payment = await this.insertPayment(tx, credit, p);
-    const source = planSourceOf(credit);
     let allocations: { installmentNumber: number; amount: number }[] = [];
 
     if (source) {
@@ -200,31 +230,32 @@ export class PaymentsService {
        * de su `paid_amount` (que además incluye lo pagado antes de que existieran las aplicaciones).
        */
       const covered: Record<number, number> = {};
-      if (source.stored) {
+      if (late) {
+        Object.assign(covered, late.ctx.scheduledPaid);
+      } else if (source.stored) {
         for (const i of credit.installments) covered[i.number] = Number(i.paidAmount);
       } else {
         const previous = await tx.paymentApplication.findMany({
-          where: { accountId: this.tenant.accountId, creditId: credit.id },
+          where: { accountId: this.tenant.accountId, creditId: credit.id, component: 'SCHEDULED' },
           select: { installmentNumber: true, amount: true },
         });
         for (const a of previous) covered[a.installmentNumber] = round2((covered[a.installmentNumber] ?? 0) + Number(a.amount));
       }
-      const { allocations: fresh } = allocatePayments({
-        rows: source.rows,
-        prepaidInstallments: source.prepaidInstallments,
-        priorPaid: covered,
-        payments: [{ id: payment.id, amount: p.amount, registeredAt: payment.createdAt }],
-      });
-      allocations = fresh.map((a) => ({ installmentNumber: a.installmentNumber, amount: a.amount }));
-      if (fresh.length > 0) {
+      const fresh: PlanAllocation[] = late
+        ? late.result.allocations.filter((a) => a.component === 'SCHEDULED').map((a) => ({ paymentId: payment.id, installmentNumber: a.installmentNumber, amount: a.amount }))
+        : allocatePayments({
+            rows: source.rows,
+            prepaidInstallments: source.prepaidInstallments,
+            priorPaid: covered,
+            payments: [{ id: payment.id, amount: p.amount, registeredAt: payment.createdAt }],
+          }).allocations;
+      allocations = (late ? late.result.allocations : fresh).map((a) => ({ installmentNumber: a.installmentNumber, amount: a.amount }));
+      const rowsToWrite = late
+        ? late.result.allocations.map((a) => ({ installmentNumber: a.installmentNumber, amount: a.amount, component: a.component, policyVersion: 2 }))
+        : fresh.map((a) => ({ installmentNumber: a.installmentNumber, amount: a.amount }));
+      if (rowsToWrite.length > 0) {
         await tx.paymentApplication.createMany({
-          data: fresh.map((a) => ({
-            accountId: this.tenant.accountId,
-            paymentId: payment.id,
-            creditId: credit.id,
-            installmentNumber: a.installmentNumber,
-            amount: a.amount,
-          })),
+          data: rowsToWrite.map((a) => ({ accountId: this.tenant.accountId, paymentId: payment.id, creditId: credit.id, ...a })),
         });
       }
       const plan = buildUpdatedPlan({ rows: source.rows, prepaidInstallments: source.prepaidInstallments, priorPaid: covered, allocations: fresh, asOf: today });

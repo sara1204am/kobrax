@@ -123,6 +123,19 @@ export async function accountToday(
   return civilTodayUTC(timezoneOf(account), now);
 }
 
+/** La zona de una cuenta leída en la transacción del tenant (para pasar de un instante a su día civil: fecha de cobro de un pago). */
+export async function accountTimezone(
+  tx: { account: { findFirst: (args: { where: { id: string }; select: { timezone: true; countryCode: true } }) => Promise<{ timezone: string | null; countryCode: string | null } | null> } },
+  accountId: string,
+): Promise<string> {
+  return timezoneOf(await tx.account.findFirst({ where: { id: accountId }, select: { timezone: true, countryCode: true } }));
+}
+
+/** El día civil (`YYYY-MM-DD`) de un instante en la zona `tz`. */
+export function civilDayOf(instant: Date, tz: string): string {
+  return civilTodayUTC(tz, instant).toISOString().slice(0, 10);
+}
+
 /** Minutos transcurridos desde la medianoche civil de `tz` (0–1439). Con una zona inválida cae a UTC. */
 export function wallMinutesNow(tz: string, now: Date = new Date()): number {
   try {

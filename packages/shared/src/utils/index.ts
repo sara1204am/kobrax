@@ -49,3 +49,4 @@ export * from './first-steps.js';
 export * from './legal-acceptance.js';
 export * from './payment-plan.js';
 export * from './late-interest.js';
+export * from './late-allocation.js';
