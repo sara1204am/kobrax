@@ -39,10 +39,10 @@ import {
 } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
-import { accountToday } from '../../common/context/tenant-clock.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { PlanLimitsService } from '../../common/plan/plan-limits.service';
 import { OfficeScopeService } from '../../common/office-scope/office-scope.service';
+import { TenantClockService, accountToday } from '../../common/context/tenant-clock.service';
 import { officeInvalid, officeOutOfScope } from '../../common/office-scope/office-scope.errors';
 import { AssignmentService } from '../assignments/assignment.service';
 import { moraAccessConditions, moraScopeOf, seesWholeAccount, visibleCredits } from '../mora/mora-query';
@@ -107,7 +107,17 @@ export class CreditsService {
     private readonly arrearsPriority: ArrearsPriorityService,
     private readonly office: OfficeScopeService,
     private readonly authz: AuthorizationService = new AuthorizationService(tenant),
+    /** El día civil de la cuenta. Opcional sólo para las pruebas que arman el servicio a mano: en la app lo inyecta Nest (módulo `@Global`). */
+    private readonly clock?: TenantClockService,
   ) {}
+
+  /**
+   * «Hoy» para contar días de atraso: el día civil de la cuenta (medianoche UTC de su fecha), no el instante UTC. En Bolivia, desde las 20:00 el
+   * servidor ya está en «mañana» y un crédito que vence hoy contaría un día de mora de más. Sin reloj inyectado (pruebas) cae al instante.
+   */
+  private today(): Promise<Date> {
+    return this.clock ? this.clock.today() : Promise.resolve(new Date());
+  }
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
     return this.prisma.withTenant(this.tenant.accountId, fn);
@@ -154,7 +164,7 @@ export class CreditsService {
     if (dto.initialState && dto.daysPastDue !== undefined) throw creditTermsConflict('daysPastDue');
     const registered = resolved && dto.initialState ? registeredState(resolved.terms, dto.initialState) : undefined;
     if (registered && !registered.ok) throw creditInitialStateInvalid(registered.code);
-    const asOf = new Date();
+    const asOf = await this.today();
     /*
      * Cuota variable (capital fijo): no hay UNA cuota que congelar. Se guarda el cronograma del motor
      * fila por fila y de ahí salen los pagos, la mora y la próxima fecha, como en los créditos con
@@ -463,7 +473,7 @@ export class CreditsService {
     // Al redefinir, el próximo vencimiento se deriva de las cuotas pagadas: no se manda aparte.
     if (redefine && dto.nextDueDate !== undefined) throw creditTermsConflict('nextDueDate');
 
-    const asOf = new Date();
+    const asOf = await this.today();
     const { before, after, assigned } = await this.tx(async (tx) => {
       const prev = await tx.credit.findFirst({
         where: { id, deletedAt: null },
@@ -880,7 +890,7 @@ export class CreditsService {
    * prioridad), así que la marca se guardaría y no haría nada. Mejor rebotar que mentir.
    */
   async markArrears(id: string, days?: number) {
-    const asOf = new Date();
+    const asOf = await this.today();
     const { credit } = await this.tx(async (tx) => {
       const found = await tx.credit.findFirst({ where: { id, deletedAt: null } });
       if (!found) throw resourceNotFound();
@@ -920,7 +930,7 @@ export class CreditsService {
    * de la base (motivo «al día») al quedar los días en cero; acá ya no se cierra nada a mano.
    */
   async clearArrears(id: string, dto: ClearArrearsDto) {
-    const asOf = new Date();
+    const asOf = await this.today();
     const { credit } = await this.tx(async (tx) => {
       const found = await tx.credit.findFirst({ where: { id, deletedAt: null } });
       if (!found) throw resourceNotFound();
@@ -962,7 +972,7 @@ export class CreditsService {
   // ── Mora ──────────────────────────────────────────────────────────────────
   async recalculateArrears(id: string, asOfInput?: string) {
     const config = await this.accountConfig();
-    const asOf = asOfInput ? new Date(asOfInput) : new Date();
+    const asOf = asOfInput ? new Date(asOfInput) : await this.today();
 
     const result = await this.tx(async (tx) => {
       const credit = await tx.credit.findFirst({
@@ -1064,7 +1074,7 @@ export class CreditsService {
           overdueAmount: arrear.overdueAmount,
           interest: arrear.interest,
           penalty: arrear.penalty,
-          calculatedAt: asOf,
+          calculatedAt: new Date(), // el instante real del cálculo; `asOf` es sólo el día civil
         },
       });
       return arrear;

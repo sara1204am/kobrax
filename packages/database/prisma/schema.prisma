@@ -111,6 +111,7 @@ model Account {
   payments                Payment[]
   paymentApplications     PaymentApplication[]
   latePolicyVersions      LatePolicyVersion[]
+  creditLateWaivers       CreditLateWaiver[]
   paymentRequests         PaymentRequest[]
   notifications           Notification[]
   devicePushTokens        DevicePushToken[]
@@ -250,16 +251,16 @@ model User {
   updatedAt              DateTime   @updatedAt @map("updated_at")
   deletedAt              DateTime?  @map("deleted_at")
 
-  profile             Profile?
-  userAccounts        UserAccount[]
-  branchAssignments   UserBranchAssignment[]
-  sessions            UserSession[]
-  auditLogs           AuditLog[]
-  legalAcceptances    UserLegalAcceptance[]
-  privacyRequests     PrivacyRequest[]
-  consentRecords      ConsentRecord[]
-  mfaBackupCodes      MfaBackupCode[]
-  passwordResetTokens PasswordResetToken[]
+  profile                 Profile?
+  userAccounts            UserAccount[]
+  branchAssignments       UserBranchAssignment[]
+  sessions                UserSession[]
+  auditLogs               AuditLog[]
+  legalAcceptances        UserLegalAcceptance[]
+  privacyRequests         PrivacyRequest[]
+  consentRecords          ConsentRecord[]
+  mfaBackupCodes          MfaBackupCode[]
+  passwordResetTokens     PasswordResetToken[]
   emailVerificationTokens EmailVerificationToken[]
 
   @@index([status])
@@ -1112,59 +1113,59 @@ model ClientAttachment {
 
 /// Obligación financiera. Nombres de concepto configurables por tenant.
 model Credit {
-  id                 String              @id @default(uuid())
-  accountId          String              @map("account_id")
-  clientId           String              @map("client_id")
-  branchId           String?             @map("branch_id")
-  code               String?
+  id                  String              @id @default(uuid())
+  accountId           String              @map("account_id")
+  clientId            String              @map("client_id")
+  branchId            String?             @map("branch_id")
+  code                String?
   /// Qué clase de crédito es → `catalog_items.code` del catálogo `CREDIT_TYPE`. Texto suelto y no
   /// enum: cada empresa arma su lista (consumo, microcrédito, vivienda…) sin que eso sea una migración.
-  typeCode           String?             @map("type_code")
+  typeCode            String?             @map("type_code")
   /// Quién responde realmente por el crédito (titular, garante…). Dato del crédito, se edita en el card de Mora.
-  payerParty         PayerParty?         @map("payer_party")
-  principalAmount    Decimal             @map("principal_amount") @db.Decimal(14, 2)
-  outstandingBalance Decimal             @map("outstanding_balance") @db.Decimal(14, 2)
-  interestRate       Decimal             @default(0) @map("interest_rate") @db.Decimal(7, 4)
-  currency           String
-  installmentsCount  Int                 @default(1) @map("installments_count")
-  status             CreditStatus        @default(ACTIVE)
-  daysPastDue        Int                 @default(0) @map("days_past_due")
-  assignedManagerId  String?             @map("assigned_manager_id") // referencia suave a users.id
-  disbursedAt        DateTime?           @map("disbursed_at")
+  payerParty          PayerParty?         @map("payer_party")
+  principalAmount     Decimal             @map("principal_amount") @db.Decimal(14, 2)
+  outstandingBalance  Decimal             @map("outstanding_balance") @db.Decimal(14, 2)
+  interestRate        Decimal             @default(0) @map("interest_rate") @db.Decimal(7, 4)
+  currency            String
+  installmentsCount   Int                 @default(1) @map("installments_count")
+  status              CreditStatus        @default(ACTIVE)
+  daysPastDue         Int                 @default(0) @map("days_past_due")
+  assignedManagerId   String?             @map("assigned_manager_id") // referencia suave a users.id
+  disbursedAt         DateTime?           @map("disbursed_at")
   /// Campos operativos de cobranza sin columna propia: frequency, origin, installmentAmount,
   /// nextDueDate, externalRef, notes. Forma y lectura en `@kobrax/shared` (`CreditMetadata`).
   /// Un crédito nacido en el móvil NO tiene cronograma: su cuota y próxima fecha viven acá.
-  metadata           Json                @default("{}")
+  metadata            Json                @default("{}")
   /// De dónde nació (D1). Espejo de `metadata.origin`, que se sigue escribiendo para las apps viejas.
-  origin             CreditDataOrigin    @default(MANUAL)
+  origin              CreditDataOrigin    @default(MANUAL)
   /// ─── Operación de una fuente externa (PSF). NULL en los créditos de Kobrax. ───
   ///
   /// La identidad es `(account_id, external_source, external_id)` — índice único parcial creado en
   /// SQL (Prisma no los expresa), ver la migración `20260930000000_creditos_de_fuente_externa`.
   /// `code` es sólo el rótulo que se muestra (D1). `outstanding_balance` y `days_past_due` son en
   /// estos créditos los valores **reportados** al `reported_as_of`, y sólo los escribe el importador.
-  externalSource     String?             @map("external_source")
-  externalId         String?             @map("external_id")
-  syncStatus         ExternalSyncStatus? @map("sync_status")
+  externalSource      String?             @map("external_source")
+  externalId          String?             @map("external_id")
+  syncStatus          ExternalSyncStatus? @map("sync_status")
   /// Desde cuándo falta del reporte (fecha de corte del primer reporte que no lo trajo).
-  absentSince        DateTime?           @map("absent_since") @db.Date
+  absentSince         DateTime?           @map("absent_since") @db.Date
   /// La última corrida (`client_import_runs.id`) que lo trajo.
-  lastSeenRunId      String?             @map("last_seen_run_id")
+  lastSeenRunId       String?             @map("last_seen_run_id")
   /// Fecha de corte del último reporte que lo trajo: la mora y el saldo son «al» esta fecha (D9).
-  reportedAsOf       DateTime?           @map("reported_as_of") @db.Date
+  reportedAsOf        DateTime?           @map("reported_as_of") @db.Date
   /// Última gestión registrada sobre el crédito (F4/08). Sólo informativa: no es estado ni filtro de SLA.
-  lastActionAt       DateTime?           @map("last_action_at")
+  lastActionAt        DateTime?           @map("last_action_at")
   /// Castigo: condición independiente de la mora (F4/08 · D1-a). NULL = no castigado. Fuente de verdad;
   /// Ya no existe un estado `WRITTEN_OFF`: el castigo es sólo esto.
-  writtenOffAt       DateTime?           @map("written_off_at")
-  writtenOffBy       String?             @map("written_off_by")
-  writtenOffReason   String?             @map("written_off_reason")
+  writtenOffAt        DateTime?           @map("written_off_at")
+  writtenOffBy        String?             @map("written_off_by")
+  writtenOffReason    String?             @map("written_off_reason")
   /// La política de mora con que nació el crédito (versión INMUTABLE). La sella un trigger al insertar y no se puede cambiar: un cambio de
   /// política después no toca los créditos que ya existen. Ver `late_policy_versions`.
-  latePolicyVersionId String?            @map("late_policy_version_id")
-  createdAt          DateTime            @default(now()) @map("created_at")
-  updatedAt          DateTime            @updatedAt @map("updated_at")
-  deletedAt          DateTime?           @map("deleted_at")
+  latePolicyVersionId String?             @map("late_policy_version_id")
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+  deletedAt           DateTime?           @map("deleted_at")
 
   account           Account                  @relation(fields: [accountId], references: [id])
   client            Client                   @relation(fields: [clientId], references: [id])
@@ -1172,6 +1173,7 @@ model Credit {
   installments      CreditInstallment[]
   arrears           Arrear[]
   payments          Payment[]
+  lateWaivers       CreditLateWaiver[]
   guarantors        CreditGuarantor[]
   collaterals       CollateralCredit[]
   assignments       CreditAssignment[]
@@ -1179,7 +1181,7 @@ model Credit {
   notes             CreditNote[]
   activities        CreditActivity[]
   externalSnapshots CreditExternalSnapshot[]
-  latePolicyVersion LatePolicyVersion? @relation(fields: [latePolicyVersionId], references: [id])
+  latePolicyVersion LatePolicyVersion?       @relation(fields: [latePolicyVersionId], references: [id])
 
   /// `code` dejó de ser único (D1): es un rótulo. Un nº de operación PSF puede coincidir con el
   /// código de un crédito manual sin que sean el mismo crédito.
@@ -1898,30 +1900,61 @@ model Payment {
 /// `credit_installments.paid_amount/status` y las columnas de `credits` son copias de lectura que se escriben en la misma transacción.
 /// La cuota se identifica por NÚMERO (no por id): sirve igual con cronograma guardado o regenerado de las condiciones.
 model PaymentApplication {
-  id                String                 @id @default(uuid())
-  accountId         String                 @map("account_id")
-  paymentId         String                 @map("payment_id")
-  creditId          String                 @map("credit_id")
-  installmentNumber Int                    @map("installment_number")
+  id                String                      @id @default(uuid())
+  accountId         String                      @map("account_id")
+  paymentId         String                      @map("payment_id")
+  creditId          String                      @map("credit_id")
+  installmentNumber Int                         @map("installment_number")
   /// Con signo: `APPLY` > 0, `REVERSAL` < 0. Nunca 0.
-  amount            Decimal                @db.Decimal(14, 2)
-  kind              PaymentApplicationKind @default(APPLY)
+  amount            Decimal                     @db.Decimal(14, 2)
+  kind              PaymentApplicationKind      @default(APPLY)
+  /// Qué cubrió: la cuota programada (capital + interés corriente) o interés moratorio (F17·F3). Las filas anteriores son `SCHEDULED`.
+  component         PaymentApplicationComponent @default(SCHEDULED)
   /// La aplicación que esta compensa. Sólo en `REVERSAL`.
-  reversesId        String?                @map("reverses_id")
+  reversesId        String?                     @map("reverses_id")
   /// Qué regla de imputación se usó (1 = FIFO por cuota más antigua). Sella la política en la fila.
-  policyVersion     Int                    @default(1) @map("policy_version") @db.SmallInt
+  policyVersion     Int                         @default(1) @map("policy_version") @db.SmallInt
   /// F14·F2b — oficina y responsable DEL CRÉDITO, copiados por trigger para la barrera RLS. 🔴 No los escribas desde el código.
-  creditBranchId    String?                @map("credit_branch_id")
-  creditManagerId   String?                @map("credit_manager_id")
-  createdAt         DateTime               @default(now()) @map("created_at")
+  creditBranchId    String?                     @map("credit_branch_id")
+  creditManagerId   String?                     @map("credit_manager_id")
+  createdAt         DateTime                    @default(now()) @map("created_at")
 
   account Account @relation(fields: [accountId], references: [id])
   payment Payment @relation(fields: [paymentId], references: [id])
 
-  @@unique([paymentId, installmentNumber, kind])
+  @@unique([paymentId, installmentNumber, kind, component], map: "payment_applications_payment_inst_kind_comp_key")
   @@index([accountId, creditId, installmentNumber])
   @@index([accountId, paymentId])
   @@map("payment_applications")
+}
+
+enum PaymentApplicationComponent {
+  SCHEDULED
+  LATE_INTEREST
+
+  @@map("payment_application_component")
+}
+
+/// Exoneración de interés moratorio (F17·F3): un HECHO append-only (quién, cuándo, cuánto y por qué), nunca una edición. Misma barrera de alcance
+/// y misma inmutabilidad que `payment_applications`; las copias `credit_branch_id`/`credit_manager_id` las escribe un trigger, no el código.
+model CreditLateWaiver {
+  id                String   @id @default(uuid())
+  accountId         String   @map("account_id")
+  creditId          String   @map("credit_id")
+  installmentNumber Int      @map("installment_number")
+  amount            Decimal  @db.Decimal(14, 2)
+  reason            String
+  createdBy         String?  @map("created_by")
+  /// F14·F2b — copiados por trigger del crédito. 🔴 No los escribas desde el código.
+  creditBranchId    String?  @map("credit_branch_id")
+  creditManagerId   String?  @map("credit_manager_id")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  account Account @relation(fields: [accountId], references: [id])
+  credit  Credit  @relation(fields: [creditId], references: [id])
+
+  @@index([accountId, creditId, installmentNumber])
+  @@map("credit_late_waivers")
 }
 
 enum PaymentApplicationKind {
@@ -2426,7 +2459,7 @@ model UserLegalAcceptance {
   id                String                @id @default(uuid())
   userId            String                @map("user_id")
   /// Organización en cuyo contexto ocurrió (null si fue previa a la sesión o a nivel de persona).
-  accountId       String?              @map("account_id")
+  accountId         String?               @map("account_id")
   documentVersionId String                @map("document_version_id")
   /// Copia del hash de la versión aceptada: la prueba no depende de seguir teniendo la fila de la versión a mano.
   contentSha256     String                @map("content_sha256")
@@ -2505,31 +2538,31 @@ enum PrivacySubjectKind {
 }
 
 model PrivacyRequest {
-  id              String               @id @default(uuid())
-  subjectKind     PrivacySubjectKind   @map("subject_kind")
-  type            PrivacyRequestType
-  status          PrivacyRequestStatus @default(RECEIVED)
+  id                     String               @id @default(uuid())
+  subjectKind            PrivacySubjectKind   @map("subject_kind")
+  type                   PrivacyRequestType
+  status                 PrivacyRequestStatus @default(RECEIVED)
   /// Quién la presentó: la propia persona (APP_USER) o el integrante de la organización que la registró (DEBTOR_VIA_ORG). NULL en THIRD_PARTY (no tiene cuenta).
-  requesterUserId String?              @map("requester_user_id")
+  requesterUserId        String?              @map("requester_user_id")
   /// Solo THIRD_PARTY: cómo responderle a quien escribió desde el formulario público, y a quién o qué reporta.
-  contactEmail    String?              @map("contact_email")
-  contactName     String?              @map("contact_name")
+  contactEmail           String?              @map("contact_email")
+  contactName            String?              @map("contact_name")
   /// Solo THIRD_PARTY: la organización, cobrador o cuenta a la que se refiere el reporte (texto libre).
-  reportedSubject String?              @map("reported_subject")
+  reportedSubject        String?              @map("reported_subject")
   /// Solo THIRD_PARTY: SHA-256 del enlace de confirmación enviado al correo (un solo uso, vence). El texto del enlace nunca se guarda.
-  contactVerifyHash      String?   @map("contact_verify_hash")
-  contactVerifyExpiresAt DateTime? @map("contact_verify_expires_at")
+  contactVerifyHash      String?              @map("contact_verify_hash")
+  contactVerifyExpiresAt DateTime?            @map("contact_verify_expires_at")
   /// Cuándo la persona confirmó que el correo es suyo. NULL = sin confirmar.
-  contactVerifiedAt      DateTime? @map("contact_verified_at")
+  contactVerifiedAt      DateTime?            @map("contact_verified_at")
   /// NULL en APP_USER (es personal); la cuenta responsable en DEBTOR_VIA_ORG. La policy de RLS deja ver NULL + la cuenta activa.
   accountId              String?              @map("account_id")
   /// Identificación mínima del titular de cobranza (solo DEBTOR_VIA_ORG): texto libre que escribe quien la registra.
-  subjectLabel    String?              @map("subject_label")
-  description     String
-  rejectionReason String?              @map("rejection_reason")
-  createdAt       DateTime             @default(now()) @map("created_at")
-  updatedAt       DateTime             @updatedAt @map("updated_at")
-  closedAt        DateTime?            @map("closed_at")
+  subjectLabel           String?              @map("subject_label")
+  description            String
+  rejectionReason        String?              @map("rejection_reason")
+  createdAt              DateTime             @default(now()) @map("created_at")
+  updatedAt              DateTime             @updatedAt @map("updated_at")
+  closedAt               DateTime?            @map("closed_at")
 
   requester User?                 @relation(fields: [requesterUserId], references: [id])
   account   Account?              @relation(fields: [accountId], references: [id])
@@ -2565,24 +2598,24 @@ model PrivacyRequestEvent {
 /// de CADA cuota) está previsto en el esquema pero la API todavía no deja activarlo: depende de decisiones legales y contractuales de la cuenta.
 /// El alcance es la cuenta (`scope = ACCOUNT`) o un producto (`scope = PRODUCT`, `type_code` del catálogo CREDIT_TYPE).
 model LatePolicyVersion {
-  id            String          @id @default(uuid())
-  accountId     String          @map("account_id")
-  scope         LatePolicyScope @default(ACCOUNT)
+  id                String          @id @default(uuid())
+  accountId         String          @map("account_id")
+  scope             LatePolicyScope @default(ACCOUNT)
   /// Sólo con `scope = PRODUCT`: el `catalog_items.code` del tipo de crédito.
-  typeCode      String?         @map("type_code")
-  version       Int
-  kind          LatePolicyKind  @default(NONE)
+  typeCode          String?         @map("type_code")
+  version           Int
+  kind              LatePolicyKind  @default(NONE)
   /// Sólo `ANNUAL_RATE`: tasa nominal anual en % (p. ej. 12.0000).
-  annualRate    Decimal?        @map("annual_rate") @db.Decimal(7, 4)
+  annualRate        Decimal?        @map("annual_rate") @db.Decimal(7, 4)
   /// Sólo `ANNUAL_RATE`: convención de días del año (360 ó 365).
-  dayCount      Int?            @map("day_count") @db.SmallInt
+  dayCount          Int?            @map("day_count") @db.SmallInt
   /// Días tras el vencimiento antes de que cuente la mora.
-  graceDays     Int             @default(0) @map("grace_days") @db.SmallInt
+  graceDays         Int             @default(0) @map("grace_days") @db.SmallInt
   /// Sólo `ANNUAL_RATE`, opcional (D5): tope acumulado del interés moratorio de una cuota, en % de su capital vencido. NULL = sin tope.
-  capPctOfPrincipal Decimal?    @map("cap_pct_of_principal") @db.Decimal(7, 4)
-  effectiveFrom DateTime        @default(now()) @map("effective_from")
-  createdBy     String?         @map("created_by")
-  createdAt     DateTime        @default(now()) @map("created_at")
+  capPctOfPrincipal Decimal?        @map("cap_pct_of_principal") @db.Decimal(7, 4)
+  effectiveFrom     DateTime        @default(now()) @map("effective_from")
+  createdBy         String?         @map("created_by")
+  createdAt         DateTime        @default(now()) @map("created_at")
 
   account Account  @relation(fields: [accountId], references: [id])
   credits Credit[]
@@ -2606,4 +2639,3 @@ enum LatePolicyKind {
 
   @@map("late_policy_kind")
 }
-

@@ -39,7 +39,7 @@ DECLARE
     'route_plans', 'route_stops',
     'field_visits', 'field_evidences',
     -- Pilar 4 + transversal
-    'payments', 'payment_applications', 'late_policy_versions', 'payment_requests', 'notifications',
+    'payments', 'payment_applications', 'credit_late_waivers', 'late_policy_versions', 'payment_requests', 'notifications',
     -- Auth (F2a)
     'refresh_tokens',
     -- Agenda (F10)

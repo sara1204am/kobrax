@@ -198,6 +198,25 @@ CREATE POLICY scope_payment_applications ON payment_applications AS RESTRICTIVE 
   OR ((SELECT app_scope_mode()) = 'log' AND app_scope_log('payment_applications', id, false))
 );
 
+-- Exoneraciones de mora (F17·F3): la misma regla que el pago (copian oficina y responsable del crédito por trigger).
+DROP POLICY IF EXISTS scope_credit_late_waivers ON credit_late_waivers;
+CREATE POLICY scope_credit_late_waivers ON credit_late_waivers AS RESTRICTIVE FOR SELECT TO kobrax_scoped USING (
+  (SELECT app_scope_open())
+  OR ((SELECT app_current_scope()) = 'own' AND (
+        credit_manager_id = (SELECT app_current_user())
+     OR credit_id = ANY ((SELECT app_my_assigned_credit_arr())::text[])))
+  OR ((SELECT app_current_scope()) = 'branch' AND (
+        credit_branch_id = ANY ((SELECT app_my_subtree_branch_arr())::text[])
+     OR credit_manager_id = (SELECT app_current_user())
+     OR credit_id = ANY ((SELECT app_my_assigned_credit_arr())::text[])))
+  OR ((SELECT app_current_scope()) = 'subtree' AND (
+        (SELECT app_assigned_to_root_now())
+     OR credit_branch_id = ANY ((SELECT app_my_subtree_branch_arr())::text[])
+     OR credit_manager_id = (SELECT app_current_user())
+     OR credit_id = ANY ((SELECT app_my_assigned_credit_arr())::text[])))
+  OR ((SELECT app_scope_mode()) = 'log' AND app_scope_log('credit_late_waivers', id, false))
+);
+
 -- Agenda: lo asignado a mí, o lo de un crédito que veo (la API usa lo primero sin `agenda:assign` y lo segundo con él).
 CREATE POLICY scope_agenda_items ON agenda_items AS RESTRICTIVE FOR SELECT TO kobrax_scoped USING (
   (SELECT app_scope_open())

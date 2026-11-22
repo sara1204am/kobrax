@@ -86,3 +86,5 @@ Cada paso se revisa contigo antes de pasar al siguiente de riesgo (F3-c).
 4. Pagos offline desde el móvil: la fecha de cobro la trae el dispositivo; se acota con `assertPaymentDate` (ya existe).
 
 **F3-a hecha 2026-11-21:** `accrueLateInterest` / `lateTrancheCharge` en `shared/utils/late-interest.ts` (BigInt, tramos, gracia, tope, corte sin retroceso, castigado) + 24 pruebas con 2 propiedades de 700 casos. P1–P6 aprobadas tal cual. Sin DB ni API. Sigue F3-b (migración `component` + `credit_late_waivers`).
+
+**F3-b hecha 2026-11-21 (solo esquema):** migración `20261121030000_late_interest_ledger` — `payment_applications.component` (SCHEDULED|LATE_INTEREST, único ampliado) + tabla `credit_late_waivers` (append-only, RLS por tenant y por alcance, copias de oficina/responsable por trigger). 8 pruebas de integración (`late-ledger.it.ts`). **El permiso `late_interest:waive` pasa a F3-d** (toca el catálogo F14 y solo lo usa el endpoint de exonerar). Además se cerró el pendiente de zona horaria en `credits.service` (create/update/markArrears/clearArrears/recalculate usan el día civil de la cuenta). Sigue F3-c (applyCore): el paso de riesgo.

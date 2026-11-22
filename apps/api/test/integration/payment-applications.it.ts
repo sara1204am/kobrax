@@ -12,6 +12,7 @@ import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { PrismaClient } from '@prisma/client';
 import { buildClientePayload, initialCliente } from '@kobrax/shared';
+import { civilTodayUTC, timezoneOf } from '../../src/common/context/tenant-clock.service';
 import { findPaymentIntegrityViolations } from '../../src/modules/payments/payment-integrity';
 import { API, appDb, call, db, freshDatabase, loginSkippingMfa, PASSWORD, startApi, stopApi, legalAcceptance } from './harness';
 
@@ -19,7 +20,12 @@ const suffix = randomUUID().slice(0, 8);
 let prisma: PrismaClient;
 let admin: string;
 
-const day = (n: number): string => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+/**
+ * «Hoy ± n» en el día CIVIL de la cuenta, no en UTC: con la fecha UTC, entre las 20:00 y la medianoche en Bolivia el servidor ya está en «mañana» y
+ * un crédito que «venció ayer» todavía no vencería para la cuenta (justo el desfase que corrige `accountToday`).
+ */
+let accountTz = 'UTC';
+const day = (n: number): string => new Date(civilTodayUTC(accountTz).getTime() + n * 86_400_000).toISOString().slice(0, 10);
 const n2 = (x: unknown): number => Math.round(Number(x) * 100) / 100;
 
 async function newClient(label: string): Promise<string> {
@@ -85,6 +91,7 @@ before(async () => {
   });
   assert.equal(res.status, 201, await res.text());
   admin = await loginSkippingMfa(email);
+  accountTz = timezoneOf(await prisma.account.findFirstOrThrow({ where: { businessName: `Cobranzas ${suffix}` }, select: { timezone: true, countryCode: true } }));
 });
 
 after(async () => {
