@@ -188,6 +188,15 @@
     "any": []
   },
   {
+    "route": "GET /accounts/me/late-policy",
+    "handler": "AccountsController.latePolicyOfMine",
+    "kind": "permissions",
+    "all": [
+      "account:read"
+    ],
+    "any": []
+  },
+  {
     "route": "GET /accounts/me/plan-history",
     "handler": "AccountsController.planHistory",
     "kind": "permissions",
@@ -2100,6 +2109,15 @@
       "route:execute",
       "route:write"
     ]
+  },
+  {
+    "route": "PUT /accounts/me/late-policy",
+    "handler": "AccountsController.changeLatePolicy",
+    "kind": "permissions",
+    "all": [
+      "account:write"
+    ],
+    "any": []
   },
   {
     "route": "PUT /arrear-categories",

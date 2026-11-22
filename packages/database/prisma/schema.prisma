@@ -2578,6 +2578,8 @@ model LatePolicyVersion {
   dayCount      Int?            @map("day_count") @db.SmallInt
   /// Días tras el vencimiento antes de que cuente la mora.
   graceDays     Int             @default(0) @map("grace_days") @db.SmallInt
+  /// Sólo `ANNUAL_RATE`, opcional (D5): tope acumulado del interés moratorio de una cuota, en % de su capital vencido. NULL = sin tope.
+  capPctOfPrincipal Decimal?    @map("cap_pct_of_principal") @db.Decimal(7, 4)
   effectiveFrom DateTime        @default(now()) @map("effective_from")
   createdBy     String?         @map("created_by")
   createdAt     DateTime        @default(now()) @map("created_at")

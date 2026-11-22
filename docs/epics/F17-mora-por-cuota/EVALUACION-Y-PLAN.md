@@ -118,3 +118,5 @@ Pendientes para F3: devengo por cuota (propiedad), idempotencia por tramo, concu
 - Activar crea una **nueva versión** de `late_policy_versions` (append-only); **solo aplica a créditos nuevos** o a los que se elijan explícitamente con fecha de inicio futura (D8). Nunca retroactivo.
 - Apagarlo crea otra versión `NONE`; los créditos ya sellados conservan su política.
 - **F2b y F3 se entregan como un solo flujo:** interruptor y parámetros (tasa anual, 360/365, gracia, tope) en la cuenta → sellado en el crédito → devengo → imputación de pagos → exoneración → visualización en Mora y Pagos. Sin la UI no se puede activar; sin F3 no hay efecto.
+
+**F2b hecha 2026-11-21 (sin F3):** GET/PUT `/accounts/me/late-policy` (LatePolicyService, versión nueva por cambio, candado advisory, auditoría `late_policy`), tope opcional `cap_pct_of_principal` (migración 20261121020000), pantalla en Cuenta → Cobranza (`late-policy-form.tsx`), apagada por defecto. Tests: unit API 7, integración 6 nuevos (base kobrax_it), web 7. Las 2 puertas nuevas están en authz-snapshot.json: **la usuaria debe aprobarlas**. Falta F3: devengo + imputación (applyCore) + exoneración + mostrar mora.

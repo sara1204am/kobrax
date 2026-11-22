@@ -89,3 +89,11 @@ export const workspaceBlocked = (blocks: { module: string; reason: string; count
     message: 'Hay módulos que todavía se usan en tu organización y no se pueden ocultar',
     details: { blocks },
   });
+
+/** La política de interés moratorio no es coherente (sin tasa, tasa fuera de rango, parámetros con «sin cargos»…). */
+export const latePolicyInvalid = (reason: string) =>
+  new BadRequestException({ code: 'LATE_POLICY_INVALID', message: 'La política de interés moratorio no es válida', details: { reason } });
+
+/** Dos administradores cambiaron la política a la vez: el segundo reintenta con lo que ya quedó guardado. */
+export const latePolicyConflict = () =>
+  new ConflictException({ code: 'LATE_POLICY_CONFLICT', message: 'La política cambió mientras la guardabas. Recarga y vuelve a intentarlo.' });

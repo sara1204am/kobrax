@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post, Put, Query, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { Permission } from '@kobrax/shared';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -6,9 +6,11 @@ import { RateLimit } from '../../common/decorators/rate-limit.decorator';
 import { AccountActivityService } from './account-activity.service';
 import { AccountRequestsService } from './account-requests.service';
 import { AccountsService } from './accounts.service';
+import { LatePolicyService } from './late-policy.service';
 import { OwnershipService } from './ownership.service';
 import { RetentionService } from './retention.service';
 import { UpdateAccountDto } from './dto/account.dto';
+import { UpdateLatePolicyDto } from './dto/late-policy.dto';
 import { CreateAccountRequestDto } from './dto/account-request.dto';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { TransferOwnershipDto } from './dto/transfer-ownership.dto';
@@ -29,6 +31,7 @@ export class AccountsController {
     private readonly ownership: OwnershipService,
     private readonly retention: RetentionService,
     private readonly emailVerification: EmailVerificationService,
+    private readonly latePolicy: LatePolicyService,
   ) {}
 
   /**
@@ -102,6 +105,20 @@ export class AccountsController {
   @RateLimit({ limit: 5, windowSec: 3600, by: 'ip' })
   transferOwnership(@Body() dto: TransferOwnershipDto) {
     return this.ownership.transfer(dto);
+  }
+
+  /** La política de interés moratorio vigente. Apagada (`NONE`) hasta que un administrador la active. */
+  @Get('me/late-policy')
+  @Roles(Permission.ACCOUNT_READ)
+  latePolicyOfMine() {
+    return this.latePolicy.current();
+  }
+
+  /** Cambia la política creando una versión nueva (nunca edita una anterior). Sólo aplica a los créditos que se creen después. */
+  @Put('me/late-policy')
+  @Roles(Permission.ACCOUNT_WRITE)
+  changeLatePolicy(@Body() dto: UpdateLatePolicyDto) {
+    return this.latePolicy.change(dto);
   }
 
   @Patch('me')

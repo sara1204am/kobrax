@@ -219,3 +219,66 @@ export interface PlanHistoryEntry {
   fromStatus: string | null;
   toStatus: string | null;
 }
+
+// ── Política de interés moratorio (F17 · F3) ────────────────────────────────────────────────────────────────────────────
+// Por defecto TODA cuenta está en `NONE` (sin cargos). Sólo se activa desde Configuración → Cuenta → Cobranza y cada cambio es una
+// VERSIÓN nueva e inmutable: los créditos ya creados conservan la política con la que nacieron (nada es retroactivo, D8).
+
+export const LATE_POLICY_KINDS = ['NONE', 'ANNUAL_RATE'] as const;
+export type LatePolicyKind = (typeof LATE_POLICY_KINDS)[number];
+
+/** Convenciones de días del año admitidas (D3): Actual/365 por defecto, 360 configurable. */
+export const LATE_POLICY_DAY_COUNTS = [365, 360] as const;
+export type LatePolicyDayCount = (typeof LATE_POLICY_DAY_COUNTS)[number];
+
+/**
+ * Límites de cordura (D5), no el tope legal: ése lo declara cada cuenta con su tasa y su tope por cuota. Existen para que un error de
+ * tecleo (180 en vez de 18) no genere cargos absurdos.
+ */
+export const LATE_POLICY_LIMITS = {
+  /** Tasa nominal anual máxima, en %. */
+  maxAnnualRate: 100,
+  /** Días de gracia máximos tras el vencimiento (D9). */
+  maxGraceDays: 90,
+  /** Tope acumulado máximo por cuota, en % de su capital vencido. */
+  maxCapPct: 100,
+} as const;
+
+/** La política vigente de la cuenta, tal como la lee la pantalla. */
+export interface LatePolicyInfo {
+  kind: LatePolicyKind;
+  /** % nominal anual (p. ej. 12). `null` con `NONE`. */
+  annualRate: number | null;
+  dayCount: LatePolicyDayCount | null;
+  graceDays: number;
+  /** Tope acumulado por cuota en % de su capital vencido; `null` = sin tope. */
+  capPctOfPrincipal: number | null;
+  /** Nº de versión de la cuenta (empieza en 1; la 1 siempre es «sin cargos»). */
+  version: number;
+  effectiveFrom: string;
+  /** Quién la dejó así; `null` en la versión inicial del sistema. */
+  createdByName: string | null;
+}
+
+/** Lo que se envía para cambiarla. Con `NONE` los demás campos no se aceptan. */
+export interface LatePolicyInput {
+  kind: LatePolicyKind;
+  annualRate?: number;
+  dayCount?: LatePolicyDayCount;
+  graceDays?: number;
+  capPctOfPrincipal?: number;
+}
+
+/** Valida una política en el cliente y en el servidor con la misma regla. Devuelve el código del primer problema o `null`. */
+export function validateLatePolicy(p: LatePolicyInput): 'RATE_REQUIRED' | 'RATE_RANGE' | 'DAYCOUNT' | 'GRACE_RANGE' | 'CAP_RANGE' | 'NONE_WITH_PARAMS' | null {
+  if (p.kind === 'NONE') {
+    return p.annualRate !== undefined || p.dayCount !== undefined || p.graceDays !== undefined || p.capPctOfPrincipal !== undefined ? 'NONE_WITH_PARAMS' : null;
+  }
+  if (p.annualRate === undefined || !Number.isFinite(p.annualRate)) return 'RATE_REQUIRED';
+  if (p.annualRate <= 0 || p.annualRate > LATE_POLICY_LIMITS.maxAnnualRate) return 'RATE_RANGE';
+  if (p.dayCount !== 360 && p.dayCount !== 365) return 'DAYCOUNT';
+  const grace = p.graceDays ?? 0;
+  if (!Number.isInteger(grace) || grace < 0 || grace > LATE_POLICY_LIMITS.maxGraceDays) return 'GRACE_RANGE';
+  if (p.capPctOfPrincipal !== undefined && (!Number.isFinite(p.capPctOfPrincipal) || p.capPctOfPrincipal <= 0 || p.capPctOfPrincipal > LATE_POLICY_LIMITS.maxCapPct)) return 'CAP_RANGE';
+  return null;
+}

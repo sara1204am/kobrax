@@ -157,3 +157,70 @@ describe('inmutabilidad y no-retroactividad', () => {
     await assert.rejects(prisma.latePolicyVersion.create({ data: { accountId, scope: 'ACCOUNT', version: 99, kind: 'NONE', annualRate: 12 } }), /late_policy_versions_kind_params|check/i);
   });
 });
+
+describe('activación desde la cuenta (GET/PUT /accounts/me/late-policy)', () => {
+  type Policy = { kind: string; annualRate: number | null; dayCount: number | null; graceDays: number; capPctOfPrincipal: number | null; version: number };
+  const sealedOf = async (creditId: string) => (await prisma.credit.findUniqueOrThrow({ where: { id: creditId }, include: { latePolicyVersion: true } })).latePolicyVersion!;
+  const versions = () => prisma.latePolicyVersion.count({ where: { accountId, scope: 'ACCOUNT' } });
+
+  it('🔴 por defecto la cuenta está APAGADA: sin cargos', async () => {
+    const res = await call<Policy>(admin, 'GET', '/accounts/me/late-policy');
+    assert.equal(res.status, 200, JSON.stringify(res.error));
+    assert.equal(res.data!.kind, 'NONE');
+    assert.equal(res.data!.annualRate, null);
+  });
+
+  it('🔴 activarla crea una versión, queda auditada y SOLO la toman los créditos creados después', async () => {
+    const existing = await newCredit();
+    const existingSealed = await sealedOf(existing);
+    const count = await versions();
+
+    const res = await call<Policy>(admin, 'PUT', '/accounts/me/late-policy', { kind: 'ANNUAL_RATE', annualRate: 18, dayCount: 365, graceDays: 2, capPctOfPrincipal: 30 });
+    assert.equal(res.status, 200, JSON.stringify(res.error));
+    assert.equal(res.data!.kind, 'ANNUAL_RATE');
+    assert.equal(Number(res.data!.annualRate), 18);
+    assert.equal(await versions(), count + 1);
+
+    // el crédito que ya existía conserva su política «sin cargos»
+    assert.equal((await sealedOf(existing)).id, existingSealed.id);
+    assert.equal((await sealedOf(existing)).kind, 'NONE');
+    // el crédito nuevo nace con la activa
+    const created = await sealedOf(await newCredit());
+    assert.equal(created.kind, 'ANNUAL_RATE');
+    assert.equal(Number(created.annualRate), 18);
+    assert.equal(Number(created.capPctOfPrincipal), 30);
+
+    const audit = await prisma.auditLog.findFirst({ where: { accountId, entity: 'late_policy', action: 'CREATE' }, orderBy: { createdAt: 'desc' } });
+    assert.ok(audit, 'el cambio deja su rastro');
+  });
+
+  it('guardar lo mismo no crea otra versión (idempotente)', async () => {
+    const count = await versions();
+    const res = await call<Policy>(admin, 'PUT', '/accounts/me/late-policy', { kind: 'ANNUAL_RATE', annualRate: 18, dayCount: 365, graceDays: 2, capPctOfPrincipal: 30 });
+    assert.equal(res.status, 200, JSON.stringify(res.error));
+    assert.equal(await versions(), count);
+  });
+
+  it('una política incoherente o fuera de rango se rechaza y no escribe nada', async () => {
+    const count = await versions();
+    assert.equal((await call(admin, 'PUT', '/accounts/me/late-policy', { kind: 'ANNUAL_RATE', dayCount: 365 })).status, 400);
+    assert.equal((await call(admin, 'PUT', '/accounts/me/late-policy', { kind: 'ANNUAL_RATE', annualRate: 500, dayCount: 365 })).status, 400);
+    assert.equal((await call(admin, 'PUT', '/accounts/me/late-policy', { kind: 'NONE', annualRate: 5 })).status, 400);
+    assert.equal(await versions(), count);
+  });
+
+  it('el tope por cuota sólo vale con interés anual (restricción de la tabla)', async () => {
+    await assert.rejects(prisma.latePolicyVersion.create({ data: { accountId, scope: 'ACCOUNT', version: 98, kind: 'NONE', capPctOfPrincipal: 10 } }), /late_policy_versions_cap|check/i);
+  });
+
+  it('apagarla de nuevo crea una versión «sin cargos» y los créditos ya sellados con interés lo conservan', async () => {
+    const withRate = await newCredit();
+    assert.equal((await sealedOf(withRate)).kind, 'ANNUAL_RATE');
+
+    const res = await call<Policy>(admin, 'PUT', '/accounts/me/late-policy', { kind: 'NONE' });
+    assert.equal(res.status, 200, JSON.stringify(res.error));
+    assert.equal(res.data!.kind, 'NONE');
+    assert.equal((await sealedOf(withRate)).kind, 'ANNUAL_RATE', 'apagar no es retroactivo');
+    assert.equal((await sealedOf(await newCredit())).kind, 'NONE');
+  });
+});
