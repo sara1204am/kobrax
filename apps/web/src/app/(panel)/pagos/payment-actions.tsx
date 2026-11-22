@@ -24,7 +24,7 @@ function toPaymentCredit(c: CreditDetail): PaymentCredit {
     code: c.code,
     suggestedAmount: c.suggestedPaymentAmount,
     external: c.locked,
-    balance: c.outstandingBalance,
+    balance: Math.round((c.outstandingBalance + (c.lateInterest?.pending ?? 0)) * 100) / 100,
     currency: c.currency,
   };
 }

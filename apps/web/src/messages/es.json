@@ -3365,6 +3365,31 @@
     "upgradeTop": "{plan} se arma a medida.",
     "upgradeHow": "El cambio de plan lo hacemos nosotros: escríbenos y queda activo el mismo día."
   },
+  "lateInterest": {
+    "title": "Interés moratorio",
+    "accrued": "Devengado",
+    "collected": "Cobrado",
+    "waived": "Exonerado",
+    "pending": "Pendiente",
+    "installment": "Cuota",
+    "dueDate": "Vence",
+    "none": "Todavía no se devengó interés moratorio.",
+    "basis": "Tasa {rate} % anual · base {days} días · gracia {grace} días. Se calcula sobre el capital vencido pendiente de cada cuota y se cobra antes que la cuota.",
+    "waive": {
+      "cta": "Exonerar mora",
+      "title": "Exonerar interés moratorio",
+      "text": "Perdonas mora ya devengada de una cuota. No se puede deshacer: queda registrada con tu nombre, el motivo y la fecha.",
+      "installment": "Cuota",
+      "amount": "Monto a exonerar",
+      "exceeds": "No puede superar la mora pendiente de la cuota ({max}).",
+      "reason": "Motivo",
+      "reasonHint": "Obligatorio. Por ejemplo: convenio de pago, error de la oficina.",
+      "cancel": "Cancelar",
+      "confirm": "Exonerar",
+      "done": "Mora exonerada.",
+      "failed": "No se pudo exonerar la mora."
+    }
+  },
   "portfolio": {
     "risk": {
       "none": "Sin definir",
@@ -5024,6 +5049,10 @@
     "client_create": {
       "name": "Dar de alta clientes",
       "description": "Registrar clientes nuevos."
+    },
+    "payment_waive_late": {
+      "name": "Exonerar interés moratorio",
+      "description": "Perdonar interés moratorio ya devengado de un crédito, con un motivo que queda en la auditoría."
     },
     "client_delete": {
       "name": "Eliminar clientes",

@@ -41,6 +41,7 @@ import { serializeNote } from './mora-notes';
 import { serializePromises } from './mora-promises';
 import { serializeMoraCredit, type MoraCreditRow } from './mora.serializer';
 import { loadCreditPlan } from '../credits/credit-plan';
+import { lateSummaryOfCredit } from '../payments/late-summary';
 import { AuthorizationService } from '../../common/authz/authorization.service';
 
 /** Lo que se le dice a quien registra una gestión inválida (el panel valida antes con la misma regla). */
@@ -216,16 +217,18 @@ export class MoraService {
       const own = await tx.credit.findUnique({ where: { id: creditId }, include: { installments: true } });
       // El MISMO plan actualizado que la ficha de Cartera (una sola función, lo persistido): vencido, próximo pago y desglose por pago.
       const plan = own ? await loadCreditPlan(tx, this.tenant.accountId, own, await accountToday(tx, this.tenant.accountId)) : null;
+      const lateInterest = own?.latePolicyVersionId ? await lateSummaryOfCredit(tx, this.tenant.accountId, creditId) : null;
       return {
         ...item,
         payerParty: own?.payerParty ?? undefined,
         plan: plan ?? undefined,
+        lateInterest,
         // Con plan, lo vencido y el monto con que arranca el pago son los del plan actualizado (los mismos números que Cartera), no una cuenta aparte.
         ...(plan
           ? {
               overdueAmount: plan.overdueAmount,
               overdueSource: 'SCHEDULE' as const,
-              ...(plan.nextPayment ? { suggestedPaymentAmount: Math.min(plan.nextPayment.amount, Number(own?.outstandingBalance ?? plan.nextPayment.amount)) } : {}),
+              ...(plan.nextPayment ? { suggestedPaymentAmount: Math.round((Math.min(plan.nextPayment.amount, Number(own?.outstandingBalance ?? plan.nextPayment.amount)) + (lateInterest?.pending ?? 0)) * 100) / 100 } : {}),
             }
           : {}),
         responsibleName: names.get(item.responsibleId ?? '') ?? undefined,

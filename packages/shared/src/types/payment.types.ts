@@ -11,6 +11,27 @@
 import type { PaymentMethod } from '../constants/kobrax.constants.js';
 import type { PaymentRequestStatus } from '../enums/index.js';
 
+/** El interés moratorio de un crédito a hoy (F17): reproducido de los hechos en la API, nunca calculado en pantalla. */
+export interface LateInterestInstallment {
+  installmentNumber: number;
+  dueDate: string;
+  accrued: number;
+  collected: number;
+  waived: number;
+  pending: number;
+}
+
+export interface LateInterestView {
+  asOf: string;
+  accrued: number;
+  collected: number;
+  waived: number;
+  /** Lo que falta cobrar de mora: devengado − cobrado − exonerado. Va APARTE del saldo del plan. */
+  pending: number;
+  installments: LateInterestInstallment[];
+  policy: { annualRate: number; dayCount: 360 | 365; graceDays: number; capPctOfPrincipal: number | null };
+}
+
 /**
  * Quién recibió la plata (D3). `PaymentMethod` es el medio; esto es el canal: la cobró Kobrax, o el
  * deudor pagó por un canal de la entidad y el cobrador lo confirmó. Los dos cuentan como recuperado.
@@ -135,6 +156,8 @@ export interface CreditPaymentsView {
     situation: 'CURRENT' | 'OVERDUE' | 'PAID';
     nextPayment: { number: number; dueDate: string; amount: number; overdue: boolean } | null;
   } | null;
+  /** Interés moratorio del crédito. `null`/ausente = no devenga (la cuenta lo tenía apagado cuando nació). */
+  lateInterest?: LateInterestView | null;
   /** Del más reciente al más antiguo. */
   payments: CreditPaymentItem[];
 }

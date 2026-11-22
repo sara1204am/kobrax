@@ -29,6 +29,7 @@ export const PERMISSION_META: Record<Permission, PermissionMeta> = {
   [P.PAYMENT_READ]: { risk: 'LOW' },
   [P.PAYMENT_WRITE]: { risk: 'MEDIUM', requires: [P.PAYMENT_READ] },
   [P.PAYMENT_APPROVE]: { risk: 'HIGH', requires: [P.PAYMENT_READ] },
+  [P.PAYMENT_WAIVE_LATE]: { risk: 'HIGH', requires: [P.PAYMENT_READ] },
 
   [P.ROUTE_READ]: { risk: 'LOW' },
   [P.ROUTE_WRITE]: { risk: 'MEDIUM', requires: [P.ROUTE_READ] },

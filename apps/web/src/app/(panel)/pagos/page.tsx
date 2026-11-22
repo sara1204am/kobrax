@@ -68,7 +68,7 @@ export default async function PagosPage({ searchParams }: { searchParams: Paymen
         code: detail?.code,
         suggestedAmount: detail?.suggestedPaymentAmount,
         external: detail?.locked,
-        balance: detail?.outstandingBalance,
+        balance: detail ? Math.round((detail.outstandingBalance + (detail.lateInterest?.pending ?? 0)) * 100) / 100 : undefined,
         currency: detail?.currency,
       }
     : undefined;

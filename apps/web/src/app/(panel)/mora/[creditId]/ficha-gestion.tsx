@@ -34,6 +34,7 @@ import { ArrearsHistory } from './arrears-history';
 import { FichaSummary } from './ficha-summary';
 import { PayerEditor } from './payer-editor';
 import { NotesSection } from './notes-section';
+import { LateInterestSection } from '@/components/late-interest-section';
 import { OverdueInstallmentsSection } from './overdue-installments-section';
 import { PaymentsSection } from './payments-section';
 import { PersonSections } from './person-sections';
@@ -164,7 +165,7 @@ export async function FichaGestion({
           code: item.code,
           suggestedAmount: item.suggestedPaymentAmount,
           external: !!item.externalSource,
-          balance: item.balance,
+          balance: item.balance === undefined ? undefined : Math.round((item.balance + (item.lateInterest?.pending ?? 0)) * 100) / 100,
           currency: item.currency,
         }}
       />
@@ -284,6 +285,7 @@ export async function FichaGestion({
 
           {/* Cuotas vencidas, cada una con SUS días: la mora es por cuota. Mismo plan que Cartera. */}
           <OverdueInstallmentsSection plan={item.plan} currency={currency} />
+          <LateInterestSection creditId={item.creditId} currency={currency} lateInterest={item.lateInterest} />
 
           <PaymentsSection
             creditId={item.creditId}

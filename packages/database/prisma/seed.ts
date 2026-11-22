@@ -75,6 +75,7 @@ const PERMISSIONS: PermRow[] = [
   ['payment:read', 'payments', 'READ', 'ACCOUNT'],
   ['payment:write', 'payments', 'CREATE', 'OWN'],
   ['payment:approve', 'payments', 'APPROVE', 'ACCOUNT'],
+  ['payment:waive_late', 'payments', 'EXECUTE', 'ACCOUNT'],
   ['route:read', 'routes', 'READ', 'ACCOUNT'],
   ['route:write', 'routes', 'UPDATE', 'BRANCH'],
   ['route:assign', 'routes', 'UPDATE', 'BRANCH'],

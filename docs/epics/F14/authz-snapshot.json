@@ -478,6 +478,15 @@
     "any": []
   },
   {
+    "route": "GET /credits/:creditId/late-interest",
+    "handler": "PaymentsController.lateOf",
+    "kind": "permissions",
+    "all": [
+      "payment:read"
+    ],
+    "any": []
+  },
+  {
     "route": "GET /credits/:creditId/payments",
     "handler": "PaymentsController.forCredit",
     "kind": "permissions",
@@ -1681,6 +1690,15 @@
     "kind": "permissions",
     "all": [
       "client:create"
+    ],
+    "any": []
+  },
+  {
+    "route": "POST /credits/:creditId/late-interest/waivers",
+    "handler": "PaymentsController.waiveLate",
+    "kind": "permissions",
+    "all": [
+      "payment:waive_late"
     ],
     "any": []
   },

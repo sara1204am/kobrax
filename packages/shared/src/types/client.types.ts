@@ -6,6 +6,7 @@
  * (Prisma) escritos como uniones, no como enums propios: son el contrato del DTO.
  */
 import type { UpdatedPlan } from '../utils/payment-plan.js';
+import type { LateInterestView } from './payment.types.js';
 import type { ArrearsMethod, CreditOrigin, ExternalSyncStatus, EffectiveBalanceBasis, InterestBase, PaymentFrequency } from '../enums/credit.enum.js';
 import type { CreditTerms } from '../utils/credit-engine.js';
 import type { CreditInitialState } from '../utils/credit-edit.js';
@@ -522,6 +523,8 @@ export interface CreditDetail {
    * fuente para Cartera y Mora. Ausente sin plan (préstamo abierto) y en operaciones de una fuente externa. Sólo en `GET /credits/:id`.
    */
   plan?: UpdatedPlan;
+  /** F17: interés moratorio a hoy. `null`/ausente = el crédito no devenga. Sólo en `GET /credits/:id`. */
+  lateInterest?: LateInterestView | null;
   /**
    * La política de mora con que nació el crédito (versión SELLADA, inmutable): `NONE` = sin cargos adicionales, sólo se mide el atraso.
    * Un cambio posterior de la política de la cuenta no la modifica. Sólo en `GET /credits/:id`.

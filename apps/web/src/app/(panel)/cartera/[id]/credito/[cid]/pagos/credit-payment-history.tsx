@@ -1,6 +1,7 @@
 import { useLocale, useTranslations } from 'next-intl';
 import type { CreditPaymentsView } from '@kobrax/shared';
 import { Badge, Section } from '@/components/panel-ui';
+import { LateInterestSection } from '@/components/late-interest-section';
 import { date, dayDate, money } from '@/lib/format';
 
 /**
@@ -38,6 +39,11 @@ export function CreditPaymentHistory({ view }: { view: CreditPaymentsView }) {
         </dl>
       )}
       {!plan && <p className="mb-4 text-k-sm text-k-muted">{t('noPlan')}</p>}
+      {view.lateInterest && (
+        <div className="mb-6">
+          <LateInterestSection creditId={view.creditId} currency={cur} lateInterest={view.lateInterest} />
+        </div>
+      )}
 
       <Section title={t('title')}>
         {view.payments.length === 0 ? (

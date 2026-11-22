@@ -202,3 +202,66 @@ describe('con la política activada desde Cuenta → Cobranza', () => {
     assert.ok(found.some((v) => v.kind === 'LATE_INTEREST_EXCEEDS_ACCRUED' && v.installmentNumber === 3));
   });
 });
+
+describe('exoneración y lectura de la mora (F17 · F3-d)', () => {
+  type Late = { pending: number; accrued: number; collected: number; waived: number; installments: { installmentNumber: number; pending: number }[] } | null;
+  const lateOf = async (id: string) => (await call<Late>(admin, 'GET', `/credits/${id}/late-interest`)).data;
+
+  it('un crédito SIN política sellada no devenga: la lectura es null y no se puede exonerar', async () => {
+    assert.equal(await lateOf(legacy), null);
+    const res = await call(admin, 'POST', `/credits/${legacy}/late-interest/waivers`, { installmentNumber: 1, amount: 1, reason: 'Convenio' });
+    assert.equal(res.status, 400);
+  });
+
+  it('con política sellada, la lectura trae lo devengado y pendiente por cuota; la ficha y el historial de pagos lo traen igual', async () => {
+    const c = await newCredit(-10);
+    const late = expectedLate(10);
+    const s = await lateOf(c);
+    assert.equal(s!.pending, late);
+    assert.equal(s!.installments[0]!.installmentNumber, 1);
+    const detail = await call<{ lateInterest: Late }>(admin, 'GET', `/credits/${c}`);
+    assert.equal(detail.data!.lateInterest!.pending, late);
+    const history = await call<{ lateInterest: Late }>(admin, 'GET', `/credits/${c}/payments`);
+    assert.equal(history.data!.lateInterest!.pending, late);
+  });
+
+  it('🔴 exonerar exige motivo y no puede pasar de la mora pendiente de esa cuota', async () => {
+    const c = await newCredit(-10);
+    const late = expectedLate(10);
+    const url = `/credits/${c}/late-interest/waivers`;
+    assert.equal((await call(admin, 'POST', url, { installmentNumber: 1, amount: 1 })).status, 400);
+    assert.equal((await call(admin, 'POST', url, { installmentNumber: 1, amount: 1, reason: '  ' })).status, 400);
+    assert.equal((await call(admin, 'POST', url, { installmentNumber: 1, amount: n2(late + 1), reason: 'Convenio' })).status, 400);
+    assert.equal((await call(admin, 'POST', url, { installmentNumber: 2, amount: 1, reason: 'Convenio' })).status, 400); // la cuota 2 no tiene mora
+    assert.equal(await prisma.creditLateWaiver.count({ where: { creditId: c } }), 0);
+  });
+
+  it('🔴 una exoneración parcial queda como hecho con motivo y autor, se audita, y el próximo pago cobra sólo lo que falta de mora', async () => {
+    const c = await newCredit(-10);
+    const late = expectedLate(10);
+    const part = n2(late / 2);
+    const res = await call<{ pendingAfter: number }>(admin, 'POST', `/credits/${c}/late-interest/waivers`, { installmentNumber: 1, amount: part, reason: 'Cliente en convenio' });
+    assert.equal(res.status, 201, JSON.stringify(res.error));
+    assert.equal(res.data!.pendingAfter, n2(late - part));
+    const w = await prisma.creditLateWaiver.findFirstOrThrow({ where: { creditId: c } });
+    assert.equal(w.reason, 'Cliente en convenio');
+    assert.ok(w.createdBy);
+    assert.equal(await prisma.auditLog.count({ where: { accountId, entity: 'credit_late_waiver', entityId: w.id } }), 1);
+    assert.equal((await lateOf(c))!.waived, part);
+
+    assert.equal((await pay(c, 500)).status, 201);
+    assert.equal(sum(await rows(c), 'LATE_INTEREST'), n2(late - part));
+    assert.deepEqual(await findPaymentIntegrityViolations(prisma, accountId, { creditId: c }), []);
+  });
+
+  it('exonerar TODA la mora: el próximo pago va entero a la cuota', async () => {
+    const c = await newCredit(-10);
+    const late = expectedLate(10);
+    assert.equal((await call(admin, 'POST', `/credits/${c}/late-interest/waivers`, { installmentNumber: 1, amount: late, reason: 'Perdón total' })).status, 201);
+    assert.equal((await lateOf(c))!.pending, 0);
+    assert.equal((await pay(c, 100)).status, 201);
+    const r = await rows(c);
+    assert.equal(sum(r, 'LATE_INTEREST'), 0);
+    assert.equal(sum(r, 'SCHEDULED'), 100);
+  });
+});

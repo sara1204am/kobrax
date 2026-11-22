@@ -3,12 +3,13 @@ import { AuthModule } from '../auth/auth.module';
 import { AuditModule } from '../../common/audit/audit.module';
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
+import { LateInterestService } from './late-interest.service';
 import { PaymentIntegrityService } from './payment-integrity.service';
 
 /** Módulo de pagos (RF-09, CU-05): ledger inmutable + aplicación a la deuda + cobro digital. */
 @Module({
   imports: [AuthModule, AuditModule],
   controllers: [PaymentsController],
-  providers: [PaymentsService, PaymentIntegrityService],
+  providers: [PaymentsService, PaymentIntegrityService, LateInterestService],
 })
 export class PaymentsModule {}

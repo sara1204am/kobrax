@@ -56,6 +56,7 @@ import {
 } from './credit-math';
 import { serializeCredit, type CreditMoraContext } from './credits.serializer';
 import { loadCreditPlan } from './credit-plan';
+import { lateSummaryOfCredit, type LateSummary } from '../payments/late-summary';
 import { ClearArrearsDto, CreateCreditDto, ListCreditsQueryDto, ReassignOfficeDto, UpdateCreditDto } from './dto/credit.dto';
 import {
   arrearsDateNotFuture,
@@ -415,7 +416,7 @@ export class CreditsService {
   }
 
   // D-7: la ficha respeta el mismo alcance que el listado: un crédito fuera de él es 404, como si no existiera.
-  async findOne(id: string): Promise<ReturnType<typeof serializeCredit>> {
+  async findOne(id: string): Promise<ReturnType<typeof serializeCredit> & { lateInterest: LateSummary | null }> {
     const config = await this.accountConfig();
     const found = await this.tx(async (tx) => {
       const credit = await tx.credit.findFirst({
@@ -431,14 +432,20 @@ export class CreditsService {
       ]);
       // El plan actualizado sale de lo persistido (aplicaciones de los pagos): la misma fuente que la ficha de Mora.
       const plan = await loadCreditPlan(tx, this.tenant.accountId, credit, await accountToday(tx, this.tenant.accountId));
-      return { credit, open, categories, plan };
+      const lateInterest = credit.latePolicyVersionId ? await lateSummaryOfCredit(tx, this.tenant.accountId, id) : null;
+      return { credit, open, categories, plan, lateInterest };
     });
     if (!found) throw resourceNotFound();
     const mora: CreditMoraContext = {
       hasOpenEpisode: found.open > 0,
       categories: found.categories.map((r) => ({ code: r.code, name: r.name, color: r.color, fromDays: r.fromDays, toDays: r.toDays })),
     };
-    return serializeCredit(found.credit, config.labels, config.staleAfterDays, mora, found.plan);
+    // F17: interés moratorio (devengado / cobrado / exonerado / pendiente). `null` = el crédito no devenga.
+    const view = serializeCredit(found.credit, config.labels, config.staleAfterDays, mora, found.plan);
+    // El monto sugerido para cobrar incluye la mora pendiente (se cobra primero): sin esto el cobrador dejaría mora sin cobrar sin saberlo.
+    const late = found.lateInterest?.pending ?? 0;
+    const suggested = late > 0 && view.suggestedPaymentAmount !== undefined ? Math.round((view.suggestedPaymentAmount + late) * 100) / 100 : view.suggestedPaymentAmount;
+    return { ...view, suggestedPaymentAmount: suggested, lateInterest: found.lateInterest };
   }
 
   async getSchedule(id: string) {

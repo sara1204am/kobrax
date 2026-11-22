@@ -3365,6 +3365,31 @@
     "upgradeTop": "{plan} is tailored to you.",
     "upgradeHow": "We change the plan for you: write to us and it is active the same day."
   },
+  "lateInterest": {
+    "title": "Late interest",
+    "accrued": "Accrued",
+    "collected": "Collected",
+    "waived": "Waived",
+    "pending": "Pending",
+    "installment": "Installment",
+    "dueDate": "Due",
+    "none": "No late interest has accrued yet.",
+    "basis": "{rate}% annual rate · {days}-day basis · {grace} grace days. Charged on each installment's overdue principal and collected before the installment itself.",
+    "waive": {
+      "cta": "Waive late interest",
+      "title": "Waive late interest",
+      "text": "You forgive late interest already accrued on one installment. It cannot be undone: it is recorded with your name, the reason and the date.",
+      "installment": "Installment",
+      "amount": "Amount to waive",
+      "exceeds": "It cannot exceed the installment's pending late interest ({max}).",
+      "reason": "Reason",
+      "reasonHint": "Required. For example: payment agreement, office error.",
+      "cancel": "Cancel",
+      "confirm": "Waive",
+      "done": "Late interest waived.",
+      "failed": "Could not waive the late interest."
+    }
+  },
   "portfolio": {
     "risk": {
       "none": "Not set",
@@ -5024,6 +5049,10 @@
     "client_create": {
       "name": "Create clients",
       "description": "Register new clients."
+    },
+    "payment_waive_late": {
+      "name": "Waive late interest",
+      "description": "Forgive late interest already accrued on a credit, with a reason that stays in the audit trail."
     },
     "client_delete": {
       "name": "Delete clients",

@@ -11,6 +11,7 @@ import { EventBusService, DomainEvent } from '../../common/events/event-bus.serv
 import { creditPatchAfterPayment, creditPatchFromPlan, planSourceOf } from './payment-apply';
 import { settlePromisesFromPayments } from './settle-promises';
 import { lateParamsOf, loadLateContext } from './late-context';
+import { lateSummaryOfCredit } from './late-summary';
 import { loadNames } from '../mora/mora-names';
 import { moraScopeOf, seesWholeAccount, visibleCreditIdsSql } from '../mora/mora-query';
 import { serializePayment, serializePaymentRequest } from './payments.serializer';
@@ -442,7 +443,8 @@ export class PaymentsService {
         accountToday(tx, this.tenant.accountId).then((today) => loadCreditPlan(tx, this.tenant.accountId, credit, today)),
       ]);
       const names = await loadNames(tx, this.tenant.accountId, payments.map((p) => p.registeredBy));
-      return { credit, payments, plan, names };
+      const lateInterest = credit.latePolicyVersionId ? await lateSummaryOfCredit(tx, this.tenant.accountId, creditId) : null;
+      return { credit, payments, plan, names, lateInterest };
     });
     if (!out) throw resourceNotFound();
     const byPayment = new Map((out.plan?.payments ?? []).map((b) => [b.paymentId, b]));
@@ -451,6 +453,8 @@ export class PaymentsService {
       code: out.credit.code ?? undefined,
       clientId: out.credit.clientId,
       currency: out.credit.currency,
+      // F17: interés moratorio del crédito (línea aparte del plan, P5). `null` = no devenga.
+      lateInterest: out.lateInterest,
       // `null` = sin plan (préstamo abierto) o una operación de una fuente externa: se listan los pagos sin imputación.
       plan: out.plan
         ? {

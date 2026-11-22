@@ -10,6 +10,7 @@
  * inventado haría pasar un dato desconocido por uno conocido.
  */
 import type { UpdatedPlan } from '../utils/payment-plan.js';
+import type { LateInterestView } from './payment.types.js';
 import type { ArrearsSource, ExternalSyncStatus } from '../enums/credit.enum.js';
 import type { CollectionPriority, CreditAssignmentKind, MoraSituation } from './sin-caso.types.js';
 import type { CreditOrigin, PaymentFrequency } from '../enums/credit.enum.js';
@@ -173,6 +174,8 @@ export interface MoraCreditDetail extends MoraCreditListItem {
   assignments: MoraAssignment[];
   /** El MISMO plan actualizado que Cartera (`CreditDetail.plan`): vencido, próximo pago y desglose por pago. */
   plan?: UpdatedPlan;
+  /** F17: interés moratorio a hoy. `null`/ausente = el crédito no devenga. */
+  lateInterest?: LateInterestView | null;
 }
 
 /** Cómo terminó una mora. `SOURCE_ABSENT` NO es una recuperación: sólo dice que la fuente dejó de reportarla. */

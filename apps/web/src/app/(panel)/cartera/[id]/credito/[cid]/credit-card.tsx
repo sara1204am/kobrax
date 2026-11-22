@@ -215,7 +215,7 @@ export function CreditCard({
           code: credit.code,
           suggestedAmount: credit.suggestedPaymentAmount,
           external: credit.locked,
-          balance: credit.outstandingBalance,
+          balance: Math.round((credit.outstandingBalance + (credit.lateInterest?.pending ?? 0)) * 100) / 100,
           currency: credit.currency,
         }}
       />
