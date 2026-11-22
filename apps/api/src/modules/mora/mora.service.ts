@@ -33,7 +33,7 @@ import { agendaNotSchedulable } from '../agenda/agenda.errors';
 import { ArrearsPriorityService } from '../arrears/arrears-priority.service';
 import type { CreateMoraActivityDto, CreateMoraNoteDto, ListMoraQueryDto, SetMoraPayerDto, SetMoraPriorityDto, UpdateMoraNoteDto } from './dto/mora.dto';
 import { activityPeople, recordCreditActivity, serializeCreditActivity } from './credit-activity';
-import { civilDayStartInstant, civilTodayUTC, timezoneOf } from '../../common/context/tenant-clock.service';
+import { accountToday, civilDayStartInstant, civilTodayUTC, timezoneOf } from '../../common/context/tenant-clock.service';
 import { loadNames, type NameMap } from './mora-names';
 import { buildMoraOrder, buildMoraWhere, MORA_ACCESS_FROM, MORA_FROM, moraAccessConditions, moraScopeOf, type MoraCategoryRange, type MoraScope } from './mora-query';
 import { serializeEpisodes } from './mora-episodes';
@@ -215,7 +215,7 @@ export class MoraService {
       const names = await this.names(tx, [item.responsibleId, ...activities.flatMap(activityPeople), ...assignments.map((a) => a.userId)]);
       const own = await tx.credit.findUnique({ where: { id: creditId }, include: { installments: true } });
       // El MISMO plan actualizado que la ficha de Cartera (una sola función, lo persistido): vencido, próximo pago y desglose por pago.
-      const plan = own ? await loadCreditPlan(tx, this.tenant.accountId, own) : null;
+      const plan = own ? await loadCreditPlan(tx, this.tenant.accountId, own, await accountToday(tx, this.tenant.accountId)) : null;
       return {
         ...item,
         payerParty: own?.payerParty ?? undefined,

@@ -109,6 +109,20 @@ export function civilDayStartInstant(day: string, tz: string): Date {
   }
 }
 
+/**
+ * El día civil de HOY de una cuenta (ancla UTC de medianoche), leído dentro de la transacción del tenant. Es el `asOf` de todo cálculo
+ * de días de atraso con dinero (plan actualizado, mora, devengo): contar con el instante UTC corre el día en las noches de América
+ * (en Bolivia, desde las 20:00 el servidor ya está en «mañana») y con interés por día eso es un cargo erróneo.
+ */
+export async function accountToday(
+  tx: { account: { findFirst: (args: { where: { id: string }; select: { timezone: true; countryCode: true } }) => Promise<{ timezone: string | null; countryCode: string | null } | null> } },
+  accountId: string,
+  now: Date = new Date(),
+): Promise<Date> {
+  const account = await tx.account.findFirst({ where: { id: accountId }, select: { timezone: true, countryCode: true } });
+  return civilTodayUTC(timezoneOf(account), now);
+}
+
 /** Minutos transcurridos desde la medianoche civil de `tz` (0–1439). Con una zona inválida cae a UTC. */
 export function wallMinutesNow(tz: string, now: Date = new Date()): number {
   try {

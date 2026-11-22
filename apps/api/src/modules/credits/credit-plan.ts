@@ -18,7 +18,8 @@ export async function loadCreditPlan(
   tx: Pick<PrismaClient, 'paymentApplication' | 'payment'>,
   accountId: string,
   credit: { id: string; metadata: unknown; origin?: string | null; installments: CreditInstallment[] },
-  asOf: Date = new Date(),
+  /** «Hoy» del tenant (`accountToday`): nunca el instante UTC, que corre el día. */
+  asOf: Date,
 ): Promise<UpdatedPlan | null> {
   if (isExternalOrigin(readCreditMetadata(credit.metadata, credit.origin).origin)) return null;
   const source = planSourceOf(credit);

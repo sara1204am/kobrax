@@ -5,7 +5,7 @@ import { CreditStatus, InstallmentStatus, Prisma } from '@prisma/client';
 import { PAYMENT_BACKDATE_DAYS, allocatePayments, buildUpdatedPlan, isExternalOrigin, readCreditMetadata, resolvePagination, type ApiResponse, ResponseDto } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
-import { TenantClockService, civilDayStartInstant, civilMonthStartUTC, civilTodayUTC } from '../../common/context/tenant-clock.service';
+import { TenantClockService, accountToday, civilDayStartInstant, civilMonthStartUTC, civilTodayUTC } from '../../common/context/tenant-clock.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { EventBusService, DomainEvent } from '../../common/events/event-bus.service';
 import { creditPatchAfterPayment, creditPatchFromPlan, planSourceOf } from './payment-apply';
@@ -184,6 +184,8 @@ export class PaymentsService {
 
     // El pago SIEMPRE descuenta el saldo (spec §5.4). El plan dice a qué cuota imputar, no cuánto vale el pago.
     const now = new Date();
+    // Los días de atraso se cuentan contra el día civil de la cuenta, no contra el instante UTC (`now` queda para `paidAt`).
+    const today = await accountToday(tx, this.tenant.accountId, now);
     const newBalance = round2(Math.max(0, balance - p.amount));
     const creditPaid = newBalance <= 0.005;
 
@@ -225,7 +227,7 @@ export class PaymentsService {
           })),
         });
       }
-      const plan = buildUpdatedPlan({ rows: source.rows, prepaidInstallments: source.prepaidInstallments, priorPaid: covered, allocations: fresh, asOf: now });
+      const plan = buildUpdatedPlan({ rows: source.rows, prepaidInstallments: source.prepaidInstallments, priorPaid: covered, allocations: fresh, asOf: today });
 
       // Cronograma guardado: las filas son una COPIA de lectura del plan actualizado (el estado sale de las aplicaciones).
       if (source.stored) {
@@ -245,7 +247,7 @@ export class PaymentsService {
         data: {
           outstandingBalance: newBalance,
           ...(creditPaid ? { status: CreditStatus.PAID } : {}),
-          ...creditPatchFromPlan({ metadata: credit.metadata, plan, creditPaid, now }),
+          ...creditPatchFromPlan({ metadata: credit.metadata, plan, creditPaid, now: today }),
         },
       });
     } else {
@@ -255,7 +257,7 @@ export class PaymentsService {
         data: {
           outstandingBalance: newBalance,
           ...(creditPaid ? { status: CreditStatus.PAID } : {}),
-          ...creditPatchAfterPayment({ metadata: credit.metadata, installments: [], amount: p.amount, newBalance, creditPaid, now }),
+          ...creditPatchAfterPayment({ metadata: credit.metadata, installments: [], amount: p.amount, newBalance, creditPaid, now: today }),
         },
       });
     }
@@ -406,7 +408,7 @@ export class PaymentsService {
       if (!credit) return null;
       const [payments, plan] = await Promise.all([
         tx.payment.findMany({ where: { creditId }, orderBy: [{ createdAt: 'asc' }, { receiptNumber: 'asc' }] }),
-        loadCreditPlan(tx, this.tenant.accountId, credit),
+        accountToday(tx, this.tenant.accountId).then((today) => loadCreditPlan(tx, this.tenant.accountId, credit, today)),
       ]);
       const names = await loadNames(tx, this.tenant.accountId, payments.map((p) => p.registeredBy));
       return { credit, payments, plan, names };

@@ -103,7 +103,7 @@ function makeService(
         return { id: 'ag1', ...args.data };
       },
     },
-    account: { findUnique: async () => ({ currencyCode: 'BOB', configuration: opts.config ?? {}, settings: opts.settings ?? {} }) },
+    account: { findFirst: async () => ({ timezone: null, countryCode: 'BO' }), findUnique: async () => ({ currencyCode: 'BOB', configuration: opts.config ?? {}, settings: opts.settings ?? {} }) },
     arrear: {
       deleteMany: async () => {
         calls.arrearDeleteMany += 1;

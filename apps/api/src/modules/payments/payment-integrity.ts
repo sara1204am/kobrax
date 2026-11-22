@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { isExternalOrigin, readCreditMetadata } from '@kobrax/shared';
 import { loadCreditPlan } from '../credits/credit-plan';
+import { accountToday } from '../../common/context/tenant-clock.service';
 
 /**
  * Verificador de la imputación de pagos (auditoría «Mora vs Cartera»): comprueba que lo guardado cuadra y **reporta, nunca corrige**.
@@ -29,7 +30,7 @@ const EPS = 0.005;
 export const INTEGRITY_BALANCE_BATCH = 500;
 
 export async function findPaymentIntegrityViolations(
-  tx: Pick<PrismaClient, '$queryRaw' | 'credit' | 'payment' | 'paymentApplication'>,
+  tx: Pick<PrismaClient, '$queryRaw' | 'account' | 'credit' | 'payment' | 'paymentApplication'>,
   accountId: string,
   opts: { creditId?: string; balanceBatch?: number } = {},
 ): Promise<IntegrityViolation[]> {
@@ -66,7 +67,7 @@ export async function findPaymentIntegrityViolations(
   for (const credit of credits) {
     const meta = readCreditMetadata(credit.metadata, credit.origin);
     if (isExternalOrigin(meta.origin) || meta.initialState?.outstandingBalance !== undefined) continue;
-    const plan = await loadCreditPlan(tx, accountId, credit);
+    const plan = await loadCreditPlan(tx, accountId, credit, await accountToday(tx, accountId));
     if (!plan) continue;
     const balance = Number(credit.outstandingBalance);
     if (Math.abs(plan.balance - balance) > EPS) out.push({ kind: 'BALANCE_MISMATCH', creditId: credit.id, expected: plan.balance, actual: balance });

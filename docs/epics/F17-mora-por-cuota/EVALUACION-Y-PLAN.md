@@ -1,6 +1,6 @@
 # F17 · Gestión de mora por cuota — evaluación arquitectónica y plan (MVP)
 
-> Fecha: 2026-11-20 · Estado: **F0, F1 y F2 implementados** (sin commit) · **F3 (interés moratorio) en espera de decisiones D1–D10**
+> Fecha: 2026-11-20 · Estado: **F0, F1 y F2 implementados** (sin commit) · **D1–D10 CERRADAS (2026-11-21, todas con el default)**; F3 pendiente de implementar
 > Método: auditoría del repositorio real + segunda opinión independiente (Claude Fable) · Convención: **HECHO** = verificado en el código, **INFERENCIA**, **PROPUESTA**.
 
 ## 1. Recomendación ejecutiva
@@ -78,23 +78,23 @@ CUENTA (accounts: país, moneda, zona horaria, tipo)        ← contexto, no con
 | **F2** | Versiones de política append-only, backfill `NONE`, sellado por trigger en todo camino, `latePolicy` en la ficha | **Hecha** |
 | F2b | UI «Configuración → Cuenta → Configuración financiera» (hoy sólo habría una opción) y política por producto | Pendiente (sin valor hasta F3) |
 | F0b | Dejar de escribir/exponer `arrears.interest/penalty` y borrar la tabla `arrears` | Pendiente: **requiere tu confirmación** (migración destructiva) |
-| **F3** | Interés moratorio anual: función de devengo en `shared` (entera/decimal), libro `credit_late_charges`, `component` en `payment_applications`, cambios en `applyCore`, cierre por tramos, exoneración manual auditada | **Bloqueada por D1–D10** |
+| **F3** | Interés moratorio anual: función de devengo en `shared` (entera/decimal), libro `credit_late_charges`, `component` en `payment_applications`, cambios en `applyCore`, cierre por tramos, exoneración manual auditada | **Desbloqueada (D1–D10 cerradas); zona horaria RESUELTA (accountToday, commit siguiente)** |
 | V2/V3 | % diario, cargos fijos, topes avanzados, perfiles regulatorios (ASFI), flujos de aprobación | Fuera del MVP |
 
 ## 8. Decisiones que sólo tú puedes tomar (con default recomendado)
 
-| # | Decisión | Default |
+| # | Decisión | Resuelto (= default) |
 |---|---|---|
-| D1 | Orden de imputación de un pago | Por cuota: mora, interés, capital (validar con asesoría legal por país) |
-| D2 | Base de cálculo | Capital vencido pendiente de la cuota; nunca la cuota entera |
-| D3 | Convención de días | Actual/365 (360 configurable) |
-| D4 | Fecha de corte del devengo | `paymentDate` (aunque la imputación siga el orden de registro) |
-| D5 | Tope | Tasa máxima validada al guardar + tope acumulado opcional por cuota; el tope legal lo declara la cuenta |
-| D6 | Crédito con mora pendiente al llegar su saldo a 0 | No pasa a `PAID` hasta pagarla o exonerarla (con auditoría) |
-| D7 | Castigados | El devengo se congela en `written_off_at`; los pagos se siguen aceptando |
-| D8 | Aplicar B a créditos vigentes | No; sólo con acción explícita por crédito y fecha de inicio futura |
-| D9 | Gracia | 0 días, configurable |
-| D10 | Préstamos abiertos (sin plan) | Sin cargos en el MVP |
+| D1 | Orden de imputación de un pago | Por cuota: mora, interés, capital (validar con asesoría legal por país) ✅ |
+| D2 | Base de cálculo | Capital vencido pendiente de la cuota; nunca la cuota entera ✅ |
+| D3 | Convención de días | Actual/365 (360 configurable) ✅ |
+| D4 | Fecha de corte del devengo | `paymentDate` (aunque la imputación siga el orden de registro) ✅ |
+| D5 | Tope | Tasa máxima validada al guardar + tope acumulado opcional por cuota; el tope legal lo declara la cuenta ✅ |
+| D6 | Crédito con mora pendiente al llegar su saldo a 0 | No pasa a `PAID` hasta pagarla o exonerarla (con auditoría) ✅ |
+| D7 | Castigados | El devengo se congela en `written_off_at`; los pagos se siguen aceptando ✅ |
+| D8 | Aplicar B a créditos vigentes | No; sólo con acción explícita por crédito y fecha de inicio futura ✅ |
+| D9 | Gracia | 0 días, configurable ✅ |
+| D10 | Préstamos abiertos (sin plan) | Sin cargos en el MVP ✅ |
 
 ## 9. Riesgos
 
@@ -110,3 +110,11 @@ CUENTA (accounts: país, moneda, zona horaria, tipo)        ← contexto, no con
 Cubiertos hoy: días por cuota (unit `shared`), capital/interés vencido (unit), `DEFAULT_ARREAR_PARAMS` sin cargos (unit), detalle de cuotas vencidas (web), sellado en todo camino de creación,
 creación concurrente de la v1, inmutabilidad de la referencia y de las versiones, no-retroactividad de una política nueva, política por producto (integración con base real).
 Pendientes para F3: devengo por cuota (propiedad), idempotencia por tramo, concurrencia de cierres, reversos/exoneraciones, imputación con componente, castigados.
+
+## 10. Requisito de la dueña (2026-11-21): apagado por defecto, se activa desde la cuenta
+
+- **Por defecto NINGUNA cuenta cobra interés moratorio** (política `NONE`, ya sellada en F2).
+- Solo se activa desde **Configuración → Cuenta → Configuración financiera** (permiso de administrador, con auditoría quién/cuándo/IP).
+- Activar crea una **nueva versión** de `late_policy_versions` (append-only); **solo aplica a créditos nuevos** o a los que se elijan explícitamente con fecha de inicio futura (D8). Nunca retroactivo.
+- Apagarlo crea otra versión `NONE`; los créditos ya sellados conservan su política.
+- **F2b y F3 se entregan como un solo flujo:** interruptor y parámetros (tasa anual, 360/365, gracia, tope) en la cuenta → sellado en el crédito → devengo → imputación de pagos → exoneración → visualización en Mora y Pagos. Sin la UI no se puede activar; sin F3 no hay efecto.

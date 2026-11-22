@@ -39,6 +39,7 @@ import {
 } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
+import { accountToday } from '../../common/context/tenant-clock.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { PlanLimitsService } from '../../common/plan/plan-limits.service';
 import { OfficeScopeService } from '../../common/office-scope/office-scope.service';
@@ -419,7 +420,7 @@ export class CreditsService {
         tx.arrearCategory.findMany({ where: { accountId: this.tenant.accountId }, orderBy: [{ sortOrder: 'asc' }, { fromDays: 'asc' }] }),
       ]);
       // El plan actualizado sale de lo persistido (aplicaciones de los pagos): la misma fuente que la ficha de Mora.
-      const plan = await loadCreditPlan(tx, this.tenant.accountId, credit);
+      const plan = await loadCreditPlan(tx, this.tenant.accountId, credit, await accountToday(tx, this.tenant.accountId));
       return { credit, open, categories, plan };
     });
     if (!found) throw resourceNotFound();

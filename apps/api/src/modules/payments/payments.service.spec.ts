@@ -49,6 +49,7 @@ function makeService(opts: { credit?: unknown; idempotentExisting?: unknown; max
     },
     creditInstallment: { update: async () => ({}) },
     // Imputación a cuotas: el candado del crédito, el correlativo del recibo y las aplicaciones guardadas.
+    account: { findFirst: async () => ({ timezone: null, countryCode: 'BO' }) },
     $queryRaw: async () => [],
     $executeRaw: async () => 0,
     paymentApplication: {
