@@ -1,6 +1,6 @@
 {
   "name": "kobrax",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Kobrax — Plataforma multi-tenant de gestión inteligente de cobranzas",
   "packageManager": "pnpm@9.12.0",
