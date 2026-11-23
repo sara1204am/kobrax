@@ -29,3 +29,29 @@ export function addLocateControl(map: MapLibreMap, onLocate?: (here: Here) => vo
   }
   return control;
 }
+
+/** La última ubicación del navegador en esta sesión: el segundo mapa que se abre no vuelve a esperar al GPS. */
+let lastHere: Here | null = null;
+
+/**
+ * Lleva un mapa **recién abierto y sin nada que mostrar** a donde está la persona, sin que tenga que pulsar «Dónde estoy».
+ *
+ * Es el centro cuando no hay punto, ni dirección cercana, ni paradas: antes caía en Santa Cruz, y quien trabaja en otra ciudad
+ * tenía que ubicarse a mano cada vez. Sólo mueve el mapa (no dibuja el punto azul ni sigue a la persona: eso es el botón).
+ *
+ * - `stillEmpty` se consulta al llegar la posición: si mientras tanto apareció un punto o paradas, esas mandan y no se mueve nada.
+ * - Si el permiso se niega o no hay GPS (http fuera de localhost), no pasa nada: el mapa queda donde estaba.
+ */
+export function centerOnUser(map: MapLibreMap, stillEmpty: () => boolean = () => true, zoom = 15): void {
+  const go = (h: Here) => {
+    lastHere = h;
+    if (stillEmpty()) map.jumpTo({ center: [h.longitude, h.latitude], zoom });
+  };
+  if (lastHere) return go(lastHere);
+  if (typeof navigator === 'undefined' || !navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(
+    (pos) => go({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+    () => undefined,
+    { enableHighAccuracy: false, timeout: 8_000, maximumAge: 5 * 60_000 },
+  );
+}

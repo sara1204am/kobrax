@@ -1675,6 +1675,10 @@
         "noAddress": "Sin dirección cargada",
         "noCoords": "Sin ubicación",
         "mapPoints": "{n} de {total} elegidos en el mapa",
+        "mapSuggested": "{total} elegidos · {s} sugerencias cerca: toca una para sumarla",
+        "suggestedTag": "Sugerida",
+        "markUrgent": "Marcar los {n} más urgentes",
+        "markFiltered": "Marcar todo lo filtrado ({n})",
         "mapInArea": "{n} en el área de {km} km",
         "mapEmpty": "Marcá deudores o buscá por área para verlos en el mapa.",
         "areaOn": "Buscar por área",
@@ -1776,6 +1780,7 @@
         "visits": {
           "title": "Visitas agendadas para ese día ({n})",
           "none": "Este cobrador no tiene visitas agendadas ese día.",
+          "inRoute": "Las visitas agendadas ese día entran solas a la ruta aunque no las marques ({n}): {names}.",
           "auto": "Estas visitas se marcarán automáticamente en la ruta.",
           "cols": {
             "time": "Hora",

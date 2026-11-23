@@ -461,14 +461,17 @@ function coordNum(v: string): number | undefined {
  *
  * `coordMode` ya no se usa en la web (sigue en el tipo porque el móvil lo comparte).
  */
-function CoordFields({
+export function CoordFields({
   row,
   onChange,
   disabled,
+  center,
 }: {
-  row: LocationRow;
-  onChange: (patch: Partial<LocationRow>) => void;
+  row: Pick<LocationRow, 'latitude' | 'longitude'>;
+  onChange: (patch: Partial<Pick<LocationRow, 'latitude' | 'longitude'>>) => void;
   disabled?: boolean;
+  /** Dónde abrir el mapa mientras no hay punto (p. ej. otra dirección del mismo cliente). */
+  center?: { latitude: number; longitude: number };
 }) {
   const t = useTranslations('portfolio');
   const lat = coordNum(row.latitude);
@@ -511,6 +514,7 @@ function CoordFields({
           }
           height={260}
           label={t('form.mapPick')}
+          center={center}
         />
         <div className="absolute left-3 top-3 z-10 flex max-w-[calc(100%-4rem)] flex-wrap items-center gap-2 rounded-xl bg-white/95 p-2 shadow">
           <Input

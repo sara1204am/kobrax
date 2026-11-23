@@ -1674,7 +1674,11 @@
         },
         "noAddress": "No address on file",
         "noCoords": "No location",
-        "mapPoints": "{n} of {total} picked on the map",
+        "mapPoints": "{n} of {total} picked on the map",
+        "mapSuggested": "{total} picked · {s} suggestions nearby: tap one to add it",
+        "suggestedTag": "Suggested",
+        "markUrgent": "Pick the {n} most urgent",
+        "markFiltered": "Pick everything filtered ({n})",
         "mapInArea": "{n} within {km} km",
         "mapEmpty": "Pick debtors or search by area to see them on the map.",
         "areaOn": "Search by area",
@@ -1776,6 +1780,7 @@
         "visits": {
           "title": "Visits scheduled for that day ({n})",
           "none": "This collector has no visits scheduled that day.",
+          "inRoute": "Visits scheduled that day join the route on their own even if you do not tick them ({n}): {names}.",
           "auto": "These visits will be marked on the route automatically.",
           "cols": {
             "time": "Time",

@@ -13,7 +13,7 @@ import {
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { DEFAULT_ZOOM, FALLBACK_CENTER, MAP_LOCALE, MAP_STYLE, SATELLITE_ATTRIBUTION, SATELLITE_TILES } from '@/lib/map-style';
 import { postJson } from '@/lib/client';
-import { addLocateControl, type Here } from '../map-locate';
+import { addLocateControl, centerOnUser, type Here } from '../map-locate';
 
 const SAT = 'plan-satellite';
 const TO_NEXT = 'plan-to-next';
@@ -178,6 +178,8 @@ export function PointsMap({
       hereRef.current = h;
       void askTrip(h, nextRef.current);
     });
+    // Sin paradas elegidas se abre donde está la persona, no en Santa Cruz.
+    centerOnUser(m, () => pointsRef.current.length === 0);
     m.on('load', () => {
       /*
        * El satélite es una capa más **debajo de todo**, y al verlo se apagan las del estilo de calles. Así el selector
@@ -366,11 +368,16 @@ export function PointsMap({
        * hermanos, y el hermano es el marcador entero. Al pasar por encima, ése sube y su globo va
        * con él.
        */
+      const suggestion = p.tone === 'suggestion';
       const hit = document.createElement('div');
-      hit.className = 'group relative flex h-6 w-6 cursor-pointer items-center justify-center hover:z-50';
+      // La sugerencia es un pin de mapa con foco encendido: la punta, no el centro, es el lugar (se ancla abajo).
+      hit.className = suggestion
+        ? 'group relative flex h-8 w-7 cursor-pointer items-end justify-center hover:z-50'
+        : 'group relative flex h-6 w-6 cursor-pointer items-center justify-center hover:z-50';
       const dot = document.createElement('span');
       dot.className = pinClass(p, focused);
-      dot.textContent = pinText(p);
+      if (suggestion) dot.innerHTML = SUGGESTION_PIN;
+      else dot.textContent = pinText(p);
       hit.appendChild(dot);
       fillPhoto(hit, p);
       fillTip(hit, p, focused);
@@ -385,7 +392,7 @@ export function PointsMap({
       hit.addEventListener('mouseenter', () => hover.current?.(p.id));
       hit.addEventListener('mouseleave', () => hover.current?.(null));
 
-      const marker = new Marker({ element: hit }).setLngLat([p.longitude, p.latitude]);
+      const marker = new Marker({ element: hit, anchor: suggestion ? 'bottom' : 'center' }).setLngLat([p.longitude, p.latitude]);
       marker.addTo(m);
       markers.current.set(p.id, marker);
     }
@@ -611,9 +618,17 @@ function drawPath(m: MapLibreMap, points: MapPoint[], hasRoad = false): void {
   );
 }
 
-/** El texto del pin: su número en el recorrido, o «+» si es una sugerencia. */
+/** El texto del pin: su número en el recorrido (la sugerencia dibuja su propio icono). */
+/** El icono de una sugerencia: pin naranja con una bombilla blanca. Es un SVG fijo (sin datos de nadie), por eso entra como HTML. */
+const SUGGESTION_PIN =
+  '<svg viewBox="0 0 24 30" width="100%" height="100%" aria-hidden="true">' +
+  '<path d="M12 0C5.4 0 0 5.2 0 11.7 0 20 12 30 12 30s12-10 12-18.3C24 5.2 18.6 0 12 0z" fill="#F5A800"/>' +
+  '<path d="M12 5.2a4.7 4.7 0 0 0-2.8 8.5c.5.4.8 1 .8 1.6v.5h4v-.5c0-.6.3-1.2.8-1.6A4.7 4.7 0 0 0 12 5.2z" fill="#fff"/>' +
+  '<rect x="9.9" y="16.8" width="4.2" height="1" rx=".5" fill="#fff"/>' +
+  '<rect x="10.3" y="18.4" width="3.4" height="1" rx=".5" fill="#fff"/>' +
+  '</svg>';
+
 function pinText(p: MapPoint): string {
-  if (p.tone === 'suggestion') return '+';
   return p.order ? String(p.order) : '';
 }
 
@@ -631,9 +646,7 @@ function pinClass(p: MapPoint, focused: boolean): string {
 
   // Dónde se registró una visita: más chico y de otro color, no compite con la parada — la distancia entre los dos es lo que se mira.
   if (p.tone === 'visit') return `${base} h-3 w-3 border-2 bg-k-purple${ring}`;
-  if (p.tone === 'suggestion') {
-    return `${base} h-5 w-5 border-2 border-k-warning bg-white text-k-sm font-bold leading-none text-k-warning-text group-hover:bg-k-warning-bg${ring}`;
-  }
+  if (p.tone === 'suggestion') return `flex h-8 w-7 origin-bottom drop-shadow transition-transform group-hover:scale-125${focused ? ' scale-125' : ''}`;
   if (p.order) {
     const fill =
       p.tone === 'done'

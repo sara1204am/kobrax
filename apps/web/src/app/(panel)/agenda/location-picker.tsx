@@ -7,6 +7,7 @@ import { locationTypeChoices } from '@kobrax/shared';
 import { Button, ErrorBanner, Field, Input, Select, TextButton } from '@/components/ui';
 import { Icon } from '@/components/panel-shell';
 import { LocationPhotos } from '@/components/location-photos';
+import { CoordFields } from '@/components/client-form';
 import { postJson, sendJson } from '@/lib/client';
 
 /**
@@ -95,7 +96,6 @@ export function LocationPicker({
   const [creando, setCreando] = useState(false);
   const [form, setForm] = useState<Borrador>(VACIO);
   const [guardando, setGuardando] = useState(false);
-  const [ubicando, setUbicando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** El punto que se está marcando sobre una dirección importada que no lo tenía. */
   const [punto, setPunto] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -126,26 +126,6 @@ export function LocationPicker({
         }).replace(' ()', '')
       : t('create.ownerClient');
   const tipo = (l: Loc) => tp(`locationType.${l.locationType}` as 'locationType.HOME');
-
-  /*
-   * El GPS del navegador, que es el mismo permiso que pide el teléfono. Si lo niegan no se bloquea
-   * nada: el mapa y los dos campos siguen ahí, y el punto es opcional de todos modos.
-   */
-  function miUbicacion() {
-    if (!navigator.geolocation) return setError(t('create.noGeo'));
-    setUbicando(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setUbicando(false);
-        set({ latitude: String(pos.coords.latitude), longitude: String(pos.coords.longitude) });
-      },
-      () => {
-        setUbicando(false);
-        setError(t('create.geoDenied'));
-      },
-      { enableHighAccuracy: false, timeout: 10_000 },
-    );
-  }
 
   /** Guarda el punto sobre la dirección que ya existe (no crea otra): una visita sin ubicación no se puede navegar ni entrar a una ruta. */
   async function guardarPunto() {
@@ -280,6 +260,14 @@ export function LocationPicker({
       ) : (
         <div className="space-y-4 rounded-xl border border-k-border bg-k-bg p-4">
           <ErrorBanner message={error} />
+          {/* Primero el punto (mapa con latitud y longitud), después el tipo y la dirección: igual que en la ficha del cliente. */}
+          <CoordFields
+            row={{ latitude: form.latitude, longitude: form.longitude }}
+            onChange={(patch) => set(patch)}
+            disabled={guardando}
+            center={cerca}
+          />
+
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label={tp('form.locationType')}>
               <Select value={form.locationType} onChange={(e) => set({ locationType: e.target.value })} disabled={guardando}>
@@ -312,58 +300,7 @@ export function LocationPicker({
 
           <LocationPhotos value={form.photoUrls} onChange={(photoUrls) => set({ photoUrls })} disabled={guardando} />
 
-          {/*
-           * El mapa y los dos campos son la MISMA coordenada, no dos formas de cargar cosas
-           * distintas: tocar el mapa escribe los números y escribirlos mueve el pin. Quien tiene el
-           * punto anotado lo tipea; quien lo conoce de vista lo marca.
-           */}
-          <MapPicker
-            latitude={coord(form.latitude)}
-            longitude={coord(form.longitude)}
-            onChange={({ latitude, longitude }) =>
-              set({ latitude: latitude.toFixed(5), longitude: longitude.toFixed(5) })
-            }
-            label={t('create.mapPick')}
-            center={cerca}
-            hint={t('create.mapPickHint')}
-          />
-          <p className="text-k-xs text-k-text-2">
-            {coord(form.latitude) != null && coord(form.longitude) != null
-              ? t('create.pinAt', { lat: form.latitude, lng: form.longitude })
-              : t('create.pinHint')}
-          </p>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label={tp('form.latitude')}>
-              <Input
-                value={form.latitude}
-                onChange={(e) => set({ latitude: e.target.value })}
-                disabled={guardando}
-                type="number"
-                step="any"
-                min={-90}
-                max={90}
-              />
-            </Field>
-            <Field label={tp('form.longitude')}>
-              <Input
-                value={form.longitude}
-                onChange={(e) => set({ longitude: e.target.value })}
-                disabled={guardando}
-                type="number"
-                step="any"
-                min={-180}
-                max={180}
-              />
-            </Field>
-          </div>
-
           <div className="flex flex-wrap items-center gap-2">
-            <span className="w-full sm:w-56">
-              <Button variant="ghost" onClick={miUbicacion} loading={ubicando} disabled={guardando}>
-                {t('create.useMyLocation')}
-              </Button>
-            </span>
             <span className="ml-auto flex gap-2">
               <span className="w-32">
                 <Button
