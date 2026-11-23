@@ -30,6 +30,11 @@ export interface LateInterestParams {
   graceDays: number;
   /** Tope acumulado por cuota, en % de su capital. `null`/ausente = sin tope. Hasta 4 decimales. */
   capPctOfPrincipal?: number | null;
+  /**
+   * Activación explícita en un crédito existente (F3-e, D8): primer día (`YYYY-MM-DD`, inclusive) en que puede correr el devengo. Los días
+   * anteriores no cobran nada, aunque la cuota ya estuviera vencida; nunca es retroactivo. `null`/ausente = desde el vencimiento (+ gracia).
+   */
+  startsOn?: string | null;
 }
 
 /** Un pago que tocó el CAPITAL de la cuota. Va en orden de REGISTRO; `date` es la fecha de cobro (`YYYY-MM-DD`). */
@@ -121,7 +126,8 @@ export function accrueLateInterest(input: {
   const capCents = capCentsOf(principalCents, policy.capPctOfPrincipal);
 
   // El devengo cuenta los días POSTERIORES a `vencimiento + gracia`.
-  let cursor = dayNumber(input.dueDate) + grace;
+  // `startsOn` es el primer día que puede cobrar: el último día libre es el anterior. La gracia sigue contando desde el vencimiento.
+  let cursor = Math.max(dayNumber(input.dueDate) + grace, policy.startsOn ? dayNumber(policy.startsOn) - 1 : -Infinity);
   let base = principalCents;
   let accrued = 0;
   let daysAccrued = 0;

@@ -140,6 +140,32 @@ describe('accrueLateInterest — una cuota', () => {
     expect(r.daysAccrued).toBe(30);
   });
 
+  describe('F3-e — activación con fecha de inicio (startsOn)', () => {
+    it('una cuota ya vencida no cobra los días anteriores al inicio: el inicio es el primer día que corre', () => {
+      const r = accrueLateInterest({ dueDate: DUE, principal: 1000, policy: { ...P18, startsOn: plus(20) }, asOf: plus(50) });
+      expect(r.daysAccrued).toBe(31); // días 20..50 inclusive
+      expect(r.tranches[0]?.from).toBe(plus(19));
+    });
+    it('antes del inicio no devenga nada, ni con asOf anterior', () => {
+      expect(accrueLateInterest({ dueDate: DUE, principal: 1000, policy: { ...P18, startsOn: plus(20) }, asOf: plus(10) }).accruedCents).toBe(0);
+      expect(accrueLateInterest({ dueDate: DUE, principal: 1000, policy: { ...P18, startsOn: plus(20) }, asOf: plus(19) }).accruedCents).toBe(0);
+    });
+    it('una cuota que vence después del inicio corre como siempre', () => {
+      const a = accrueLateInterest({ dueDate: DUE, principal: 1000, policy: { ...P18, startsOn: plus(-40) }, asOf: plus(30) });
+      const b = accrueLateInterest({ dueDate: DUE, principal: 1000, policy: P18, asOf: plus(30) });
+      expect(a).toEqual(b);
+    });
+    it('un pago de capital anterior al inicio reduce la base sin cerrar un tramo cobrable', () => {
+      const r = accrueLateInterest({ dueDate: DUE, principal: 1000, policy: { ...P18, startsOn: plus(20) }, asOf: plus(30), events: [{ date: plus(5), principal: 400 }] });
+      expect(r.tranches).toHaveLength(1);
+      expect(r.tranches[0]?.baseCents).toBe(60_000);
+    });
+    it('la gracia sigue contando desde el vencimiento y el inicio manda si es posterior', () => {
+      const r = accrueLateInterest({ dueDate: DUE, principal: 1000, policy: { ...P18, graceDays: 5, startsOn: plus(3) }, asOf: plus(10) });
+      expect(r.daysAccrued).toBe(5); // gracia hasta +5; corre +6..+10
+    });
+  });
+
   it('una cuota sin capital o una tasa en cero no devengan nada (créditos sin desglose, política apagada)', () => {
     expect(accrueLateInterest({ dueDate: DUE, principal: 0, policy: P18, asOf: plus(30) }).accruedCents).toBe(0);
     expect(accrueLateInterest({ dueDate: DUE, principal: 1000, policy: { ...P18, annualRate: 0 }, asOf: plus(30) }).accruedCents).toBe(0);

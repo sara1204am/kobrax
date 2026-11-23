@@ -40,6 +40,38 @@ describe('LateInterestSection — interés moratorio del crédito (F17)', () => 
     expect(screen.queryByTestId('late-interest-summary')).not.toBeInTheDocument();
   });
 
+  it('🔴 sin el permiso de activar no hay botón; con él, un crédito sin mora ofrece activarla', () => {
+    renderIt(null, ['payment:read', 'payment:waive_late']);
+    expect(screen.queryByRole('button', { name: 'Activar interés moratorio' })).not.toBeInTheDocument();
+  });
+
+  it('con el permiso activa: pide fecha y motivo y manda ambos', async () => {
+    const sent: unknown[] = [];
+    server.use(
+      http.post(`*/api/credits/${CREDIT}/late-activation`, async ({ request }) => {
+        sent.push(await request.json());
+        return HttpResponse.json({ data: { id: 'a1' } }, { status: 201 });
+      }),
+    );
+    const user = userEvent.setup();
+    renderIt(null, ['payment:read', 'payment:activate_late']);
+    await user.click(screen.getByRole('button', { name: 'Activar interés moratorio' }));
+    const confirm = screen.getByRole('button', { name: 'Activar' });
+    expect(confirm).toBeDisabled();
+    await user.type(screen.getByLabelText(/Empieza a correr el/), '2027-01-15');
+    expect(confirm).toBeDisabled(); // falta el motivo
+    await user.type(screen.getByLabelText(/Motivo/), 'Refinanciación acordada');
+    expect(confirm).toBeEnabled();
+    await user.click(confirm);
+    expect(sent).toEqual([{ startsOn: '2027-01-15', reason: 'Refinanciación acordada' }]);
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it('un crédito activado con inicio futuro avisa desde cuándo corre', () => {
+    renderIt({ ...LATE, accrued: 0, collected: 0, waived: 0, pending: 0, installments: [], policy: { ...LATE.policy, startsOn: '2027-01-15' } }, ['payment:read']);
+    expect(screen.getByText(/corre desde el/)).toBeInTheDocument();
+  });
+
   it('muestra devengado, cobrado, exonerado y pendiente, aparte del plan', () => {
     renderIt(LATE, ['payment:read']);
     const summary = screen.getByTestId('late-interest-summary');

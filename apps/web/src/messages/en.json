@@ -3375,6 +3375,21 @@
     "dueDate": "Due",
     "none": "No late interest has accrued yet.",
     "basis": "{rate}% annual rate · {days}-day basis · {grace} grace days. Charged on each installment's overdue principal and collected before the installment itself.",
+    "startsOn": "Late interest runs from {date}. Earlier days do not accrue.",
+    "activate": {
+      "cta": "Activate late interest",
+      "hint": "This credit was created without late interest. You can turn it on from a future date, using the account's current policy.",
+      "title": "Activate late interest",
+      "text": "The account policy in force today will apply to each installment's overdue principal, only from the date you choose. It never charges backwards and cannot be undone: it is recorded with your name, the reason and the date.",
+      "startsOn": "Starts accruing on",
+      "startsOnHint": "Must be after today.",
+      "reason": "Reason",
+      "reasonHint": "Required. For example: refinancing agreed with the client.",
+      "cancel": "Cancel",
+      "confirm": "Activate",
+      "done": "Late interest activated.",
+      "failed": "Could not activate late interest."
+    },
     "waive": {
       "cta": "Waive late interest",
       "title": "Waive late interest",
@@ -5049,6 +5064,10 @@
     "client_create": {
       "name": "Create clients",
       "description": "Register new clients."
+    },
+    "payment_activate_late": {
+      "name": "Activate late interest on a credit",
+      "description": "Start charging late interest on a credit that was created without it, from a future date and with a reason kept in the audit log."
     },
     "payment_waive_late": {
       "name": "Waive late interest",

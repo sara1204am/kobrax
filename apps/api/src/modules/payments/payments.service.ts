@@ -10,7 +10,7 @@ import { AuditService } from '../../common/audit/audit.service';
 import { EventBusService, DomainEvent } from '../../common/events/event-bus.service';
 import { creditPatchAfterPayment, creditPatchFromPlan, planSourceOf } from './payment-apply';
 import { settlePromisesFromPayments } from './settle-promises';
-import { lateParamsOf, loadLateContext } from './late-context';
+import { LATE_POLICY_INCLUDE, lateParamsOf, loadLateContext } from './late-context';
 import { lateSummaryOfCredit } from './late-summary';
 import { loadNames } from '../mora/mora-names';
 import { moraScopeOf, seesWholeAccount, visibleCreditIdsSql } from '../mora/mora-query';
@@ -158,7 +158,7 @@ export class PaymentsService {
       const existing = await tx.payment.findFirst({ where: { idempotencyKey: p.idempotencyKey } });
       if (existing) return { payment: existing, creditPaid: false, external: false, replay: true, allocations: [] };
     }
-    const credit = await tx.credit.findFirst({ where: { id: p.creditId, deletedAt: null }, include: { installments: true, latePolicyVersion: true } });
+    const credit = await tx.credit.findFirst({ where: { id: p.creditId, deletedAt: null }, include: { installments: true, ...LATE_POLICY_INCLUDE } });
     if (!credit) throw resourceNotFound();
     // El cobro dice en qué visita se hizo: esa visita tiene que existir y ser de ESTE crédito.
     if (p.visitId) {
@@ -192,7 +192,7 @@ export class PaymentsService {
      * Sin política (la cuenta lo tiene apagado, o el crédito es anterior) `late` queda en `null` y TODO lo de abajo es el camino de siempre.
      * La mora se calcula a la fecha de cobro del pago (D4), acotada a hoy; el pago puede cubrir saldo del plan + mora pendiente.
      */
-    const lateParams = source ? lateParamsOf(credit.latePolicyVersion) : null;
+    const lateParams = source ? lateParamsOf(credit.latePolicyVersion, credit.lateActivation) : null;
     let late: { ctx: Awaited<ReturnType<typeof loadLateContext>>; result: ReturnType<typeof allocateWithLateInterest> } | null = null;
     if (source && lateParams) {
       const tz = await accountTimezone(tx, this.tenant.accountId);

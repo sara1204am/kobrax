@@ -10,6 +10,8 @@ REVOKE UPDATE, DELETE, TRUNCATE ON payment_applications FROM kobrax_app;
 REVOKE UPDATE, DELETE, TRUNCATE ON credit_late_waivers FROM kobrax_app;
 -- `late_policy_versions`: una política nueva es una versión nueva; nunca se edita ni se borra una.
 REVOKE UPDATE, DELETE, TRUNCATE ON late_policy_versions FROM kobrax_app;
+-- `credit_late_activations`: la activación de mora en un crédito existente es un hecho (F17·F3-e).
+REVOKE UPDATE, DELETE, TRUNCATE ON credit_late_activations FROM kobrax_app;
 
 DO $$
 BEGIN
@@ -19,5 +21,6 @@ BEGIN
     EXECUTE 'REVOKE UPDATE, DELETE, TRUNCATE ON payment_applications FROM kobrax_scoped';
     EXECUTE 'REVOKE UPDATE, DELETE, TRUNCATE ON credit_late_waivers FROM kobrax_scoped';
     EXECUTE 'REVOKE UPDATE, DELETE, TRUNCATE ON late_policy_versions FROM kobrax_scoped';
+    EXECUTE 'REVOKE UPDATE, DELETE, TRUNCATE ON credit_late_activations FROM kobrax_scoped';
   END IF;
 END $$;

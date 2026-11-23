@@ -112,6 +112,7 @@ model Account {
   paymentApplications     PaymentApplication[]
   latePolicyVersions      LatePolicyVersion[]
   creditLateWaivers       CreditLateWaiver[]
+  creditLateActivations   CreditLateActivation[]
   paymentRequests         PaymentRequest[]
   notifications           Notification[]
   devicePushTokens        DevicePushToken[]
@@ -1173,6 +1174,7 @@ model Credit {
   installments      CreditInstallment[]
   arrears           Arrear[]
   payments          Payment[]
+  lateActivation    CreditLateActivation?
   lateWaivers       CreditLateWaiver[]
   guarantors        CreditGuarantor[]
   collaterals       CollateralCredit[]
@@ -2606,6 +2608,28 @@ model LatePolicyVersion {
   version           Int
   kind              LatePolicyKind  @default(NONE)
   /// Sólo `ANNUAL_RATE`: tasa nominal anual en % (p. ej. 12.0000).
+/// F17·F3-e — activación EXPLÍCITA del interés moratorio en un crédito que nació sin él (D8). Un hecho append-only, único por crédito:
+/// sella la política de la cuenta vigente al activar y el primer día en que puede correr el devengo (siempre posterior al día de la activación,
+/// nunca retroactivo). No toca `credits.late_policy_version_id` (inmutable): la política efectiva del crédito es la de esta fila si existe.
+model CreditLateActivation {
+  id              String   @id @default(uuid())
+  accountId       String   @map("account_id")
+  creditId        String   @unique @map("credit_id")
+  policyVersionId String   @map("policy_version_id")
+  /// Primer día (día civil de la cuenta) en que puede correr el devengo.
+  startsOn        DateTime @map("starts_on") @db.Date
+  reason          String
+  createdBy       String?  @map("created_by")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  account       Account           @relation(fields: [accountId], references: [id])
+  credit        Credit            @relation(fields: [creditId], references: [id])
+  policyVersion LatePolicyVersion @relation(fields: [policyVersionId], references: [id])
+
+  @@index([accountId, creditId])
+  @@map("credit_late_activations")
+}
+
   annualRate        Decimal?        @map("annual_rate") @db.Decimal(7, 4)
   /// Sólo `ANNUAL_RATE`: convención de días del año (360 ó 365).
   dayCount          Int?            @map("day_count") @db.SmallInt
@@ -2617,8 +2641,9 @@ model LatePolicyVersion {
   createdBy         String?         @map("created_by")
   createdAt         DateTime        @default(now()) @map("created_at")
 
-  account Account  @relation(fields: [accountId], references: [id])
-  credits Credit[]
+  account     Account                @relation(fields: [accountId], references: [id])
+  credits     Credit[]
+  activations CreditLateActivation[]
 
   @@index([accountId, scope, typeCode])
   @@map("late_policy_versions")

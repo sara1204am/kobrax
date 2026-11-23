@@ -1694,6 +1694,15 @@
     "any": []
   },
   {
+    "route": "POST /credits/:creditId/late-interest/activation",
+    "handler": "PaymentsController.activateLate",
+    "kind": "permissions",
+    "all": [
+      "payment:activate_late"
+    ],
+    "any": []
+  },
+  {
     "route": "POST /credits/:creditId/late-interest/waivers",
     "handler": "PaymentsController.waiveLate",
     "kind": "permissions",

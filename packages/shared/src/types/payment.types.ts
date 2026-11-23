@@ -29,7 +29,8 @@ export interface LateInterestView {
   /** Lo que falta cobrar de mora: devengado − cobrado − exonerado. Va APARTE del saldo del plan. */
   pending: number;
   installments: LateInterestInstallment[];
-  policy: { annualRate: number; dayCount: 360 | 365; graceDays: number; capPctOfPrincipal: number | null };
+  /** `startsOn`: primer día que corre el devengo si el interés se activó explícitamente en un crédito existente (F3-e); `null` = desde el vencimiento. */
+  policy: { annualRate: number; dayCount: 360 | 365; graceDays: number; capPctOfPrincipal: number | null; startsOn?: string | null };
 }
 
 /**

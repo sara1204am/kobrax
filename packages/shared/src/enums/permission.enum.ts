@@ -23,6 +23,8 @@ export enum Permission {
   PAYMENT_APPROVE = 'payment:approve',
   /** F17 · F3-d: exonerar interés moratorio (perdonar mora devengada). Aparte de `payment:write`: registrar un cobro no es perdonar deuda. */
   PAYMENT_WAIVE_LATE = 'payment:waive_late',
+  /** F17 · F3-e: empezar a cobrar interés moratorio en un crédito que nació sin él (activación con fecha futura). */
+  PAYMENT_ACTIVATE_LATE = 'payment:activate_late',
 
   ROUTE_READ = 'route:read',
   ROUTE_WRITE = 'route:write',

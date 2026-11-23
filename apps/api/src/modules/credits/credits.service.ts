@@ -421,7 +421,7 @@ export class CreditsService {
     const found = await this.tx(async (tx) => {
       const credit = await tx.credit.findFirst({
         where: { id, deletedAt: null },
-        include: { installments: { orderBy: { number: 'asc' } }, arrears: true, latePolicyVersion: true, _count: { select: { payments: true } } },
+        include: { installments: { orderBy: { number: 'asc' } }, arrears: true, latePolicyVersion: true, lateActivation: true, _count: { select: { payments: true } } },
       });
       if (!credit) return null;
       await this.assertInScope(tx, id);

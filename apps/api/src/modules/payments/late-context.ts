@@ -4,10 +4,24 @@ import { civilDayOf } from '../../common/context/tenant-clock.service';
 
 const round2 = (x: number): number => Math.round(x * 100) / 100;
 
-/** La política sellada en el crédito (`late_policy_versions`), tal como la necesita el cálculo. `null` = sin cargos (camino de siempre). */
-export function lateParamsOf(
-  v: { kind: string; annualRate: unknown; dayCount: number | null; graceDays: number; capPctOfPrincipal: unknown } | null | undefined,
-): LateInterestParams | null {
+type PolicyVersionShape = { kind: string; annualRate: unknown; dayCount: number | null; graceDays: number; capPctOfPrincipal: unknown };
+type ActivationShape = { startsOn: Date; policyVersion: PolicyVersionShape };
+
+/** Lo que hay que cargar con el crédito para conocer su política EFECTIVA: la sellada al nacer y, si existe, su activación (F3-e). */
+export const LATE_POLICY_INCLUDE = { latePolicyVersion: true, lateActivation: { include: { policyVersion: true } } } as const;
+
+/** El día civil (`YYYY-MM-DD`) de una columna `DATE`. */
+const dateOnly = (d: Date): string => d.toISOString().slice(0, 10);
+
+/**
+ * La política EFECTIVA del crédito, tal como la necesita el cálculo. `null` = sin cargos (camino de siempre).
+ * Si el crédito tiene una activación explícita (F3-e), manda su política sellada y su fecha de inicio; si no, la sellada al nacer.
+ */
+export function lateParamsOf(v: PolicyVersionShape | null | undefined, activation?: ActivationShape | null): LateInterestParams | null {
+  if (activation) {
+    const base = lateParamsOf(activation.policyVersion);
+    return base ? { ...base, startsOn: dateOnly(activation.startsOn) } : null;
+  }
   if (!v || v.kind !== 'ANNUAL_RATE' || v.annualRate === null || v.annualRate === undefined) return null;
   const rate = Number(v.annualRate);
   if (!(rate > 0)) return null;

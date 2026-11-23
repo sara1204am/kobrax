@@ -1,7 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import { isExternalOrigin, lateStateAt, readCreditMetadata } from '@kobrax/shared';
 import { accountTimezone, accountToday, civilDayOf } from '../../common/context/tenant-clock.service';
-import { lateParamsOf, loadLateContext } from './late-context';
+import { LATE_POLICY_INCLUDE, lateParamsOf, loadLateContext } from './late-context';
 import { planSourceOf } from './payment-apply';
 
 export interface LateSummaryInstallment {
@@ -21,7 +21,7 @@ export interface LateSummary {
   pending: number;
   /** Sólo las cuotas con algo devengado. */
   installments: LateSummaryInstallment[];
-  policy: { annualRate: number; dayCount: 360 | 365; graceDays: number; capPctOfPrincipal: number | null };
+  policy: { annualRate: number; dayCount: 360 | 365; graceDays: number; capPctOfPrincipal: number | null; startsOn: string | null };
 }
 
 const round2 = (x: number): number => Math.round(x * 100) / 100;
@@ -44,12 +44,14 @@ export async function loadLateSummary(
       writtenOffAt: Date | null;
       installments: { number: number; paidAmount: unknown; dueDate: Date; amount: unknown; principal?: unknown; interest?: unknown }[];
       latePolicyVersion: Parameters<typeof lateParamsOf>[0];
+      /** Activación explícita (F3-e): si existe, manda sobre la política con que nació el crédito. */
+      lateActivation?: Parameters<typeof lateParamsOf>[1];
     };
   },
 ): Promise<LateSummary | null> {
   const { credit } = p;
   if (isExternalOrigin(readCreditMetadata(credit.metadata, credit.origin).origin)) return null;
-  const policy = lateParamsOf(credit.latePolicyVersion);
+  const policy = lateParamsOf(credit.latePolicyVersion, credit.lateActivation);
   const source = planSourceOf(credit);
   if (!policy || !source) return null;
 
@@ -82,7 +84,7 @@ export async function loadLateSummary(
     waived: total((s) => s.waived),
     pending: total((s) => s.pending),
     installments,
-    policy: { annualRate: policy.annualRate, dayCount: policy.dayCount, graceDays: policy.graceDays, capPctOfPrincipal: policy.capPctOfPrincipal ?? null },
+    policy: { annualRate: policy.annualRate, dayCount: policy.dayCount, graceDays: policy.graceDays, capPctOfPrincipal: policy.capPctOfPrincipal ?? null, startsOn: policy.startsOn ?? null },
   };
 }
 
@@ -95,7 +97,7 @@ export async function lateSummaryOfCredit(
   accountId: string,
   creditId: string,
 ): Promise<LateSummary | null> {
-  const credit = await tx.credit.findFirst({ where: { id: creditId, accountId, deletedAt: null }, include: { installments: true, latePolicyVersion: true } });
+  const credit = await tx.credit.findFirst({ where: { id: creditId, accountId, deletedAt: null }, include: { installments: true, ...LATE_POLICY_INCLUDE } });
   if (!credit || !credit.latePolicyVersion) return null; // sin política sellada no hay nada que reproducir (camino barato de siempre)
   const tz = await accountTimezone(tx, accountId);
   const today = (await accountToday(tx, accountId)).toISOString().slice(0, 10);

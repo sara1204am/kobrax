@@ -5,9 +5,13 @@ import { TenantContextService } from '../../common/context/tenant-context.servic
 import { accountTimezone, accountToday } from '../../common/context/tenant-clock.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { moraScopeOf, seesWholeAccount, visibleCreditIdsSql } from '../mora/mora-query';
+import { LATE_POLICY_INCLUDE } from './late-context';
 import { loadLateSummary } from './late-summary';
+import { planSourceOf } from './payment-apply';
+import { isExternalOrigin, readCreditMetadata } from '@kobrax/shared';
 import { paymentInvalid, resourceNotFound } from './payments.errors';
 import type { CreateLateWaiverDto } from './dto/late-waiver.dto';
+import type { CreateLateActivationDto } from './dto/late-activation.dto';
 
 const round2 = (x: number): number => Math.round(x * 100) / 100;
 
@@ -28,7 +32,7 @@ export class LateInterestService {
   }
 
   private async load(tx: PrismaClient, creditId: string) {
-    const credit = await tx.credit.findFirst({ where: { id: creditId, deletedAt: null }, include: { installments: true, latePolicyVersion: true } });
+    const credit = await tx.credit.findFirst({ where: { id: creditId, deletedAt: null }, include: { installments: true, ...LATE_POLICY_INCLUDE } });
     if (!credit) throw resourceNotFound();
     const tz = await accountTimezone(tx, this.tenant.accountId);
     const today = (await accountToday(tx, this.tenant.accountId)).toISOString().slice(0, 10);
@@ -40,6 +44,44 @@ export class LateInterestService {
     return this.prisma.withTenant(this.tenant.accountId, async (tx) => {
       await this.assertInScope(tx, creditId);
       return (await this.load(tx, creditId)).summary;
+    });
+  }
+
+  /**
+   * F3-e — activa el interés moratorio en un crédito que nació sin él. Crea un HECHO (única por crédito) que sella la política de la cuenta
+   * vigente ahora y el primer día que puede correr el devengo, que tiene que ser POSTERIOR a hoy: nunca cobra hacia atrás (D8).
+   */
+  async activate(creditId: string, dto: CreateLateActivationDto) {
+    return this.prisma.withTenant(this.tenant.accountId, async (tx) => {
+      await this.assertInScope(tx, creditId);
+      await tx.$queryRaw`SELECT id FROM credits WHERE id = ${creditId} AND account_id = ${this.tenant.accountId} FOR UPDATE`;
+      const credit = await tx.credit.findFirst({ where: { id: creditId, deletedAt: null }, include: { installments: true, ...LATE_POLICY_INCLUDE } });
+      if (!credit) throw resourceNotFound();
+      if (isExternalOrigin(readCreditMetadata(credit.metadata, credit.origin).origin)) throw paymentInvalid('Una cartera de fuente externa no devenga interés moratorio');
+      if (credit.status !== CreditStatus.ACTIVE || credit.writtenOffAt) throw paymentInvalid('Sólo se activa la mora en un crédito activo y no castigado');
+      if (!planSourceOf(credit)) throw paymentInvalid('Este crédito no tiene un plan con capital e interés por cuota: no hay base para el interés moratorio');
+      if (credit.lateActivation) throw paymentInvalid('Este crédito ya tiene el interés moratorio activado');
+      if (credit.latePolicyVersion?.kind === 'ANNUAL_RATE') throw paymentInvalid('Este crédito ya devenga interés moratorio');
+
+      const policy = await tx.latePolicyVersion.findFirst({ where: { accountId: this.tenant.accountId, scope: 'ACCOUNT' }, orderBy: { version: 'desc' } });
+      if (!policy || policy.kind !== 'ANNUAL_RATE') throw paymentInvalid('La cuenta no tiene activado el interés moratorio: actívalo primero en Configuración financiera');
+
+      const today = (await accountToday(tx, this.tenant.accountId)).toISOString().slice(0, 10);
+      if (Number.isNaN(Date.parse(`${dto.startsOn}T00:00:00Z`)) || new Date(`${dto.startsOn}T00:00:00Z`).toISOString().slice(0, 10) !== dto.startsOn) {
+        throw paymentInvalid('La fecha de inicio no es válida');
+      }
+      if (dto.startsOn <= today) throw paymentInvalid('La fecha de inicio debe ser posterior a hoy: el interés moratorio no se cobra hacia atrás');
+
+      const activation = await tx.creditLateActivation.create({
+        data: { accountId: this.tenant.accountId, creditId, policyVersionId: policy.id, startsOn: new Date(`${dto.startsOn}T00:00:00Z`), reason: dto.reason.trim(), createdBy: this.tenant.userId },
+      });
+      await this.audit.recordInTx(tx, {
+        entity: 'credit_late_activation',
+        entityId: activation.id,
+        action: 'CREATE',
+        after: { creditId, startsOn: dto.startsOn, reason: activation.reason, policyVersion: policy.version, annualRate: Number(policy.annualRate), graceDays: policy.graceDays },
+      });
+      return { id: activation.id, startsOn: dto.startsOn, policyVersion: policy.version };
     });
   }
 

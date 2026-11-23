@@ -3375,6 +3375,21 @@
     "dueDate": "Vence",
     "none": "Todavía no se devengó interés moratorio.",
     "basis": "Tasa {rate} % anual · base {days} días · gracia {grace} días. Se calcula sobre el capital vencido pendiente de cada cuota y se cobra antes que la cuota.",
+    "startsOn": "El interés moratorio corre desde el {date}. Los días anteriores no generan mora.",
+    "activate": {
+      "cta": "Activar interés moratorio",
+      "hint": "Este crédito nació sin interés moratorio. Puedes activarlo desde una fecha futura, con la política vigente de la cuenta.",
+      "title": "Activar interés moratorio",
+      "text": "Se aplicará la política de la cuenta vigente hoy, sobre el capital vencido de cada cuota, solo desde la fecha que elijas. No cobra hacia atrás y no se puede deshacer: queda registrada con tu nombre, el motivo y la fecha.",
+      "startsOn": "Empieza a correr el",
+      "startsOnHint": "Debe ser posterior a hoy.",
+      "reason": "Motivo",
+      "reasonHint": "Obligatorio. Por ejemplo: refinanciación acordada con el cliente.",
+      "cancel": "Cancelar",
+      "confirm": "Activar",
+      "done": "Interés moratorio activado.",
+      "failed": "No se pudo activar el interés moratorio."
+    },
     "waive": {
       "cta": "Exonerar mora",
       "title": "Exonerar interés moratorio",
@@ -5049,6 +5064,10 @@
     "client_create": {
       "name": "Dar de alta clientes",
       "description": "Registrar clientes nuevos."
+    },
+    "payment_activate_late": {
+      "name": "Activar interés moratorio en un crédito",
+      "description": "Empezar a cobrar interés moratorio en un crédito que nació sin él, desde una fecha futura y con un motivo que queda en la auditoría."
     },
     "payment_waive_late": {
       "name": "Exonerar interés moratorio",

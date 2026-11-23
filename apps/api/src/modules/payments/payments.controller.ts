@@ -4,6 +4,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { PaymentsService } from './payments.service';
 import { LateInterestService } from './late-interest.service';
 import { CreateLateWaiverDto } from './dto/late-waiver.dto';
+import { CreateLateActivationDto } from './dto/late-activation.dto';
 import { ConfirmPaymentRequestDto, CreatePaymentDto, CreatePaymentRequestDto, ListPaymentRequestsQueryDto, ListPaymentsQueryDto } from './dto/payment.dto';
 
 @Controller()
@@ -26,6 +27,13 @@ export class PaymentsController {
   @Roles(Permission.PAYMENT_WAIVE_LATE)
   waiveLate(@Param('creditId', ParseUUIDPipe) creditId: string, @Body() dto: CreateLateWaiverDto) {
     return this.lateInterest.waive(creditId, dto).then((data) => ResponseDto.ok(data));
+  }
+
+  /** Empezar a cobrar mora en un crédito que nació sin ella, desde una fecha futura. Permiso propio, motivo obligatorio y auditado. */
+  @Post('credits/:creditId/late-interest/activation')
+  @Roles(Permission.PAYMENT_ACTIVATE_LATE)
+  activateLate(@Param('creditId', ParseUUIDPipe) creditId: string, @Body() dto: CreateLateActivationDto) {
+    return this.lateInterest.activate(creditId, dto).then((data) => ResponseDto.ok(data));
   }
 
   // ── Pagos ────────────────────────────────────────────────────────────────────

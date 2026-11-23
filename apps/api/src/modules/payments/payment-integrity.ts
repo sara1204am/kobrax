@@ -2,7 +2,7 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 import { isExternalOrigin, lateStateAt, readCreditMetadata } from '@kobrax/shared';
 import { loadCreditPlan } from '../credits/credit-plan';
 import { accountTimezone, accountToday, civilDayOf } from '../../common/context/tenant-clock.service';
-import { lateParamsOf, loadLateContext } from './late-context';
+import { LATE_POLICY_INCLUDE, lateParamsOf, loadLateContext } from './late-context';
 import { planSourceOf } from './payment-apply';
 
 /**
@@ -79,8 +79,14 @@ export async function findPaymentIntegrityViolations(
 
   // Interés moratorio (F17): sólo créditos con política sellada y plan. La mora se REPRODUCE de los hechos y se compara con lo cobrado.
   const withPolicy = await tx.credit.findMany({
-    where: { accountId, deletedAt: null, latePolicyVersion: { is: { kind: 'ANNUAL_RATE' } }, payments: { some: {} }, ...(opts.creditId ? { id: opts.creditId } : {}) },
-    include: { installments: true, latePolicyVersion: true },
+    where: {
+      accountId,
+      deletedAt: null,
+      OR: [{ latePolicyVersion: { is: { kind: 'ANNUAL_RATE' } } }, { lateActivation: { isNot: null } }],
+      payments: { some: {} },
+      ...(opts.creditId ? { id: opts.creditId } : {}),
+    },
+    include: { installments: true, ...LATE_POLICY_INCLUDE },
     take: opts.balanceBatch ?? INTEGRITY_BALANCE_BATCH,
     orderBy: { updatedAt: 'desc' },
   });
@@ -88,7 +94,7 @@ export async function findPaymentIntegrityViolations(
     const tz = await accountTimezone(tx, accountId);
     const today = (await accountToday(tx, accountId)).toISOString().slice(0, 10);
     for (const credit of withPolicy) {
-      const policy = lateParamsOf(credit.latePolicyVersion);
+      const policy = lateParamsOf(credit.latePolicyVersion, credit.lateActivation);
       const source = planSourceOf(credit);
       if (!policy || !source) continue;
       const ctx = await loadLateContext(tx, {
