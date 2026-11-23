@@ -1,18 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import {
-  PAYER_PARTIES,
   PROMISE_RESULT,
   RECOVERY_ACTIVITY_TYPES,
   RECOVERY_NOTES_MAX_LENGTH,
   RECOVERY_RESULTS_BY_TYPE,
-  reasonsFor,
+  validateActivityTarget,
   validateRecoveryActivity,
   type RecoveryActivityType,
 } from '@kobrax/shared';
+import { ActivityOutcomeFields, emptyOutcome, outcomeBody, type OutcomeContact, type OutcomeLocation } from '@/components/activity-outcome-fields';
 import type { CatalogOption } from '@/components/client-form';
 import { Modal } from '@/components/modal';
 import { useToast } from '@/components/toast';
@@ -25,28 +25,33 @@ import { todayIso } from '@/lib/format';
 const FALLBACK_METHODS = ['CASH', 'TRANSFER', 'QR'];
 
 /**
- * Registrar una gestión: **qué se hizo, cómo terminó y, si prometió pagar, la promesa**.
+ * Registrar una gestión: **qué se hizo, a dónde o a quién, cómo terminó y, si prometió pagar, la promesa**.
  *
- * 🔴 **Antes sólo se podía dejar una nota.** El formulario de la ficha no exponía el resultado ni la promesa
- * aunque la API los aceptaba, así que ninguna gestión hecha desde el panel decía cómo terminó — y sin eso no hay
- * ni cumplimiento de promesas ni resumen de qué se logró.
+ * 🔴 **Pide lo mismo que se pide al agendar.** Antes, agendar una llamada o una visita preguntaba a qué teléfono o a qué dirección, pero
+ * registrarla directo aquí no: la gestión quedaba sin decir dónde. Ahora el cuerpo del formulario es el de la agenda
+ * (`ActivityOutcomeFields`): teléfono (llamada y mensaje), dirección visitada (visita), canal y plantilla (mensaje), resultado, motivo de no
+ * pago —solo si se habló con el deudor— y observaciones.
  *
- * 🔴 **La regla es la de shared** (`validateRecoveryActivity`), la misma que aplica la API: se ofrecen sólo los
- * resultados que corresponden al tipo («no lo encontró» es de una visita), y «promesa de pago» y los datos de la
- * promesa van juntos. El panel no ofrece lo que la API va a rechazar.
+ * 🔴 **«Quién responde por el crédito» ya no se pregunta acá**: es un dato del crédito y se edita en su card.
  *
- * Sirve con **cualquier crédito que se vea, esté o no en mora** (F4/08): no abre ni exige ningún caso. Si la mora está abierta, la
- * API deja la gestión ligada a ese episodio; si no, es una acción preventiva.
+ * 🔴 **La regla es la de shared** (`validateRecoveryActivity`), la misma que aplica la API: se ofrecen sólo los resultados que corresponden
+ * al tipo y «promesa de pago» y los datos de la promesa van juntos.
+ *
+ * Sirve con **cualquier crédito que se vea, esté o no en mora** (F4/08): no abre ni exige ningún caso.
  */
 export function RegisterActivityButton({
   creditId,
+  clientId,
   suggestedAmount,
   methods,
   banks,
   reasons = [],
   incomeSource,
+  templates = [],
 }: {
   creditId: string;
+  /** El deudor: de él salen los teléfonos y las direcciones que se ofrecen. Ausente = no se ofrecen. */
+  clientId?: string;
   /** Con qué monto arranca la promesa. Ausente = vacío. */
   suggestedAmount?: number;
   /** Catálogo `PAYMENT_METHOD` del tenant. Vacío = los medios de siempre. */
@@ -57,6 +62,8 @@ export function RegisterActivityButton({
   reasons?: CatalogOption[];
   /** Fuente de ingreso del cliente: filtra qué motivos se ofrecen. Desconocida = se ofrecen todos. */
   incomeSource?: string;
+  /** Catálogo `WHATSAPP_TEMPLATE`: las plantillas que se ofrecen al registrar un mensaje. */
+  templates?: CatalogOption[];
 }) {
   const t = useTranslations('panel.mora');
   const tf = useTranslations('panel.mora.ficha.activity');
@@ -66,54 +73,56 @@ export function RegisterActivityButton({
   const toast = useToast();
 
   const [open, setOpen] = useState(false);
+  /** El día de la gestión: hoy por defecto; se puede cargar una de un día anterior, nunca una futura. */
+  const [activityDate, setActivityDate] = useState(todayIso);
   const [type, setType] = useState<RecoveryActivityType>('CALL');
-  const [result, setResult] = useState('');
-  const [notes, setNotes] = useState('');
+  const [out, setOut] = useState(emptyOutcome);
   const [amount, setAmount] = useState('');
   const [promiseDate, setPromiseDate] = useState('');
   const [method, setMethod] = useState('');
   const [bank, setBank] = useState('');
-  const [reasonCode, setReasonCode] = useState('');
-  const [expectedIncomeDate, setExpectedIncomeDate] = useState('');
-  const [payerParty, setPayerParty] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [touched, setTouched] = useState(false);
+  /** Los teléfonos y direcciones del deudor (los mismos que ofrece el alta de la agenda). Se piden al abrir. */
+  const [contacts, setContacts] = useState<OutcomeContact[]>([]);
+  const [locations, setLocations] = useState<OutcomeLocation[]>([]);
+
+  useEffect(() => {
+    if (!open || !clientId) return;
+    let alive = true;
+    void fetch(`/api/agenda/context/${clientId}`, { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { contacts?: OutcomeContact[]; locations?: OutcomeLocation[] } | null) => {
+        if (!alive || !data) return;
+        setContacts(data.contacts ?? []);
+        setLocations(data.locations ?? []);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [open, clientId]);
 
   const results = RECOVERY_RESULTS_BY_TYPE[type];
-  const promises = result === PROMISE_RESULT;
+  const promises = out.result === PROMISE_RESULT;
   const methodOptions = methods.length > 0 ? methods : FALLBACK_METHODS.map((code) => ({ code, label: tMethod(code as never) }));
-  // F4/13 · E4: el motivo no aplica a una nota (no tiene resultado). Lo que se ofrece depende de la fuente de ingreso.
-  const reasonOptions = reasonsFor(reasons, incomeSource);
-  const selectedReason = reasons.find((r) => r.code === reasonCode);
-  const asksIncomeDate = selectedReason?.metadata?.asksExpectedIncomeDate === true;
-  const withContext = type !== 'NOTE' && reasons.length > 0;
 
-  const input = {
-    type,
-    result: result || undefined,
-    notes,
-    promise: promises
-      ? { amount: Number(amount.replace(',', '.')), promiseDate, paymentMethodCode: method, ...(bank ? { bankCode: bank } : {}) }
-      : undefined,
-    // Solo viaja lo que se eligió; una nota nunca lleva contexto.
-    ...(withContext && reasonCode ? { reasonCode } : {}),
-    ...(withContext && reasonCode && asksIncomeDate && expectedIncomeDate ? { expectedIncomeDate } : {}),
-    ...(withContext && payerParty ? { payerParty } : {}),
-  };
-  const invalid = validateRecoveryActivity(input, todayIso());
+  const body = outcomeBody(type, out, reasons);
+  const promise = promises ? { amount: Number(amount.replace(',', '.')), promiseDate, paymentMethodCode: method, ...(bank ? { bankCode: bank } : {}) } : undefined;
+  const invalid =
+    (!activityDate || activityDate > todayIso() ? ('ACTIVITY_DATE_INVALID' as const) : null) ??
+    validateRecoveryActivity({ type, ...body, promise } as never, todayIso()) ??
+    (validateActivityTarget({ locationId: body.locationId, contactId: body.contactId, channel: body.channel }, type) ? ('TYPE_INVALID' as const) : null);
 
   function reset() {
+    setActivityDate(todayIso());
     setType('CALL');
-    setResult('');
-    setNotes('');
+    setOut(emptyOutcome());
     setAmount('');
     setPromiseDate('');
     setMethod('');
     setBank('');
-    setReasonCode('');
-    setExpectedIncomeDate('');
-    setPayerParty('');
     setError(null);
     setTouched(false);
   }
@@ -121,13 +130,13 @@ export function RegisterActivityButton({
   function changeType(next: RecoveryActivityType) {
     setType(next);
     // Un resultado que no corresponde al tipo nuevo no se arrastra.
-    if (!(RECOVERY_RESULTS_BY_TYPE[next] as readonly string[]).includes(result)) setResult('');
+    if (!(RECOVERY_RESULTS_BY_TYPE[next] as readonly string[]).includes(out.result)) setOut({ ...out, result: '' });
   }
 
-  function changeResult(next: string) {
-    setResult(next);
+  function changeOut(next: typeof out) {
     // Al prometer, el monto arranca con el sugerido: lo habitual es prometer la cuota o lo vencido.
-    if (next === PROMISE_RESULT && amount === '' && suggestedAmount !== undefined) setAmount(String(suggestedAmount));
+    if (next.result === PROMISE_RESULT && out.result !== PROMISE_RESULT && amount === '' && suggestedAmount !== undefined) setAmount(String(suggestedAmount));
+    setOut(next);
   }
 
   async function submit() {
@@ -135,15 +144,7 @@ export function RegisterActivityButton({
     if (invalid) return;
     setBusy(true);
     setError(null);
-    const res = await postJson(`/api/mora/${creditId}/activities`, {
-      type,
-      result: result || undefined,
-      notes: notes.trim() || undefined,
-      promise: input.promise,
-      ...(input.reasonCode ? { reasonCode: input.reasonCode } : {}),
-      ...(input.expectedIncomeDate ? { expectedIncomeDate: input.expectedIncomeDate } : {}),
-      ...(input.payerParty ? { payerParty: input.payerParty } : {}),
-    });
+    const res = await postJson(`/api/mora/${creditId}/activities`, { activityDate, type, ...body, ...(promise ? { promise } : {}) });
     setBusy(false);
     if (!res.ok) {
       setError(errorText(res.data.error, t, locale));
@@ -189,7 +190,11 @@ export function RegisterActivityButton({
         <ErrorBanner message={error} />
         <p>{tf('text')}</p>
         <div className="mt-4 space-y-4">
-          <Field label={tf('type')}>
+          {/* Lo PRIMERO: cuándo fue. Hoy ya viene elegido; se puede ir hacia atrás, no hacia adelante. */}
+          <Field label={tf('activityDate')} hint={tf('activityDateHint')} required>
+            <Input type="date" max={todayIso()} value={activityDate} onChange={(e) => setActivityDate(e.target.value)} disabled={busy} />
+          </Field>
+          <Field label={tf('type')} required>
             <Select value={type} onChange={(e) => changeType(e.target.value as RecoveryActivityType)} disabled={busy}>
               {RECOVERY_ACTIVITY_TYPES.map((k) => (
                 <option key={k} value={k}>
@@ -199,92 +204,55 @@ export function RegisterActivityButton({
             </Select>
           </Field>
 
-          {results.length > 0 && (
-            <Field label={tf('result')}>
-              <Select value={result} onChange={(e) => changeResult(e.target.value)} disabled={busy}>
-                <option value="">{tf('resultPlaceholder')}</option>
-                {results.map((r) => (
-                  <option key={r} value={r}>
-                    {tf(`results.${r}`)}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          )}
-
-          {promises && (
-            <fieldset className="space-y-4 rounded-xl border border-k-border bg-k-bg p-3">
-              <legend className="px-1 text-k-xs font-semibold uppercase tracking-wide text-k-text-2">{tf('promise')}</legend>
-              <Field label={tf('amount')}>
-                <Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} disabled={busy} />
-              </Field>
-              <Field label={tf('date')}>
-                <Input type="date" min={todayIso()} value={promiseDate} onChange={(e) => setPromiseDate(e.target.value)} disabled={busy} />
-              </Field>
-              <Field label={tf('method')}>
-                <Select value={method} onChange={(e) => setMethod(e.target.value)} disabled={busy}>
-                  <option value="">{tf('methodPlaceholder')}</option>
-                  {methodOptions.map((m) => (
-                    <option key={m.code} value={m.code}>
-                      {m.label}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              {banks.length > 0 && (
-                <Field label={tf('bank')}>
-                  <Select value={bank} onChange={(e) => setBank(e.target.value)} disabled={busy}>
-                    <option value="">{tf('bankPlaceholder')}</option>
-                    {banks.map((b) => (
-                      <option key={b.code} value={b.code}>
-                        {b.label}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              )}
-            </fieldset>
-          )}
-
-          {/* F4/13 · E4. Opcional: dejarlo en blanco no es un error, y una nota no lo lleva. */}
-          {withContext && (
-            <fieldset className="space-y-4 rounded-xl border border-k-border bg-k-bg p-3">
-              <legend className="px-1 text-k-xs font-semibold uppercase tracking-wide text-k-text-2">{tf('context')}</legend>
-              <p className="text-k-xs text-k-muted">{tf('contextHint')}</p>
-              <Field label={tf('reason')}>
-                <Select value={reasonCode} onChange={(e) => setReasonCode(e.target.value)} disabled={busy}>
-                  <option value="">{tf('reasonPlaceholder')}</option>
-                  {reasonOptions.map((r) => (
-                    <option key={r.code} value={r.code}>
-                      {r.label}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              {typeof selectedReason?.metadata?.suggestion === 'string' && (
-                <p className="text-k-xs text-k-text-2">{selectedReason.metadata.suggestion}</p>
-              )}
-              {asksIncomeDate && (
-                <Field label={tf('expectedIncome')}>
-                  <Input type="date" min={todayIso()} value={expectedIncomeDate} onChange={(e) => setExpectedIncomeDate(e.target.value)} disabled={busy} />
-                </Field>
-              )}
-              <Field label={tf('payer')}>
-                <Select value={payerParty} onChange={(e) => setPayerParty(e.target.value)} disabled={busy}>
-                  <option value="">{tf('payerPlaceholder')}</option>
-                  {PAYER_PARTIES.map((p) => (
-                    <option key={p} value={p}>
-                      {tf(`payers.${p}`)}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-            </fieldset>
-          )}
-
-          <Field label={type === 'NOTE' ? tf('noteText') : tf('notes')}>
-            <Input value={notes} onChange={(e) => setNotes(e.target.value)} disabled={busy} maxLength={RECOVERY_NOTES_MAX_LENGTH} />
-          </Field>
+          <ActivityOutcomeFields
+            type={type}
+            value={out}
+            onChange={changeOut}
+            results={results}
+            resultLabel={(r) => tf(`results.${r}`)}
+            contacts={contacts}
+            locations={locations}
+            reasons={reasons}
+            incomeSource={incomeSource}
+            templates={templates}
+            disabled={busy}
+            notesMax={RECOVERY_NOTES_MAX_LENGTH}
+            afterResult={
+              promises ? (
+                <fieldset className="space-y-4 rounded-xl border border-k-border bg-k-bg p-3">
+                  <legend className="px-1 text-k-xs font-semibold uppercase tracking-wide text-k-text-2">{tf('promise')}</legend>
+                  <Field label={tf('amount')} required>
+                    <Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} disabled={busy} />
+                  </Field>
+                  <Field label={tf('date')} required>
+                    <Input type="date" min={todayIso()} value={promiseDate} onChange={(e) => setPromiseDate(e.target.value)} disabled={busy} />
+                  </Field>
+                  <Field label={tf('method')} required>
+                    <Select value={method} onChange={(e) => setMethod(e.target.value)} disabled={busy}>
+                      <option value="">{tf('methodPlaceholder')}</option>
+                      {methodOptions.map((m) => (
+                        <option key={m.code} value={m.code}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  {banks.length > 0 && (
+                    <Field label={tf('bank')}>
+                      <Select value={bank} onChange={(e) => setBank(e.target.value)} disabled={busy}>
+                        <option value="">{tf('bankPlaceholder')}</option>
+                        {banks.map((b) => (
+                          <option key={b.code} value={b.code}>
+                            {b.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                  )}
+                </fieldset>
+              ) : undefined
+            }
+          />
 
           {/* Recién después del primer intento: no se le grita a quien todavía no escribió nada. */}
           {touched && invalid && <ErrorBanner message={tf(`errors.${invalid}`)} />}

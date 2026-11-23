@@ -8,6 +8,7 @@ import { DataTable, type Column, type PageMeta } from '@/components/data-table';
 import type { FilterDef } from '@/components/data-table-filters';
 import { SearchBox } from '@/components/search-box';
 import { money, fullName } from '@/lib/format';
+import { riskSegmentOf } from '@/lib/risk-segment';
 import { rowStatus, STATUS_TONE, type PortfolioRow } from '@/lib/portfolio';
 
 /**
@@ -124,7 +125,7 @@ export function PortfolioTable({
     },
     // Existen pero arrancan apagadas: se prenden con el ojito de ⚙ Columnas. Ponerlas por defecto
     // sería tapar lo que se mira todos los días con lo que se mira una vez por mes.
-    { key: 'risk', header: t('columns.risk'), visibleByDefault: false, render: (c) => c.riskSegment ?? '—' },
+    { key: 'risk', header: t('columns.risk'), visibleByDefault: false, render: (c) => (riskSegmentOf(c.riskSegment) ? t(`risk.${riskSegmentOf(c.riskSegment)}`) : (c.riskSegment ?? '—')) },
     {
       key: 'clientStatus',
       header: t('columns.clientStatus'),

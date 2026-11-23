@@ -126,6 +126,8 @@ export function OnboardingWizard({
     firstRun ? startsFrom() : applyPlanGatesTo(draftOf(base), gated),
   );
   const [saving, setSaving] = useState(false);
+  /** Qué botón del cierre se pulsó: queda con spinner y todos bloqueados hasta que el panel cambie de pantalla. */
+  const [leaving, setLeaving] = useState<'enter' | 'tour' | 'client' | null>(null);
   const [failure, setFailure] = useState<SaveFailure | null>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
 
@@ -156,13 +158,18 @@ export function OnboardingWizard({
 
   /** Sale del asistente y vuelve a pedir la sesión: el layout ya no lo monta (estado `done`/`skipped`). */
   async function leave(after?: 'client' | 'tour') {
+    if (leaving) return; // doble clic
+    setLeaving(after ?? 'enter');
     // Quien configuró la cuenta ya conoce el espacio: no hace falta darle además la tarjeta de bienvenida. Se espera el
     // guardado antes de refrescar: si no, el panel podría leer el estado viejo y mostrársela igual.
     if (!onClose) await sendJson('/api/users/me/guides', { welcomeSeen: true }, 'PATCH');
     onClose?.();
+    // Primero se navega y después se refresca: en Next 14 un `refresh()` seguido de `push()` cancela la navegación
+    // (el clic en «Registrar mi primer cliente» no hacía nada). El refresh ya re-renderiza el layout en la ruta nueva.
+    if (after === 'client') router.push('/cartera'); // sigue cargando: la pantalla cambia sola al llegar
     router.refresh();
-    if (after === 'client') router.push('/cartera');
     if (after === 'tour') startTour();
+    if (after !== 'client') setLeaving(null);
   }
 
   // Abierto desde Cuenta (`onClose`) cerrar no resuelve nada; montado por el panel, «después» marca el asistente como omitido.
@@ -456,13 +463,15 @@ export function OnboardingWizard({
                 </Button>
               ) : (
                 <>
-                  <Button variant="ghost" className="!w-auto px-4" onClick={() => void leave()}>
+                  <Button variant="ghost" className="!w-auto px-4" onClick={() => void leave()} loading={leaving === 'enter'} disabled={leaving !== null}>
                     {t('done.enter')}
                   </Button>
                   <Button
                     variant="ghost"
                     className="!w-auto px-4"
                     onClick={() => void leave('tour')}
+                    loading={leaving === 'tour'}
+                    disabled={leaving !== null}
                   >
                     {tourT('wizardCta')}
                   </Button>
@@ -470,6 +479,8 @@ export function OnboardingWizard({
                     variant="primary"
                     className="!w-auto pl-6 pr-12"
                     onClick={() => void leave('client')}
+                    loading={leaving === 'client'}
+                    disabled={leaving !== null}
                   >
                     {t('done.firstClient')}
                   </Button>

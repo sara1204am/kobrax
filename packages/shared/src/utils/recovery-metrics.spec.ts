@@ -115,11 +115,14 @@ describe('computeRecoveryMetrics — plata recuperada', () => {
     expect(m.balanceAtStart).toBe(1000);
   });
 
-  it('🔴 lo confirmado por un canal de la entidad no es plata que Kobrax cobró', () => {
+  it('🔴 un pago cobrado por otro canal también es recuperado: la deuda baja igual; solo se desglosa quién lo cobró', () => {
     const m = computeRecoveryMetrics(base({ payments: [pay(500, '2026-10-03T10:00:00Z', 'EXTERNAL_CONFIRMED'), pay(100, '2026-10-04T10:00:00Z', 'KOBRAX_COLLECTED')] }));
-    expect(m.recoveredAmount).toBe(100);
-    expect(m.recoveredAllTime).toBe(100);
-    expect(m.daysToFirstPayment).toBe(3);
+    expect(m.recoveredAmount).toBe(600);
+    expect(m.recoveredAllTime).toBe(600);
+    expect(m.paymentsCount).toBe(2);
+    expect(m.collectedByKobrax).toBe(100);
+    expect(m.collectedByOthers).toBe(500);
+    expect(m.daysToFirstPayment).toBe(2);
   });
 
   it('el primer pago es el más antiguo aunque lleguen desordenados', () => {

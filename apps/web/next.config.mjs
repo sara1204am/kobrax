@@ -34,6 +34,13 @@ const SECURITY_HEADERS = [
 const nextConfig = {
   reactStrictMode: true,
 
+  /**
+   * Sin retención en el Router Cache del cliente para páginas dinámicas. Por defecto (Next 14.2) una pantalla dinámica visitada se
+   * reutiliza ~30 s al navegar con enlaces o Atrás: registrar un pago y volver a Cartera podía mostrar el crédito de antes. Todo el
+   * panel es dinámico y lee del servidor, así que no hay nada que ahorrar y sí un estado viejo que evitar.
+   */
+  experimental: { staleTimes: { dynamic: 0, static: 30 } },
+
   /** Única variable que se expone al navegador desde el `.env` raíz: `APP_VERSION` (la versión pública del producto). */
   env: { NEXT_PUBLIC_APP_VERSION: readAppVersion() },
 

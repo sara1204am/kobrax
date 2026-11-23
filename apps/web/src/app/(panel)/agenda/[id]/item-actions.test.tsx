@@ -100,15 +100,15 @@ describe('ItemActions · completar con motivo y plantilla (F4/13 · E4/E5)', () 
     return { dialog, sent: () => enviado };
   }
 
-  it('con motivo, fecha esperada y quién responde: el cierre viaja con el contexto', async () => {
+  it('con motivo y fecha esperada: el cierre viaja con el contexto (y sin quién responde)', async () => {
     renderActions({ type: 'CALL' as never, reasons: NO_PAY });
     const { dialog, sent } = await openComplete();
     await userEvent.selectOptions(within(dialog).getByLabelText('Motivo de no pago'), 'LATE_PAY');
     fireEvent.change(within(dialog).getByLabelText('Cuándo espera cobrar'), { target: { value: '2026-10-20' } });
-    await userEvent.selectOptions(within(dialog).getByLabelText('Quién responde por el crédito'), 'CODEBTOR');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Registrar' }));
     await vi.waitFor(() => expect(sent()).not.toBeNull());
-    expect(sent()).toMatchObject({ outcome: 'CONTACTED', reasonCode: 'LATE_PAY', expectedIncomeDate: '2026-10-20', payerParty: 'CODEBTOR' });
+    expect(sent()).toMatchObject({ outcome: 'CONTACTED', reasonCode: 'LATE_PAY', expectedIncomeDate: '2026-10-20' });
+    expect(sent()).not.toHaveProperty('payerParty');
   });
 
   it('sin elegir nada, el cierre sale como siempre: sin campos de contexto', async () => {

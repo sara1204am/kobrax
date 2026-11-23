@@ -26,6 +26,7 @@ export function AvailableList({
   remoteSort,
   remoteDir,
   onSortRemote,
+  locked,
 }: {
   /** Créditos en mora; `id` es el creditId. */
   rows: AvailableCredit[];
@@ -39,14 +40,24 @@ export function AvailableList({
   remoteDir?: 'asc' | 'desc';
   /** Qué hacer cuando tocan una columna que el servidor sabe ordenar. */
   onSortRemote?: (key: 'balance' | 'daysPastDue') => void;
+  /** Créditos con visita agendada: entran a la ruta sí o sí, así que van marcados y no se pueden soltar desde acá. */
+  locked?: Set<string>;
 }) {
   const t = useTranslations('panel.routes.planning');
   const [localSort, setLocalSort] = useState<{ key: LocalSort; dir: 'asc' | 'desc' } | null>(null);
 
-  const filas = useMemo(
-    () => (localSort ? sortAvailable(rows, localSort.key, localSort.dir) : rows),
-    [rows, localSort],
-  );
+  // 🔴 Lo que ya va en la ruta queda ARRIBA —primero las visitas agendadas, luego lo marcado— y el resto debajo con el orden elegido:
+  // buscar y filtrar recorta lo de abajo, pero lo que se tiene no se pierde de vista.
+  const filas = useMemo(() => {
+    const sorted = localSort ? sortAvailable(rows, localSort.key, localSort.dir) : rows;
+    const isLocked = (id: string) => locked?.has(id) ?? false;
+    const isPicked = (id: string) => picked.includes(id);
+    return [
+      ...sorted.filter((c) => isLocked(c.id)),
+      ...sorted.filter((c) => !isLocked(c.id) && isPicked(c.id)),
+      ...sorted.filter((c) => !isLocked(c.id) && !isPicked(c.id)),
+    ];
+  }, [rows, localSort, locked, picked]);
 
   function sortLocal(key: LocalSort) {
     setLocalSort((prev) => ({ key, dir: prev?.key === key && prev.dir === 'asc' ? 'desc' : 'asc' }));
@@ -102,7 +113,8 @@ export function AvailableList({
        */}
       <ul className="max-h-[min(55rem,70vh)] divide-y divide-k-border overflow-y-auto">
         {filas.map((c) => {
-          const marcado = picked.includes(c.id);
+          const marcado = picked.includes(c.id) || (locked?.has(c.id) ?? false);
+          const fija = locked?.has(c.id) ?? false;
           const ajeno = collectorId != null && c.assigneeId != null && c.assigneeId !== collectorId;
           // La primera es la principal: la misma que va al mapa, para que la fila y el pin hablen
           // del mismo lugar.
@@ -116,6 +128,7 @@ export function AvailableList({
                   type="checkbox"
                   className="h-4 w-4 shrink-0 accent-k-purple"
                   checked={marcado}
+                  disabled={fija}
                   onChange={() => onToggle(c.id)}
                 />
                 <span className="min-w-[180px] flex-1">
@@ -124,6 +137,7 @@ export function AvailableList({
                     {/* Se dice cuándo la parada es AYUDA a otro: el responsable del crédito no cambia, sólo
                         esta jornada la cubre otro. */}
                     {ajeno && <Badge tone="warning">{t('help')}</Badge>}
+                    {fija && <Badge tone="neutral">🔒 {t('scheduledTag')}</Badge>}
                   </span>
                   <span className="block truncate text-k-xs text-k-muted">{loc?.address ?? t('noAddress')}</span>
                 </span>

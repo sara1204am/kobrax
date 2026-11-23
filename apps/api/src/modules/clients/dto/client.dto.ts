@@ -134,7 +134,10 @@ export class CreateRelationDto {
 export class CreateCollateralDto {
   /** Código del catálogo `COLLATERAL_TYPE` del tenant. Texto suelto: cada empresa arma su lista. */
   @IsOptional() @IsString() @MaxLength(64) type?: string;
-  @IsString() @IsNotEmpty() @MaxLength(500) description!: string;
+  /** Si `type` es `OTHER`: qué es exactamente. */
+  @IsOptional() @IsString() @MaxLength(80) typeOther?: string;
+  /** Opcional: qué es exactamente (marca, modelo, nº de serie…). */
+  @IsOptional() @IsString() @MaxLength(500) description?: string;
   @IsOptional() @Type(() => Number) @IsNumber() @Min(0) estimatedValue?: number;
   @IsOptional() @IsString() @Length(3, 3) currency?: string;
   @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) photoUrls?: string[];
@@ -143,7 +146,8 @@ export class CreateCollateralDto {
 
 export class UpdateCollateralDto {
   @IsOptional() @IsString() @MaxLength(64) type?: string;
-  @IsOptional() @IsString() @IsNotEmpty() @MaxLength(500) description?: string;
+  @IsOptional() @IsString() @MaxLength(80) typeOther?: string;
+  @IsOptional() @IsString() @MaxLength(500) description?: string;
   @IsOptional() @Type(() => Number) @IsNumber() @Min(0) estimatedValue?: number;
   @IsOptional() @IsString() @Length(3, 3) currency?: string;
   @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) photoUrls?: string[];

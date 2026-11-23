@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import {
+  CreditDefinition,
   buildNewCreditPayload,
   creditFormState,
   DEFAULT_ARREARS_METHOD,
@@ -224,6 +225,7 @@ export function LoanForm({
               )}
               <PaymentPlanTable
                 rows={schedule}
+                informal={state.terms.definition !== CreditDefinition.CALCULATED}
                 currency={currency}
                 paidCount={paidCount}
                 onPaidChange={schedule.length > 1 ? setPaid : undefined}

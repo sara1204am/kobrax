@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { Permission } from '../enums/permission.enum.js';
@@ -51,9 +51,21 @@ describe('PERMISSION_META — el catálogo que lee el editor de roles (F14 · F7
     }
   });
 
-  it('🔴 la migración del catálogo coincide con PERMISSION_META (si cambia uno, hay que regenerar la otra)', () => {
-    const file = join(__dirname, '../../../database/prisma/migrations/20261108010000_f14_f7_permission_catalog_meta/migration.sql');
-    const sql = readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
-    expect(sql.endsWith(permissionMetaSql() + '\n')).toBe(true);
+  it('🔴 cada permiso del catálogo tiene su metadato escrito en alguna migración (si cambia uno, hay que regenerar la otra)', () => {
+    // La migración F7 es histórica (ya aplicada, no se edita): los permisos que llegaron después llevan su propia línea idéntica en la suya.
+    const dir = join(__dirname, '../../../database/prisma/migrations');
+    const read = (name: string): string => readFileSync(join(dir, name, 'migration.sql'), 'utf8').replace(/\r\n/g, '\n');
+    const all = readdirSync(dir, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => read(d.name))
+      .join('\n');
+    const lines = permissionMetaSql().split('\n');
+    expect(lines.filter((line) => !all.includes(line))).toEqual([]);
+    // Y lo que escribió la F7 sigue valiendo hoy: nada de lo que fijó cambió de valor.
+    const current = new Set(lines);
+    const stale = read('20261108010000_f14_f7_permission_catalog_meta')
+      .split('\n')
+      .filter((l) => l.startsWith('UPDATE "permissions"') && !current.has(l));
+    expect(stale).toEqual([]);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { server } from '@/test/msw-server';
@@ -253,3 +253,58 @@ describe('PaymentModal — foto del comprobante', () => {
     expect(sent.body).not.toHaveProperty('receiptUrl');
   });
 });
+
+const isoDay = (offset: number): string => {
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+describe('PaymentModal — la fecha del pago', () => {
+  it('🔴 el PRIMER campo es la fecha: hoy preseleccionado, sin días futuros y hasta 29 días atrás', () => {
+    renderModal({ id: 'cr1', code: '302-222-2542', suggestedAmount: 500 });
+    const date = screen.getByLabelText(/Fecha del pago/) as HTMLInputElement;
+    expect(date).toHaveAttribute('type', 'date');
+    expect(date.value).toBe(isoDay(0));
+    expect(date).toHaveAttribute('max', isoDay(0));
+    expect(date).toHaveAttribute('min', isoDay(-29));
+    // Va antes que el crédito y el monto.
+    for (const later of [screen.getByLabelText('Crédito'), screen.getByLabelText('Monto')]) {
+      expect(date.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+  });
+
+  it('sin tocar la fecha el pago es de ahora: no manda `paymentDate`', async () => {
+    const sent = capture();
+    const { onClose } = renderModal({ id: 'cr1', suggestedAmount: 500 });
+    await userEvent.type(screen.getByLabelText('Monto'), '{Enter}');
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(sent.body).not.toHaveProperty('paymentDate');
+  });
+
+  it('🔴 un pago de un día anterior viaja con ESE día (al mediodía, para que ninguna zona lo corra)', async () => {
+    const sent = capture();
+    const { onClose } = renderModal({ id: 'cr1', suggestedAmount: 500 });
+    fireEvent.change(screen.getByLabelText(/Fecha del pago/), { target: { value: isoDay(-4) } });
+    await userEvent.type(screen.getByLabelText('Monto'), '{Enter}');
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalled());
+    const sentDate = new Date(sent.body!.paymentDate as string);
+    expect(sentDate.getTime()).toBe(new Date(`${isoDay(-4)}T12:00:00`).getTime());
+    expect(sent.body).toMatchObject({ creditId: 'cr1', amount: 500 });
+  });
+
+  it('🔴 una fecha futura, una demasiado vieja o vacía no se pueden registrar', async () => {
+    const sent = capture();
+    renderModal({ id: 'cr1', suggestedAmount: 500 });
+    const confirm = screen.getByRole('button', { name: 'Registrar' });
+    for (const bad of [isoDay(1), isoDay(-45), '']) {
+      fireEvent.change(screen.getByLabelText(/Fecha del pago/), { target: { value: bad } });
+      expect(confirm).toBeDisabled();
+      expect(screen.getByText(/no se registran pagos futuros ni más viejos/)).toBeInTheDocument();
+    }
+    fireEvent.change(screen.getByLabelText(/Fecha del pago/), { target: { value: isoDay(-29) } });
+    expect(confirm).toBeEnabled();
+    expect(sent.body).toBeUndefined();
+  });
+});
+

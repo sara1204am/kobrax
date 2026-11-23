@@ -7,6 +7,7 @@ import {
   Permission,
   resolvePagination,
   validateActivityContext,
+  validateActivityTarget,
   validateAgendaDetails,
   type AgendaDetails,
   type ApiResponse,
@@ -584,6 +585,23 @@ export class AgendaService {
       }
       if (item.status !== AgendaItemStatus.SCHEDULED) throw agendaNotSchedulable();
       if (!AGENDA_OUTCOMES_BY_TYPE[item.type].includes(dto.outcome)) throw agendaInvalidOutcome();
+      // Lo que se eligió al registrar (dirección visitada, teléfono usado, canal) se valida con la regla compartida y tiene que ser
+      // DEL CLIENTE de la gestión. Sin elegir, se conserva lo que se agendó (el alta ya lo pedía).
+      const tipo = ACTIVITY_TYPE_BY_AGENDA[item.type];
+      const objetivo = validateActivityTarget({ locationId: dto.locationId, contactId: dto.contactId, channel: dto.channel }, tipo);
+      if (objetivo) throw agendaInvalidContext(objetivo);
+      if (dto.locationId && !(await tx.clientLocation.findFirst({ where: { id: dto.locationId, clientId: item.clientId }, select: { id: true } }))) {
+        throw agendaInvalidContext('LOCATION_INVALID');
+      }
+      if (dto.contactId && !(await tx.clientContact.findFirst({ where: { id: dto.contactId, clientId: item.clientId }, select: { id: true } }))) {
+        throw agendaInvalidContext('CONTACT_INVALID');
+      }
+      const agendado = (item.details ?? {}) as { locationId?: unknown; contactId?: unknown };
+      const locationId = dto.locationId ?? (tipo === CreditActivityType.VISIT && typeof agendado.locationId === 'string' ? agendado.locationId : undefined);
+      const contactId =
+        dto.contactId ??
+        ((tipo === CreditActivityType.CALL || tipo === CreditActivityType.MESSAGE) && typeof agendado.contactId === 'string' ? agendado.contactId : undefined);
+      const channel = dto.channel ?? (item.type === AgendaItemType.WHATSAPP ? 'WHATSAPP' : undefined);
       // Una visita que una ruta lleva se registra desde su parada: acá se crearía una SEGUNDA actividad y no quedaría GPS ni evidencia.
       if (item.type === AgendaItemType.VISIT) {
         const stop = await tx.routeStop.findFirst({ where: { agendaItemId: id, status: { not: RouteStopStatus.SKIPPED } }, select: { id: true } });
@@ -603,7 +621,12 @@ export class AgendaService {
         payerParty: dto.payerParty as PayerParty | undefined,
         origin: dto.origin as DataOrigin | undefined,
         templateCode: dto.templateCode,
+        locationId,
+        contactId,
+        channel,
       });
+      // Compatibilidad: si la gestión trae quién responde, también queda en el crédito (es un dato del crédito).
+      if (dto.payerParty) await tx.credit.update({ where: { id: item.creditId }, data: { payerParty: dto.payerParty as PayerParty } });
       const updated = await tx.agendaItem.update({
         where: { id },
         data: { status: AgendaItemStatus.EXECUTED, resultActivityId: activity.id, updatedBy: this.tenant.userId },

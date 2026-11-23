@@ -1,10 +1,11 @@
 import { getTranslations } from 'next-intl/server';
-import { todayISO, Permission, type AgendaAssignee, type AgendaListItem, type MeInfo, type Member } from '@kobrax/shared';
+import { CatalogType, todayISO, Permission, type AgendaAssignee, type AgendaListItem, type MeInfo, type Member } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
 import { getAgendaSummary } from '@/lib/agenda-summary';
 import { dayOr, monthRange } from '@/lib/agenda';
 import { EmptyState } from '@/components/panel-ui';
 import { AgendaConnector } from './agenda-connector';
+import type { CatalogOption } from './[id]/page';
 import { requirePermission } from '@/lib/authz';
 
 /** Cuántas vencidas se traen. `meta.total` dice cuántas hay de verdad. */
@@ -34,7 +35,7 @@ export default async function AgendaPage({
   const day = dayOr(today, searchParams.date);
   const mes = monthRange(day);
 
-  const [list, month, overdue, me, team] = await Promise.all([
+  const [list, month, overdue, me, team, cancelReasons, rescheduleReasons, noPaymentReasons, templates] = await Promise.all([
     apiCall<AgendaListItem[]>(`/agenda?date=${day}`, { method: 'GET', auth: true }),
     apiCall<AgendaListItem[]>(`/agenda?from=${mes.from}&to=${mes.to}`, { method: 'GET', auth: true }),
     apiCall<AgendaListItem[]>(`/agenda/overdue?limit=${OVERDUE_LIMIT}`, { method: 'GET', auth: true }),
@@ -42,6 +43,12 @@ export default async function AgendaPage({
     // Cobradores y supervisores de su alcance, sin pedir `user:read` (el supervisor no lo tiene): sirve para agrupar
     // el equipo y para elegir a quién asignar. Sin `agenda:assign` vuelve 403 y queda vacío.
     apiCall<AgendaAssignee[]>('/agenda/assignees', { method: 'GET', auth: true }),
+    // Para los diálogos del menú «⋮» (cancelar, reagendar, registrar el resultado): se abren en la propia lista, sin ir al detalle.
+    // Sin `catalog:read` vuelven vacíos y cada diálogo lo dice.
+    apiCall<CatalogOption[]>('/catalogs/CANCEL_REASON', { method: 'GET', auth: true }),
+    apiCall<CatalogOption[]>('/catalogs/RESCHEDULE_REASON', { method: 'GET', auth: true }),
+    apiCall<CatalogOption[]>(`/catalogs/${CatalogType.NO_PAYMENT_REASON}`, { method: 'GET', auth: true }),
+    apiCall<CatalogOption[]>(`/catalogs/${CatalogType.WHATSAPP_TEMPLATE}`, { method: 'GET', auth: true }),
   ]);
 
   if (list.status !== 200 || !list.body.data) {
@@ -82,6 +89,13 @@ export default async function AgendaPage({
       members={members}
       supervises={supervises}
       assign={canAssign && me.body.data ? { meId: me.body.data.userId } : undefined}
+      dialogs={{
+        canWrite: me.body.data?.permissions?.includes(Permission.AGENDA_WRITE) ?? false,
+        cancelReasons: cancelReasons.body.data ?? [],
+        rescheduleReasons: rescheduleReasons.body.data ?? [],
+        reasons: noPaymentReasons.status === 200 ? (noPaymentReasons.body.data ?? []) : [],
+        templates: templates.status === 200 ? (templates.body.data ?? []) : [],
+      }}
     />
     </div>
   );

@@ -106,8 +106,11 @@ describe('MoraService.metrics — las métricas de recuperación', () => {
     assert.equal(data!.contacts, 1);
     assert.equal(data!.daysToFirstContact, 4);
     assert.equal(data!.daysToFirstVisit, 5);
-    assert.equal(data!.recoveredAmount, 300.5);
-    assert.equal(data!.recoveredAllTime, 400.5);
+    // Todo pago del deudor cuenta (lo cobrado por otro canal también); se desglosa quién lo cobró.
+    assert.equal(data!.recoveredAmount, 1299.5);
+    assert.equal(data!.collectedByKobrax, 300.5);
+    assert.equal(data!.collectedByOthers, 999);
+    assert.equal(data!.recoveredAllTime, 1399.5);
     assert.equal(data!.daysToFirstPayment, 8);
   });
 

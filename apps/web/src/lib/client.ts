@@ -1,3 +1,4 @@
+import { clearMinimizedNotices } from './notice-minimize';
 import {
   getLoadedSessionId,
   publishSessionEvent,
@@ -101,6 +102,7 @@ export function routeByStep(router: MiniRouter, step: Step, accounts?: AccountOp
     case 'done':
       // Sesión nueva en el navegador: las otras pestañas abiertas tienen que enterarse.
       publishSessionEvent('login');
+      clearMinimizedNotices(); // los avisos minimizados vuelven completos en cada login
       hardNavigate('/dashboard');
       break;
     case 'mfa':

@@ -2,10 +2,13 @@ import { InstallmentStatus, type Prisma } from '@prisma/client';
 import {
   addPeriods,
   arrearsByMethod,
+  calculateCredit,
   isExternalOrigin,
   oldestUnpaid,
   readCreditMetadata,
   type CreditMetadata,
+  type PlanScheduleRow,
+  type UpdatedPlan,
   withArrearsMethod,
 } from '@kobrax/shared';
 
@@ -138,3 +141,85 @@ const toIsoDate = (d: Date): string => d.toISOString().slice(0, 10);
 function stripUndefined(meta: CreditMetadata): Prisma.InputJsonObject {
   return Object.fromEntries(Object.entries(meta).filter(([, v]) => v !== undefined)) as Prisma.InputJsonObject;
 }
+
+/**
+ * De dónde sale el PLAN ORIGINAL de un crédito para imputar un pago (auditoría «Mora vs Cartera»):
+ *  · cronograma guardado (`credit_installments`) → esas filas;
+ *  · si no, las condiciones (`metadata.terms`) → el plan que regenera `calculateCredit`, con las cuotas ya pagadas al registrar;
+ *  · si no hay ninguno (préstamo abierto, o uno sin condiciones) → `null`: no hay plan que imputar y manda la lógica de siempre.
+ * Puro y testeable.
+ */
+export interface PlanSource {
+  rows: PlanScheduleRow[];
+  /** Cuotas pagadas ANTES de registrar el crédito en Kobrax (`initialState`). Sólo con condiciones. */
+  prepaidInstallments: number;
+  /** `true` si las filas son las guardadas en `credit_installments` (hay que mantener sus copias de lectura). */
+  stored: boolean;
+}
+
+/**
+ * Capital e interés de la cuota, sólo si cierran con su importe (una cuota con seguro o cargos dentro no se parte: lo demás no es capital).
+ * Sin la partición, la cuota se muestra entera.
+ */
+function splitOf(amount: number, principal: unknown, interest: unknown): { principal?: number; interest?: number } {
+  const p = principal === undefined || principal === null ? NaN : Number(principal);
+  const i = interest === undefined || interest === null ? NaN : Number(interest);
+  return Number.isFinite(p) && Number.isFinite(i) && Math.abs(p + i - amount) < 0.005 ? { principal: p, interest: i } : {};
+}
+
+export function planSourceOf(credit: {
+  metadata: unknown;
+  origin?: string | null;
+  installments: { number: number; dueDate: Date; amount: unknown; principal?: unknown; interest?: unknown }[];
+}): PlanSource | null {
+  if (credit.installments.length > 0) {
+    return {
+      rows: credit.installments.map((i) => ({ number: i.number, dueDate: i.dueDate.toISOString().slice(0, 10), amount: Number(i.amount), ...splitOf(Number(i.amount), i.principal, i.interest) })),
+      prepaidInstallments: 0,
+      stored: true,
+    };
+  }
+  const meta = readCreditMetadata(credit.metadata, credit.origin);
+  if (!meta.terms) return null;
+  const schedule = calculateCredit(meta.terms).schedule;
+  if (!schedule || schedule.length === 0) return null;
+  return {
+    rows: schedule.map((r) => ({ number: r.number, dueDate: r.dueDate, amount: r.amount, ...splitOf(r.amount, r.principal, r.interest) })),
+    prepaidInstallments: meta.initialState?.paidInstallments ?? 0,
+    stored: false,
+  };
+}
+
+/**
+ * Lo que queda por actualizar del crédito tras un pago, leído del PLAN ACTUALIZADO (no del pago suelto): la próxima fecha y la mora.
+ *
+ * 🔴 Reemplaza la regla «¿ESTE pago cubre una cuota?» de `creditPatchAfterPayment`, que no acumulaba (dos pagos de 3.000 contra una cuota
+ * de 5.208,33 nunca la cubrían) y avanzaba un solo período aunque el pago cubriera varias. Ahora el estado sale de TODO lo pagado:
+ *  · la próxima fecha es la de la cuota impaga más antigua (o, al día, la siguiente con saldo): lo que muestra `creditView`;
+ *  · la mora son los días desde la cuota vencida más antigua, con el método del crédito (D20) aplicado encima.
+ */
+export function creditPatchFromPlan(p: { metadata: unknown; plan: UpdatedPlan; creditPaid: boolean; now: Date }): CreditPatchAfterPayment {
+  const meta = readCreditMetadata(p.metadata);
+  const nextDueDate = p.plan.nextPayment?.dueDate ?? meta.nextDueDate;
+  const patch: CreditPatchAfterPayment = {};
+
+  // En cartera de un core ajeno manda la fuente: no se recalcula la mora (spec §6). Sólo la próxima fecha.
+  const external = isExternalOrigin(meta.origin);
+  const reading = p.creditPaid || external
+    ? { daysPastDue: 0, arrearsSince: undefined as string | undefined }
+    : withArrearsMethod({
+        baseDays: p.plan.baseDaysPastDue,
+        method: meta.arrearsMethod,
+        oldestUnpaidDue: p.plan.oldestOverdueDueDate,
+        arrearsSince: meta.arrearsSince,
+        asOf: p.now,
+      });
+  if (!external) patch.daysPastDue = reading.daysPastDue;
+
+  const arrearsSince = external ? meta.arrearsSince : reading.arrearsSince;
+  if (nextDueDate !== meta.nextDueDate || arrearsSince !== meta.arrearsSince) {
+    patch.metadata = stripUndefined({ ...meta, nextDueDate, arrearsSince });
+  }
+  return patch;
+}
+

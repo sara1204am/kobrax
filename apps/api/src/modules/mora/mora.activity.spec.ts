@@ -7,6 +7,8 @@ import { AgendaService } from '../agenda/agenda.service';
 const CREDIT = '11111111-1111-4111-8111-111111111111';
 const OTHER_CREDIT = '99999999-9999-4999-8999-999999999999';
 const ITEM = '33333333-3333-4333-8333-333333333333';
+const LOC = '44444444-4444-4444-8444-444444444444';
+const CONTACT = '55555555-5555-4555-8555-555555555555';
 const FUTURE = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
 const PROMISE = { amount: 500, promiseDate: FUTURE, paymentMethodCode: 'CASH' };
 
@@ -32,6 +34,8 @@ function make(opts: Opts = {}) {
     agendaUpdates: [] as { where: { id: string }; data: Record<string, unknown> }[],
     audits: [] as { entity: string; action: string }[],
     queries: [] as { sql: string; values: unknown[] }[],
+    /** `last_action_at` de una gestión con fecha propia: sólo avanza (updateMany con condición), nunca retrocede. */
+    lastActionMany: [] as Record<string, unknown>[],
   };
   let activityLookups = 0;
   const stored = { id: 'act-previa', type: 'CALL', createdAt: new Date('2026-10-02T09:00:00Z'), creditId: CREDIT, episodeId: null };
@@ -52,12 +56,21 @@ function make(opts: Opts = {}) {
       },
     },
     creditArrearEpisode: { findFirst: async () => (opts.episode ? { id: opts.episode } : null) },
+    // La zona de la empresa (para decidir qué es «hoy» al cargar una gestión con fecha).
+    account: { findFirst: async () => ({ timezone: 'America/La_Paz', countryCode: 'BO' }) },
     credit: {
+      updateMany: async (args: Record<string, unknown>) => {
+        calls.lastActionMany.push(args);
+        return { count: 1 };
+      },
       update: async (args: { data: Record<string, unknown> }) => {
         calls.creditUpdates.push(args.data);
         return {};
       },
     },
+    // Las direcciones y teléfonos DEL cliente (`cl1`): una id que no esté acá es de otro cliente.
+    clientLocation: { findFirst: async (a: { where: { id: string } }) => (a.where.id === LOC ? { id: LOC } : null) },
+    clientContact: { findFirst: async (a: { where: { id: string } }) => (a.where.id === CONTACT ? { id: CONTACT } : null) },
     agendaItem: {
       findFirst: async () => opts.agendaItem ?? null,
       update: async (args: { where: { id: string }; data: Record<string, unknown> }) => {
@@ -83,6 +96,64 @@ function make(opts: Opts = {}) {
   );
   return { service, calls };
 }
+
+const dayInLaPaz = (offset: number): string =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(Date.now() + offset * 86_400_000));
+
+describe('MoraService.addActivity — la fecha de la gestión', () => {
+  it('🔴 una fecha FUTURA se rechaza y no se escribe nada', async () => {
+    const { service, calls } = make();
+    await assert.rejects(
+      service.addActivity(CREDIT, { type: 'CALL', result: 'NO_ANSWER', activityDate: dayInLaPaz(2) }),
+      (e: unknown) => e instanceof BadRequestException && (e.getResponse() as { code: string }).code === 'MORA_ACTIVITY_DATE_FUTURE',
+    );
+    assert.equal(calls.activities.length, 0);
+    assert.equal(calls.creditUpdates.length, 0);
+  });
+
+  it('una fecha que no existe en el calendario se rechaza', async () => {
+    const { service, calls } = make();
+    await assert.rejects(
+      service.addActivity(CREDIT, { type: 'CALL', result: 'NO_ANSWER', activityDate: '2026-02-31' }),
+      (e: unknown) => e instanceof BadRequestException && (e.getResponse() as { code: string }).code === 'MORA_ACTIVITY_DATE_INVALID',
+    );
+    assert.equal(calls.activities.length, 0);
+  });
+
+  it('con la fecha de HOY se comporta como siempre: ahora, y «última gestión» avanza a ahora', async () => {
+    const { service, calls } = make();
+    await service.addActivity(CREDIT, { type: 'CALL', result: 'NO_ANSWER', activityDate: dayInLaPaz(0) });
+    assert.equal('createdAt' in calls.activities[0]!, false);
+    assert.ok(calls.creditUpdates[0]!.lastActionAt instanceof Date);
+    assert.equal(calls.lastActionMany.length, 0);
+  });
+
+  it('un día ANTERIOR queda fechado ese día (mediodía de la empresa) y «última gestión» no retrocede', async () => {
+    const { service, calls } = make({ episode: 'ep-1' });
+    const day = dayInLaPaz(-3);
+    await service.addActivity(CREDIT, { type: 'VISIT', result: 'NOT_FOUND', activityDate: day, notes: 'Fue la semana pasada' });
+    const a = calls.activities[0]!;
+    // Mediodía en La Paz (UTC−4) = 16:00 UTC del mismo día civil: ninguna zona la corre de día.
+    assert.equal((a.createdAt as Date).toISOString(), `${day}T16:00:00.000Z`);
+    assert.equal(a.episodeId, 'ep-1');
+    assert.equal(calls.creditUpdates.length, 0, 'no se pisa last_action_at con una fecha vieja');
+    const cond = JSON.stringify(calls.lastActionMany[0]);
+    assert.ok(cond.includes('"lt"') && cond.includes('lastActionAt'), 'sólo avanza si la nueva es más reciente');
+  });
+
+  it('una gestión con fecha propia queda auditada (es un dato retroactivo)', async () => {
+    const { service, calls } = make();
+    await service.addActivity(CREDIT, { type: 'CALL', result: 'NO_ANSWER', activityDate: dayInLaPaz(-1) });
+    assert.deepEqual(calls.audits, [{ entity: 'credit_activity', action: 'CREATE' }]);
+  });
+
+  it('sin activityDate nada cambia (el móvil y lo encolado no la mandan)', async () => {
+    const { service, calls } = make();
+    await service.addActivity(CREDIT, { type: 'CALL', result: 'NO_ANSWER' });
+    assert.equal('createdAt' in calls.activities[0]!, false);
+    assert.equal(calls.lastActionMany.length, 0);
+  });
+});
 
 describe('MoraService.addActivity — por crédito', () => {
   it('registra una visita en credit_activities ', async () => {
@@ -419,4 +490,35 @@ describe('MoraService.addActivity — contexto de la gestión (F4/13 · E4)', ()
       assert.equal(calls.activities.length, 0);
     });
   }
+});
+
+describe('MoraService.addActivity — dirección, teléfono y canal', () => {
+  it('una visita guarda la dirección visitada', async () => {
+    const { service, calls } = make();
+    await service.addActivity(CREDIT, { type: 'VISIT', result: 'CONTACTED', locationId: LOC });
+    assert.equal(calls.activities[0]!.locationId, LOC);
+  });
+  it('una llamada guarda el teléfono; un mensaje, teléfono y canal', async () => {
+    const a = make();
+    await a.service.addActivity(CREDIT, { type: 'CALL', result: 'CONTACTED', contactId: CONTACT });
+    assert.equal(a.calls.activities[0]!.contactId, CONTACT);
+    const b = make();
+    await b.service.addActivity(CREDIT, { type: 'MESSAGE', result: 'NO_ANSWER', contactId: CONTACT, channel: 'EMAIL' });
+    assert.equal(b.calls.activities[0]!.channel, 'EMAIL');
+  });
+  it('la dirección es de una visita: en una llamada se rechaza', async () => {
+    const { service } = make();
+    await assert.rejects(service.addActivity(CREDIT, { type: 'CALL', result: 'CONTACTED', locationId: LOC }), BadRequestException);
+  });
+  it('una dirección o teléfono de OTRO cliente no se guarda', async () => {
+    const { service, calls } = make();
+    await assert.rejects(service.addActivity(CREDIT, { type: 'VISIT', result: 'CONTACTED', locationId: OTHER_CREDIT }), BadRequestException);
+    await assert.rejects(service.addActivity(CREDIT, { type: 'CALL', result: 'CONTACTED', contactId: OTHER_CREDIT }), BadRequestException);
+    assert.equal(calls.activities.length, 0);
+  });
+  it('quien responde (móvil) queda también en el crédito', async () => {
+    const { service, calls } = make();
+    await service.addActivity(CREDIT, { type: 'CALL', result: 'CONTACTED', payerParty: 'GUARANTOR' });
+    assert.ok(calls.creditUpdates.some((u) => u.payerParty === 'GUARANTOR'));
+  });
 });

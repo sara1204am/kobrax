@@ -311,16 +311,16 @@ describe('RecordVisitDialog · la cuota que correspondía pagar', () => {
 });
 
 describe('RecordVisitDialog · motivo de no pago (F4/13 · E4, alineación web ↔ móvil)', () => {
-  it('con un motivo, la fecha esperada y quién responde: la visita viaja con el contexto', async () => {
+  it('con un motivo y la fecha esperada: la visita viaja con el contexto (quién responde ya no se pregunta)', async () => {
     const calls = mockApi({ reasons: REASONS });
     setup();
     await choose('No contesta');
     await userEvent.selectOptions(await screen.findByLabelText('Motivo de no pago'), 'LATE_PAY');
     fireEvent.change(await screen.findByLabelText('Cuándo espera cobrar'), { target: { value: '2026-10-20' } });
-    await userEvent.selectOptions(screen.getByLabelText('Quién responde por el crédito'), 'GUARANTOR');
     await submit();
     await vi.waitFor(() => expect(calls.visit).toHaveLength(1));
-    expect(calls.visit[0]).toMatchObject({ reasonCode: 'LATE_PAY', expectedIncomeDate: '2026-10-20', payerParty: 'GUARANTOR' });
+    expect(calls.visit[0]).toMatchObject({ reasonCode: 'LATE_PAY', expectedIncomeDate: '2026-10-20' });
+    expect(calls.visit[0]).not.toHaveProperty('payerParty');
   });
 
   it('sin elegir nada, la visita sale sin los campos del contexto (es opcional)', async () => {

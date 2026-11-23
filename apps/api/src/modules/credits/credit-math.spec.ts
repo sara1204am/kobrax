@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildSchedule, computeArrears, scheduleIsBalanced } from './credit-math';
+import { buildSchedule, computeArrears, DEFAULT_ARREAR_PARAMS, scheduleIsBalanced } from './credit-math';
 
 const FIRST_DUE = new Date('2026-01-15T00:00:00Z');
 const sum = (arr: number[]) => Math.round(arr.reduce((s, x) => s + x, 0) * 100) / 100;
@@ -46,7 +46,15 @@ describe('buildSchedule', () => {
 });
 
 describe('computeArrears', () => {
-  const params = { dailyMoratoriumRate: 0.001, penaltyRate: 0.02, graceDays: 0 };
+  const params = { graceDays: 0 };
+
+  it('🔴 la mora MIDE el atraso y no suma cargos: el resultado no trae interés ni penalidad (F0b)', () => {
+    assert.deepEqual(DEFAULT_ARREAR_PARAMS, { graceDays: 0 });
+    const r = computeArrears([{ id: 'a', dueDate: new Date('2026-06-01'), amount: 100, paidAmount: 0, status: 'PENDING' }], DEFAULT_ARREAR_PARAMS, new Date('2026-06-11'));
+    assert.equal(r.daysOverdue, 10, 'el atraso sí se mide');
+    assert.deepEqual(Object.keys(r).sort(), ['daysOverdue', 'overdueAmount', 'overdueInstallmentIds']);
+  });
+
 
   it('sin cuotas vencidas → todo en cero', () => {
     const r = computeArrears(
@@ -54,10 +62,10 @@ describe('computeArrears', () => {
       params,
       new Date('2026-01-20'),
     );
-    assert.deepEqual(r, { daysOverdue: 0, overdueAmount: 0, interest: 0, penalty: 0, overdueInstallmentIds: [] });
+    assert.deepEqual(r, { daysOverdue: 0, overdueAmount: 0, overdueInstallmentIds: [] });
   });
 
-  it('cuota vencida: días, interés moratorio y penalización', () => {
+  it('cuota vencida: días y monto vencido', () => {
     const r = computeArrears(
       [{ id: 'i1', dueDate: new Date('2026-01-01T00:00:00Z'), amount: 100, paidAmount: 0, status: 'PENDING' }],
       params,
@@ -65,8 +73,6 @@ describe('computeArrears', () => {
     );
     assert.equal(r.daysOverdue, 10);
     assert.equal(r.overdueAmount, 100);
-    assert.equal(r.interest, 1); // 100 * 0.001 * 10
-    assert.equal(r.penalty, 2); // 100 * 0.02
     assert.deepEqual(r.overdueInstallmentIds, ['i1']);
   });
 
@@ -77,7 +83,6 @@ describe('computeArrears', () => {
       new Date('2026-01-11T00:00:00Z'),
     );
     assert.equal(r.daysOverdue, 5);
-    assert.equal(r.interest, 0.5);
   });
 
   it('excluye cuotas pagadas y usa el saldo no pagado', () => {

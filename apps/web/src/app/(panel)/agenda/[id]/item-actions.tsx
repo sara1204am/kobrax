@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { AGENDA_OUTCOMES_BY_TYPE, AgendaItemType, ScheduleTimeMode, validateActivityContext, type AgendaListItem } from '@kobrax/shared';
 import { Button, ErrorBanner, Field, Input, Select } from '@/components/ui';
-import { ActivityContextFields, activityContextPayload, emptyActivityContext } from '@/components/activity-context-fields';
+import { ActivityOutcomeFields, emptyOutcome, outcomeBody, type OutcomeContact, type OutcomeLocation, type OutcomeState, type OutcomeType } from '@/components/activity-outcome-fields';
 import type { CatalogOption as ReasonOption } from '@/components/client-form';
 import { Modal } from '@/components/modal';
 import { useToast } from '@/components/toast';
@@ -19,12 +19,6 @@ import type { CatalogOption } from './page';
 type Action = 'complete' | 'cancel' | 'reschedule' | 'delete' | null;
 
 /**
- * Las gestiones cuya ejecución puede llevar el motivo de no pago (F4/13 · E4): llamada, visita y mensaje. Una promesa o un
- * recordatorio dejan una **nota** en la bitácora, y una nota no lleva contexto (misma regla que el móvil).
- */
-const TYPES_WITH_CONTEXT: readonly AgendaItemType[] = [AgendaItemType.CALL, AgendaItemType.VISIT, AgendaItemType.WHATSAPP];
-
-/**
  * Lo que se puede hacer con una gestión pendiente.
  *
  * Los tres caminos cierran el día de formas distintas y ninguno borra nada: ejecutar deja además
@@ -34,6 +28,8 @@ const TYPES_WITH_CONTEXT: readonly AgendaItemType[] = [AgendaItemType.CALL, Agen
 export function ItemActions({
   itemId,
   type,
+  clientId,
+  details,
   initialAction,
   today,
   cancelReasons,
@@ -48,9 +44,15 @@ export function ItemActions({
   incomeSource,
   templates = [],
   initialTemplateCode,
+  hideTriggers = false,
+  onClose,
 }: {
   itemId: string;
   type: AgendaItemType;
+  /** El deudor: de él salen los teléfonos y direcciones que se ofrecen al registrar el resultado. */
+  clientId?: string;
+  /** Lo que se agendó (teléfono, dirección): arranca elegido al registrar el resultado. */
+  details?: Record<string, unknown>;
   /** El diálogo que se abre de entrada (`?accion=` del menú de la lista). */
   initialAction?: 'complete' | 'reschedule' | 'cancel' | 'edit' | 'delete';
   /** Hoy, en `YYYY-MM-DD` UTC. Lo calcula el servidor: el reloj del navegador puede estar corrido. */
@@ -80,6 +82,10 @@ export function ItemActions({
   templates?: ReasonOption[];
   /** La plantilla con la que se armó el mensaje al agendar (si la hubo): arranca elegida al registrar el resultado. */
   initialTemplateCode?: string;
+  /** Sólo los diálogos, sin los botones: la lista de la agenda los abre desde su menú «⋮» sin salir de ella. */
+  hideTriggers?: boolean;
+  /** Se llama cuando el diálogo se cierra (cancelando o al terminar), para que quien lo montó lo desmonte. */
+  onClose?: () => void;
 }) {
   const t = useTranslations('panel.agenda');
   const tCtx = useTranslations('panel.mora.ficha.activity');
@@ -89,12 +95,19 @@ export function ItemActions({
 
   // `edit` no es un diálogo de acá sino el modal del formulario: arranca abierto si se pidió desde el menú de la lista.
   const [action, setAction] = useState<Action>(initialAction && initialAction !== 'edit' && (initialAction !== 'delete' || editable) ? initialAction : null);
-  const [outcome, setOutcome] = useState('');
-  const [notes, setNotes] = useState('');
+  // F4/13 · E4/E5: el resultado, a dónde o a quién, el motivo (solo si se habló con el deudor) y la plantilla. Todo opcional salvo el resultado.
+  const startOutcome = (): OutcomeState => ({
+    ...emptyOutcome(),
+    contactId: typeof details?.contactId === 'string' ? details.contactId : '',
+    locationId: typeof details?.locationId === 'string' ? details.locationId : '',
+    channel: type === AgendaItemType.WHATSAPP ? 'WHATSAPP' : '',
+    templateCode: templates.some((tpl) => tpl.code === initialTemplateCode) ? (initialTemplateCode ?? '') : '',
+  });
+  const [out, setOut] = useState<OutcomeState>(startOutcome);
   const [reasonCode, setReasonCode] = useState('');
-  // F4/13 · E4/E5: contexto de la gestión que se completa y la plantilla que se usó. Todo opcional.
-  const [ctx, setCtx] = useState(emptyActivityContext());
-  const [templateCode, setTemplateCode] = useState(templates.some((tpl) => tpl.code === initialTemplateCode) ? (initialTemplateCode ?? '') : '');
+  /** Los teléfonos y direcciones del deudor (los mismos del alta de la agenda). Se piden al abrir «Completar». */
+  const [contacts, setContacts] = useState<OutcomeContact[]>([]);
+  const [locations, setLocations] = useState<OutcomeLocation[]>([]);
   /*
    * Mañana, contado desde HOY y no desde el día del ítem. Con el día del ítem, reagendar una
    * gestión vencida proponía una fecha ya pasada y la API la rechazaba siempre (`AGENDA_003`) —
@@ -109,29 +122,47 @@ export function ItemActions({
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(initialAction === 'edit' && !!editable);
 
+  useEffect(() => {
+    if (action !== 'complete' || !clientId) return;
+    let alive = true;
+    void fetch(`/api/agenda/context/${clientId}`, { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { contacts?: OutcomeContact[]; locations?: OutcomeLocation[] } | null) => {
+        if (!alive || !data) return;
+        setContacts(data.contacts ?? []);
+        setLocations(data.locations ?? []);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [action, clientId]);
+
   // Los desenlaces válidos dependen del TIPO, y la API rechaza los demás con AGENDA_007: una
   // visita no puede terminar en «el número no es del deudor».
   const outcomes = AGENDA_OUTCOMES_BY_TYPE[type] ?? [];
-  const withContext = TYPES_WITH_CONTEXT.includes(type) && reasons.length > 0;
+  // Una llamada, visita o mensaje; una promesa o un recordatorio dejan una **nota** en la bitácora y no llevan teléfono, dirección ni motivo.
+  const outcomeType: OutcomeType = type === AgendaItemType.CALL ? 'CALL' : type === AgendaItemType.VISIT ? 'VISIT' : type === AgendaItemType.WHATSAPP ? 'MESSAGE' : 'NOTE';
   const withTemplate = type === AgendaItemType.WHATSAPP && templates.length > 0;
-  // Solo viaja lo que se eligió; la misma regla compartida que aplica la API (`validateActivityContext`).
-  const contextBody = {
-    ...(withContext ? activityContextPayload(ctx, reasons) : {}),
-    ...(withTemplate && templateCode ? { templateCode } : {}),
-  };
+  // Solo viaja lo elegido y lo que corresponde al tipo; la misma regla compartida que aplica la API (`validateActivityContext`).
+  const body = outcomeBody(outcomeType, out, reasons);
+  const { result: outcome, notes: bodyNotes, ...contextBody } = body;
+  const ctxOnly = { reasonCode: contextBody.reasonCode, expectedIncomeDate: contextBody.expectedIncomeDate, templateCode: contextBody.templateCode };
   const contextInvalid =
-    Object.keys(contextBody).length > 0
-      ? validateActivityContext(contextBody, type === AgendaItemType.WHATSAPP ? 'MESSAGE' : type, today)
+    ctxOnly.reasonCode !== undefined || ctxOnly.expectedIncomeDate !== undefined || ctxOnly.templateCode !== undefined
+      ? validateActivityContext(
+          Object.fromEntries(Object.entries(ctxOnly).filter(([, v]) => v !== undefined)),
+          type === AgendaItemType.WHATSAPP ? 'MESSAGE' : type,
+          today,
+        )
       : null;
 
   function close() {
     setAction(null);
     setError(null);
-    setOutcome('');
-    setNotes('');
+    setOut(startOutcome());
     setReasonCode('');
-    setCtx(emptyActivityContext());
-    setTemplateCode('');
+    onClose?.();
   }
 
   /** Eliminar quita la gestión: el detalle ya no existe, así que se vuelve a la agenda (no se refresca un 404). */
@@ -146,7 +177,8 @@ export function ItemActions({
     }
     close();
     toast(t('deleteItem.done'));
-    router.push('/agenda');
+    // Desde el detalle la gestión ya no existe: se vuelve a la agenda. Desde la lista se queda en el día que se miraba.
+    if (!hideTriggers) router.push('/agenda');
     router.refresh();
   }
 
@@ -171,7 +203,7 @@ export function ItemActions({
 
   return (
     <>
-      {canExecute && (
+      {!hideTriggers && canExecute && (
         <>
           {routeStopHref ? (
             <a href={routeStopHref} className="contents">
@@ -194,7 +226,7 @@ export function ItemActions({
           </Button>
         </>
       )}
-      {editable && (
+      {!hideTriggers && editable && (
         <>
           <Button variant="ghost" onClick={() => setEditing(true)} className="sm:w-auto sm:px-6">
             {t('actions.edit')}
@@ -207,7 +239,16 @@ export function ItemActions({
 
       {/* Se monta al abrir: el borrador arranca limpio cada vez, con lo guardado. */}
       {editable && editing && (
-        <NewTaskModal open onClose={() => setEditing(false)} date={editable.scheduledDate.slice(0, 10)} editing={editable} assign={assign} />
+        <NewTaskModal
+          open
+          onClose={() => {
+            setEditing(false);
+            onClose?.();
+          }}
+          date={editable.scheduledDate.slice(0, 10)}
+          editing={editable}
+          assign={assign}
+        />
       )}
 
       <Modal
@@ -240,7 +281,7 @@ export function ItemActions({
             </Button>
             <Button
               onClick={() =>
-                send(`/api/agenda/${itemId}/complete`, { outcome, notes: notes.trim() || undefined, ...contextBody }, t('complete.done'))
+                send(`/api/agenda/${itemId}/complete`, { outcome, notes: bodyNotes, ...contextBody }, t('complete.done'))
               }
               loading={busy}
               disabled={!outcome || contextInvalid !== null}
@@ -253,32 +294,24 @@ export function ItemActions({
       >
         <ErrorBanner message={error} />
         <div className="space-y-4">
-          <Field label={t('complete.outcome')}>
-            <Select value={outcome} onChange={(e) => setOutcome(e.target.value)} disabled={busy}>
-              <option value="">—</option>
-              {outcomes.map((value) => (
-                <option key={value} value={value}>
-                  {t(`outcome.${value}`)}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          {withContext && <ActivityContextFields reasons={reasons} incomeSource={incomeSource} value={ctx} onChange={setCtx} disabled={busy} />}
-          {withTemplate && (
-            <Field label={t('complete.template')}>
-              <Select value={templateCode} onChange={(e) => setTemplateCode(e.target.value)} disabled={busy}>
-                <option value="">{t('complete.templatePlaceholder')}</option>
-                {templates.map((tpl) => (
-                  <option key={tpl.code} value={tpl.code}>
-                    {tpl.label}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          )}
-          <Field label={t('complete.notes')}>
-            <Input value={notes} onChange={(e) => setNotes(e.target.value)} disabled={busy} maxLength={1000} />
-          </Field>
+          {/* El mismo cuerpo que «Registrar gestión» de la ficha de mora: teléfono o dirección, canal, resultado, motivo (si se habló con el
+              deudor) y observaciones. */}
+          <ActivityOutcomeFields
+            type={outcomeType}
+            value={out}
+            onChange={setOut}
+            results={outcomes}
+            resultLabel={(r) => t(`outcome.${r}`)}
+            contacts={contacts}
+            locations={locations}
+            reasons={reasons}
+            incomeSource={incomeSource}
+            templates={withTemplate ? templates : []}
+            disabled={busy}
+            notesLabel={t('complete.notes')}
+            resultLabelText={t('complete.outcome')}
+            templateLabelText={t('complete.template')}
+          />
           {contextInvalid && <ErrorBanner message={tCtx(`errors.${contextInvalid}`)} />}
         </div>
       </Modal>

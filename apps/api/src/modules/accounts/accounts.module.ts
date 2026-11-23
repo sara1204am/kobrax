@@ -9,6 +9,7 @@ import { AccountActivityService } from './account-activity.service';
 import { AccountRequestsService } from './account-requests.service';
 import { AccountsController } from './accounts.controller';
 import { AccountsService } from './accounts.service';
+import { LatePolicyService } from './late-policy.service';
 import { OwnershipService } from './ownership.service';
 import { RetentionService } from './retention.service';
 
@@ -16,7 +17,7 @@ import { RetentionService } from './retention.service';
 @Module({
   imports: [AuthModule, AuditModule, PlanModule, MailModule, NotificationsModule, LegalModule],
   controllers: [AccountsController],
-  providers: [AccountsService, AccountActivityService, AccountRequestsService, OwnershipService, RetentionService],
+  providers: [AccountsService, AccountActivityService, AccountRequestsService, OwnershipService, RetentionService, LatePolicyService],
   exports: [AccountsService, AccountRequestsService],
 })
 export class AccountsModule {}

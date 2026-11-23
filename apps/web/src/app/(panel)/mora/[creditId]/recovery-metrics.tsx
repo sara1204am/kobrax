@@ -63,7 +63,12 @@ export function RecoveryMetricsSection({ metrics, currency }: { metrics: Recover
             <Metric
               label={t('recovered')}
               value={amount(metrics.recoveredAmount)}
-              hint={[t('payments', { n: metrics.paymentsCount }), metrics.balanceAtStart !== undefined ? t('ofBalance', { amount: amount(metrics.balanceAtStart) }) : null]
+              hint={[
+                t('payments', { n: metrics.paymentsCount }),
+                metrics.balanceAtStart !== undefined ? t('ofBalance', { amount: amount(metrics.balanceAtStart) }) : null,
+                // Lo cobrado por otro canal cuenta, pero se dice: quién lo cobró no es lo mismo para el cobrador.
+                metrics.collectedByOthers > 0 ? t('byOthers', { amount: amount(metrics.collectedByOthers) }) : null,
+              ]
                 .filter(Boolean)
                 .join(' · ')}
             />

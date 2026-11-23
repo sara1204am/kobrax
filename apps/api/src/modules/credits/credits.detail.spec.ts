@@ -14,7 +14,7 @@ function make(opts: { credit?: Record<string, unknown>; openEpisodes?: number; c
     credit: { findFirst: async () => credit },
     creditArrearEpisode: { count: async () => opts.openEpisodes ?? 0 },
     arrearCategory: { findMany: async () => (calls.categoryQueries++, opts.categories ?? CATS) },
-    account: { findUnique: async () => ({ currencyCode: 'BOB', configuration: {}, settings: {} }) },
+    account: { findFirst: async () => ({ timezone: null, countryCode: 'BO' }), findUnique: async () => ({ currencyCode: 'BOB', configuration: {}, settings: {} }) },
   };
   const service = new CreditsService(
     { withTenant: async (_a: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx) } as never,

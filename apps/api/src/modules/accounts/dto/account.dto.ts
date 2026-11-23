@@ -13,6 +13,7 @@ import {
   IsUrl,
   Length,
   Matches,
+  MaxLength,
   Max,
   Min,
   ValidateNested,
@@ -85,6 +86,8 @@ export class UpdateAccountDto {
   @IsOptional() @IsIn(['0', '1', '2']) currencyDecimals?: string;
   // D20: cómo se cuenta la mora por defecto en los créditos nuevos de la cuenta.
   @IsOptional() @IsIn(Object.values(ArrearsMethod)) arrearsMethod?: string;
+  // Máscara del Nº de crédito automático: `CR-######` (los `#` son la parte numérica). Ver `credit-code.ts` en shared.
+  @IsOptional() @IsString() @MaxLength(30) @Matches(/^[^#\s]*#{1,9}[^#\s]*$/, { message: 'creditCodeMask inválida' }) creditCodeMask?: string;
 
   // Identidad y contacto del negocio. Todos opcionales y **removibles**: `@IsOptional` deja pasar el `null`, que es la
   // forma de quitarlos (y `undefined` = no tocarlo).

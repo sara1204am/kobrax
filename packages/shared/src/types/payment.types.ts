@@ -11,6 +11,28 @@
 import type { PaymentMethod } from '../constants/kobrax.constants.js';
 import type { PaymentRequestStatus } from '../enums/index.js';
 
+/** El interés moratorio de un crédito a hoy (F17): reproducido de los hechos en la API, nunca calculado en pantalla. */
+export interface LateInterestInstallment {
+  installmentNumber: number;
+  dueDate: string;
+  accrued: number;
+  collected: number;
+  waived: number;
+  pending: number;
+}
+
+export interface LateInterestView {
+  asOf: string;
+  accrued: number;
+  collected: number;
+  waived: number;
+  /** Lo que falta cobrar de mora: devengado − cobrado − exonerado. Va APARTE del saldo del plan. */
+  pending: number;
+  installments: LateInterestInstallment[];
+  /** `startsOn`: primer día que corre el devengo si el interés se activó explícitamente en un crédito existente (F3-e); `null` = desde el vencimiento. */
+  policy: { annualRate: number; dayCount: 360 | 365; graceDays: number; capPctOfPrincipal: number | null; startsOn?: string | null };
+}
+
 /**
  * Quién recibió la plata (D3). `PaymentMethod` es el medio; esto es el canal: la cobró Kobrax, o el
  * deudor pagó por un canal de la entidad y el cobrador lo confirmó. Los dos cuentan como recuperado.
@@ -99,3 +121,51 @@ export interface PaymentRequestItem {
   creditCode?: string;
   clientName?: string;
 }
+
+/** A qué cuotas se aplicó un pago (imputación FIFO) y cómo quedó el plan después de él. Viene de `payment_applications`. */
+export interface PaymentImputation {
+  allocations: { installmentNumber: number; amount: number; /** ¿la cuota quedó cubierta del todo con este pago? */ coversInstallment: boolean }[];
+  applied: number;
+  /** Lo que no cupo en el plan. */
+  unapplied: number;
+  /** Lo que quedaba por pagar del plan después de este pago. */
+  balanceAfter: number;
+  /** Pago anterior a que existieran las aplicaciones: no se inventa un reparto. */
+  unrecorded: boolean;
+}
+
+/** Un pago del historial de UN crédito (`GET /credits/:id/payments`). `REGISTERED` es el único estado: todavía no hay anulación. */
+export interface CreditPaymentItem extends PaymentItem {
+  status: 'REGISTERED';
+  /** Cuándo se registró en el sistema (la fecha efectiva del cobro es `paymentDate`). */
+  registeredAt: string;
+  imputation?: PaymentImputation;
+}
+
+export interface CreditPaymentsView {
+  creditId: string;
+  code?: string;
+  clientId: string;
+  currency: string;
+  /** `null` = sin plan (préstamo abierto) o una operación de una fuente externa. */
+  plan: {
+    planTotal: number;
+    prepaidAmount: number;
+    collectedAmount: number;
+    balance: number;
+    overdueAmount: number;
+    situation: 'CURRENT' | 'OVERDUE' | 'PAID';
+    nextPayment: { number: number; dueDate: string; amount: number; overdue: boolean } | null;
+  } | null;
+  /** Interés moratorio del crédito. `null`/ausente = no devenga (la cuenta lo tenía apagado cuando nació). */
+  lateInterest?: LateInterestView | null;
+  /** Del más reciente al más antiguo. */
+  payments: CreditPaymentItem[];
+}
+
+/**
+ * Hasta cuántos días atrás puede fecharse un cobro. Cubre al cobrador que pasa una semana sin señal y sincroniza al volver; más atrás ya no
+ * es un pago offline, es una corrección de historia. Lo valida la API y lo respeta el formulario del panel (el campo de fecha).
+ */
+export const PAYMENT_BACKDATE_DAYS = 30;
+

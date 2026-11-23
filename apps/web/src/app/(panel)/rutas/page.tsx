@@ -97,7 +97,13 @@ export default async function RutasPage({ searchParams }: { searchParams: RouteP
           day={day}
           routes={todays.body.data}
           // Quien administra rutas ve también a los cobradores que todavía no tienen la suya; el cobrador, solo la propia.
-          collectors={supervises ? members.filter((m) => m.isActive && m.roleName === RoleType.COLLECTOR) : []}
+          // Quien administra también sale a campo (la API acepta a cualquier usuario activo como cobrador): sin sumarse a sí mismo,
+          // una cuenta de una sola persona (administrador/gerente) no tendría fila en «Hoy» ni forma de planificarse.
+          collectors={
+            supervises
+              ? members.filter((m) => m.isActive && (m.roleName === RoleType.COLLECTOR || m.userId === me.body.data?.userId))
+              : []
+          }
           members={members}
           userId={me.body.data?.userId}
           canPlan={supervises}

@@ -30,6 +30,7 @@ import { usePermissions } from '@/components/permissions';
 import { SituationBadge } from '@/components/situation-badge';
 import { CREDIT_STATUS_TONE, CreditProgress } from '@/components/credit-progress';
 import { PaymentPlanTable } from '@/components/payment-plan-table';
+import { UpdatedPlanTable } from '@/components/updated-plan-table';
 import { date, dateTime, dayDate, money } from '@/lib/format';
 import { downloadText } from '@/lib/download';
 import { TextButton } from '@/components/ui';
@@ -77,7 +78,7 @@ export function CreditView({
               type="button"
               onClick={() =>
                 downloadText(
-                  paymentPlanCsv(planRows),
+                  paymentPlanCsv(planRows, { informal: credit.terms != null && credit.terms.definition !== CreditDefinition.CALCULATED }),
                   paymentPlanFileName(credit.code ?? undefined, planRows[0]!.dueDate),
                 )
               }
@@ -88,7 +89,19 @@ export function CreditView({
           ) : undefined
         }
       >
-        {calculation ? (
+        {credit.plan ? (
+          <>
+            {/* El plan ACTUALIZADO (lo pagado encima) es lo que se mira; el original no cambia nunca y queda plegado debajo. */}
+            <p className="mb-3 text-k-xs text-k-muted">{t('updatedPlan.hint')}</p>
+            <UpdatedPlanTable rows={credit.plan.rows} currency={credit.currency} />
+            <details className="mt-6">
+              <summary className="cursor-pointer text-k-sm font-medium text-k-text-2">{t('updatedPlan.originalTitle')}</summary>
+              <div className="mt-3">
+                {calculation ? <TermsPlan credit={credit} schedule={calculation.schedule} /> : <StoredPlan credit={credit} />}
+              </div>
+            </details>
+          </>
+        ) : calculation ? (
           <TermsPlan credit={credit} schedule={calculation.schedule} />
         ) : (
           <StoredPlan credit={credit} />
@@ -368,16 +381,30 @@ function CurrentState({ credit }: { credit: CreditDetail }) {
           label={t('totalToCollect')}
           value={credit.totalToCollect != null ? money(credit.totalToCollect, cur) : t('unknown')}
         />
-        <Figure
-          label={t('nextDue')}
-          value={
-            credit.nextDueDate
-              ? dayDate(credit.nextDueDate, locale)
-              : unknown('nextDueDate')
-                ? t('unknown')
+        {credit.plan ? (
+          <Figure
+            label={t('nextPayment')}
+            value={
+              credit.plan.nextPayment
+                ? `${money(credit.plan.nextPayment.amount, cur)} · ${dayDate(credit.plan.nextPayment.dueDate, locale)}`
                 : t('noNextDue')
-          }
-        />
+            }
+          />
+        ) : (
+          <Figure
+            label={t('nextDue')}
+            value={
+              credit.nextDueDate
+                ? dayDate(credit.nextDueDate, locale)
+                : unknown('nextDueDate')
+                  ? t('unknown')
+                  : t('noNextDue')
+            }
+          />
+        )}
+        {credit.plan && credit.plan.overdueAmount > 0 && (
+          <Figure label={t('overdueAmount')} value={money(credit.plan.overdueAmount, cur)} />
+        )}
         <div>
           <dt className="text-k-xs text-k-text-2">{t('arrears')}</dt>
           <dd className="mt-1">
@@ -481,7 +508,11 @@ function TermsPlan({
       <p className="mb-3 text-k-xs text-k-muted">
         {t('planHint')} {paid > 0 && t('planPaidHint', { count: paid })}
       </p>
-      <PaymentPlanTable rows={schedule} currency={credit.currency} />
+      <PaymentPlanTable
+        rows={schedule}
+        currency={credit.currency}
+        informal={credit.terms != null && credit.terms.definition !== CreditDefinition.CALCULATED}
+      />
     </>
   );
 }

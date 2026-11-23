@@ -39,8 +39,6 @@ export default async function PlanificarPage({ searchParams }: { searchParams: P
   const t = await getTranslations('panel.routes.planning');
   // «Hoy» es el de la EMPRESA: en Bolivia, desde las 20:00 el servidor ya está en mañana y «mañana» sería pasado mañana.
   const today = (await getAgendaSummary())?.date ?? todayISO();
-  const day = searchParams.date ?? shiftDay(today, 1);
-
   const [me, team] = await Promise.all([
     apiCall<MeInfo>('/auth/me', { method: 'GET', auth: true }),
     apiCall<Member[]>('/users', { method: 'GET', auth: true }),
@@ -64,8 +62,23 @@ export default async function PlanificarPage({ searchParams }: { searchParams: P
     );
   }
 
+  /*
+   * 🔴 Sin fecha en la URL se propone MAÑANA, salvo que HOY ya haya visitas agendadas sin ruta: esas son compromisos del día y
+   * planificar «mañana» las dejaba fuera de la pantalla (quien agenda una visita para hoy abre «Planificar» y no la ve).
+   * Y sin cobrador elegido se empieza por quien tiene esas visitas, no por el primero de la lista.
+   */
+  const todayVisits = searchParams.date
+    ? []
+    : ((await apiCall<AgendaListItem[]>(`/agenda?date=${today}`, { method: 'GET', auth: true }).catch(() => null))?.body.data ?? []).filter(
+        (i) => i.type === 'VISIT' && i.status === 'SCHEDULED' && collectors.some((c) => c.userId === i.assigneeId),
+      );
+  const day = searchParams.date ?? (todayVisits.length > 0 ? today : shiftDay(today, 1));
+
   // El primero de la lista si no se eligió a nadie: la pantalla siempre está planificándole a alguien.
-  const collectorId = collectors.find((c) => c.userId === searchParams.collectorId)?.userId ?? collectors[0]!.userId;
+  const collectorId =
+    collectors.find((c) => c.userId === searchParams.collectorId)?.userId ??
+    (todayVisits.length > 0 ? todayVisits[0]!.assigneeId : undefined) ??
+    collectors[0]!.userId;
   const params: PlanParams = { ...searchParams, collectorId };
 
   const [available, routes, categories, agenda] = await Promise.all([
@@ -98,6 +111,37 @@ export default async function PlanificarPage({ searchParams }: { searchParams: P
     );
   }
 
+  /*
+   * 🔴 Una visita agendada puede ser de un crédito que NO está en la lista de mora (al día, o de otro responsable). Sin sus datos no
+   * hay ubicación que dibujar ni parada que ordenar: el planificador la mostraba «sin ubicación» o no la mostraba. Se trae cada
+   * una por su código (la búsqueda ya entiende el código, y respeta el alcance de quien mira) y se suma a lo elegible.
+   */
+  const rows = [...available.body.data];
+  const known = new Set(rows.map((r) => r.creditId));
+  /*
+   * 🔴 La mora SIN RESPONSABLE también se ofrece: el filtro por cobrador la deja fuera (no es de nadie), y es justo la que cualquiera
+   * puede aprovechar —un crédito en mora al que nadie atiende, cerca de la ruta—. Con los mismos filtros que el resto de la lista.
+   */
+  const unassignedQuery = availableQuery(params, day);
+  unassignedQuery.delete('assigneeId');
+  unassignedQuery.set('unassigned', 'true');
+  const orphans = await apiCall<MoraCreditListItem[]>(`/mora?${unassignedQuery}`, { method: 'GET', auth: true }).catch(() => null);
+  for (const row of orphans?.body.data ?? []) {
+    if (!known.has(row.creditId)) {
+      rows.push(row);
+      known.add(row.creditId);
+    }
+  }
+  const absent = visits.filter((v) => !known.has(v.creditId) && v.creditCode).slice(0, 25);
+  const found = await Promise.all(
+    absent.map((v) =>
+      apiCall<MoraCreditListItem[]>(`/mora?${new URLSearchParams({ todos: 'true', limit: '10', q: v.creditCode! })}`, { method: 'GET', auth: true })
+        .then((r) => r.body.data?.find((row) => row.creditId === v.creditId))
+        .catch(() => undefined),
+    ),
+  );
+  for (const row of found) if (row) rows.push(row);
+
   return (
     <>
       <PageHeader title={t('title')} subtitle={t('subtitle')} />
@@ -106,8 +150,8 @@ export default async function PlanificarPage({ searchParams }: { searchParams: P
         today={today}
         collectors={collectors}
         collectorId={collectorId}
-        available={available.body.data.map(toAvailable)}
-        total={available.body.meta?.total ?? available.body.data.length}
+        available={rows.map(toAvailable)}
+        total={(available.body.meta?.total ?? available.body.data.length) + (rows.length - available.body.data.length)}
         routes={routes.body.data ?? []}
         minStops={minStops(params)}
         filtered={hasPlanFilters(params)}

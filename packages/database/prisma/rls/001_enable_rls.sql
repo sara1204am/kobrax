@@ -29,7 +29,7 @@ DECLARE
     'branch_types', 'user_branch_assignments',
     -- Pilar 2
     'clients', 'client_contacts', 'client_locations', 'client_relations',
-    'client_attachments', 'credits', 'credit_installments', 'arrears',
+    'client_attachments', 'credits', 'credit_installments',
     -- Corridas de importación (clientes y cartera). Llevan account_id desde
     -- 20260618160000 y quedaron fuera de esta lista hasta 2026-07-29.
     'client_import_runs',
@@ -39,7 +39,7 @@ DECLARE
     'route_plans', 'route_stops',
     'field_visits', 'field_evidences',
     -- Pilar 4 + transversal
-    'payments', 'payment_requests', 'notifications',
+    'payments', 'payment_applications', 'credit_late_waivers', 'credit_late_activations', 'late_policy_versions', 'payment_requests', 'notifications',
     -- Auth (F2a)
     'refresh_tokens',
     -- Agenda (F10)

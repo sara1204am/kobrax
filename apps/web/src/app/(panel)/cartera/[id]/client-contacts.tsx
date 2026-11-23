@@ -9,6 +9,7 @@ import { Section } from '@/components/panel-ui';
 import { Modal } from '@/components/modal';
 import { PhotoViewer } from '@/components/photo-viewer';
 import { TextButton } from '@/components/ui';
+import { WeekDayChips } from '@/components/week-day-chips';
 
 /**
  * El mapa se carga **sólo cuando alguien abre el modal**.
@@ -143,7 +144,7 @@ export function LocationList({
       </Section>
 
       <Modal wide open={actual !== null} onClose={() => setViendo(null)} title={actual?.address ?? t('sections.locations')}>
-        {actual && <LocationDetail location={actual} />}
+        {actual && <LocationDetail location={actual} modalities={modalities} />}
       </Modal>
     </>
   );
@@ -158,6 +159,9 @@ export function ContactDetail({ contact }: { contact: ClientContactDetail }) {
     <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
       <Dato label={t('form.contactType')} value={t(`contactType.${contact.contactType}`)} />
       <Dato label={t('form.contactValue')} value={contact.value ?? '—'} />
+      {contact.contactType !== 'EMAIL' && (
+        <Dato label="WhatsApp" value={contact.contactType === 'WHATSAPP' ? t('yes') : t('no')} />
+      )}
       <Dato label={t('primary')} value={contact.isPrimary ? t('yes') : t('no')} />
       {contact.isVerified != null && <Dato label={t('verified')} value={contact.isVerified ? t('yes') : t('no')} />}
       {contact.notes && <Dato label={t('form.notes')} value={contact.notes} wide />}
@@ -172,7 +176,7 @@ export function ContactDetail({ contact }: { contact: ClientContactDetail }) {
  * dirección importada de un extracto es texto y nada más, y quien mira tiene que saber que el
  * punto falta —y que se carga desde «Editar»—, no preguntarse si el mapa no cargó.
  */
-export function LocationDetail({ location }: { location: ClientLocationDetail }) {
+export function LocationDetail({ location, modalities = [] }: { location: ClientLocationDetail; modalities?: { code: string; label: string }[] }) {
   const t = useTranslations('portfolio');
   const conPunto = location.latitude != null && location.longitude != null;
   const fotos = location.photoUrls ?? [];
@@ -220,6 +224,7 @@ export function LocationDetail({ location }: { location: ClientLocationDetail })
         <Dato label={t('form.reference')} value={location.referenceNotes || '—'} wide />
         <Dato label={t('coordinates')} value={conPunto ? `${location.latitude}, ${location.longitude}` : t('noPoint')} wide />
       </dl>
+      <CollectionDetail profile={location.visitSchedule} modalities={modalities} />
       {conPunto && (
         <MapPicker
           key={location.id}
@@ -230,6 +235,57 @@ export function LocationDetail({ location }: { location: ClientLocationDetail })
         />
       )}
     </div>
+  );
+}
+
+/**
+ * «Cómo cobrarle» de un lugar, **completo**: lo mismo que se edita (modalidad, quién entrega la cuota, frecuencia, días, franja
+ * e indicación). Sin perfil no se dibuja nada: una dirección antigua no muestra un bloque vacío.
+ */
+export function CollectionDetail({
+  profile,
+  modalities = [],
+}: {
+  profile: ClientLocationDetail['visitSchedule'];
+  modalities?: { code: string; label: string }[];
+}) {
+  const t = useTranslations('portfolio');
+  if (!profile) return null;
+  const dias = profile.frequency === 'DAILY' ? [1, 2, 3, 4, 5, 6, 7] : (profile.days ?? []);
+  const filas: { label: string; value: string; wide?: boolean }[] = [];
+  if (profile.modality) filas.push({ label: t('collection.modality'), value: modalities.find((m) => m.code === profile.modality)?.label ?? profile.modality });
+  if (profile.handoverBy) filas.push({ label: t('collection.handoverBy'), value: t(`collection.handoverOptions.${profile.handoverBy}`) });
+  if (profile.frequency) filas.push({ label: t('collection.frequency'), value: t(`collection.frequencyOptions.${profile.frequency}`) });
+  // «Según el calendario» no tiene días propios.
+  const verDias = dias.length > 0 && profile.frequency !== 'PER_INSTALLMENT';
+  const despues: { label: string; value: string; wide?: boolean }[] = [];
+  if (profile.window) despues.push({ label: t('collection.windowLabel'), value: `${profile.window.from} – ${profile.window.to}` });
+  if (profile.note) despues.push({ label: t('collection.note'), value: profile.note, wide: true });
+  if (filas.length === 0 && despues.length === 0 && !verDias) return null;
+
+  return (
+    <section className="border-t border-k-border pt-3">
+      <h3 className="mb-2 text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">{t('collection.title')}</h3>
+      <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+        {filas.map((f) => (
+          <Dato key={f.label} label={f.label} value={f.value} wide={f.wide} />
+        ))}
+      </dl>
+      {/* Los días con el MISMO componente que al editar, sin poder tocarse: los elegidos se ven en el color primario. */}
+      {verDias && (
+        <div className="mt-3">
+          <p className="mb-1 text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">{t('collection.days')}</p>
+          <WeekDayChips days={dias} readOnly label={t('collection.days')} />
+        </div>
+      )}
+      {despues.length > 0 && (
+        <dl className="mt-3 grid gap-x-6 gap-y-3 sm:grid-cols-2">
+          {despues.map((f) => (
+            <Dato key={f.label} label={f.label} value={f.value} wide={f.wide} />
+          ))}
+        </dl>
+      )}
+    </section>
   );
 }
 

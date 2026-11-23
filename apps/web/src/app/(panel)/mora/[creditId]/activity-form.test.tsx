@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RegisterActivityButton } from './activity-form';
 import { ActivityResult } from './activity-result';
@@ -13,6 +13,15 @@ vi.mock('next/navigation', () => ({
 vi.mock('@/components/toast', () => ({ useToast: () => toast }));
 vi.mock('@/lib/client', async (orig) => ({ ...(await orig<typeof import('@/lib/client')>()), postJson: post }));
 
+const today = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+const daysAgo = (n: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 const tomorrow = () => {
   const d = new Date();
   d.setDate(d.getDate() + 1);
@@ -135,7 +144,7 @@ describe('RegisterActivityButton — registrar', () => {
     await userEvent.type(screen.getByLabelText('Observaciones'), '  Se dejó aviso con un familiar ');
     await userEvent.click(screen.getByRole('button', { name: 'Registrar' }));
     await waitFor(() => expect(post).toHaveBeenCalled());
-    expect(post).toHaveBeenCalledWith('/api/mora/c1/activities', { type: 'VISIT', result: 'NOT_FOUND', notes: 'Se dejó aviso con un familiar', promise: undefined });
+    expect(post).toHaveBeenCalledWith('/api/mora/c1/activities', { activityDate: today(), type: 'VISIT', result: 'NOT_FOUND', notes: 'Se dejó aviso con un familiar', promise: undefined });
     await waitFor(() => expect(toast).toHaveBeenCalledWith('Gestión registrada'));
     expect(refresh).toHaveBeenCalled();
   });
@@ -190,7 +199,7 @@ describe('ActivityResult — el resultado en el historial', () => {
   });
 });
 
-describe('RegisterActivityButton — motivo y quién responde (F4/13 · E4)', () => {
+describe('RegisterActivityButton — motivo de no pago (F4/13 · E4)', () => {
   const REASONS = [
     { code: 'JOB_LOSS', label: 'Perdió el empleo', metadata: { appliesTo: ['EMPLOYEE', 'OTHER'], suggestion: 'Suele tardar más en recuperarse.' } },
     { code: 'NO_SALES', label: 'Sin ventas o negocio caído', metadata: { appliesTo: ['BUSINESS'] } },
@@ -198,20 +207,40 @@ describe('RegisterActivityButton — motivo y quién responde (F4/13 · E4)', ()
     { code: 'FORGOT', label: 'Olvido o descuido', metadata: {} },
   ];
   const reasonSelect = () => screen.getByLabelText('Motivo de no pago') as HTMLSelectElement;
+  /** «Habló con el deudor»: recién ahí se despliega el motivo de no pago. */
+  const talked = () => userEvent.selectOptions(resultSelect(), 'CONTACTED');
 
   it('🔴 sin catálogo de motivos el formulario es el de siempre: no aparece el bloque', async () => {
     await open();
+    await talked();
     expect(screen.queryByLabelText('Motivo de no pago')).toBeNull();
   });
 
-  it('con catálogo ofrece los motivos y quién responde', async () => {
+  it('🔴 el motivo NO se ofrece hasta que se habló con el deudor', async () => {
     await open({ reasons: REASONS });
+    expect(screen.queryByLabelText('Motivo de no pago')).toBeNull();
+    await userEvent.selectOptions(resultSelect(), 'NO_ANSWER');
+    expect(screen.queryByLabelText('Motivo de no pago')).toBeNull();
+    await talked();
     expect(optionsOf(reasonSelect())).toEqual(['JOB_LOSS', 'NO_SALES', 'LATE_INCOME', 'FORGOT']);
-    expect(screen.getByLabelText('Quién responde por el crédito')).toBeInTheDocument();
+  });
+
+  it('🔴 «quién responde por el crédito» ya no se pregunta aquí: es un dato del crédito', async () => {
+    await open({ reasons: REASONS });
+    await talked();
+    expect(screen.queryByLabelText('Quién responde por el crédito')).toBeNull();
+  });
+
+  it('las observaciones están siempre: ahí va todo lo demás', async () => {
+    await open({ reasons: REASONS });
+    expect(screen.getByLabelText('Observaciones')).toBeInTheDocument();
+    await talked();
+    expect(screen.getByLabelText('Observaciones')).toBeInTheDocument();
   });
 
   it('el motivo se filtra por la fuente de ingreso del cliente', async () => {
     await open({ reasons: REASONS, incomeSource: 'BUSINESS' });
+    await talked();
     expect(optionsOf(reasonSelect())).toEqual(['NO_SALES', 'LATE_INCOME', 'FORGOT']);
   });
 
@@ -223,6 +252,7 @@ describe('RegisterActivityButton — motivo y quién responde (F4/13 · E4)', ()
 
   it('la fecha en que espera cobrar solo aparece con el motivo que la pide', async () => {
     await open({ reasons: REASONS });
+    await talked();
     expect(screen.queryByLabelText('Cuándo espera cobrar')).toBeNull();
     await userEvent.selectOptions(reasonSelect(), 'FORGOT');
     expect(screen.queryByLabelText('Cuándo espera cobrar')).toBeNull();
@@ -232,26 +262,22 @@ describe('RegisterActivityButton — motivo y quién responde (F4/13 · E4)', ()
 
   it('muestra la sugerencia del motivo elegido', async () => {
     await open({ reasons: REASONS });
+    await talked();
     await userEvent.selectOptions(reasonSelect(), 'LATE_INCOME');
     expect(screen.getByText('Pagará al cobrar.')).toBeInTheDocument();
   });
 
-  it('🔴 el motivo, la fecha y quién responde viajan con la gestión', async () => {
+  it('🔴 el motivo y la fecha viajan con la gestión (y quién responde, nunca)', async () => {
     post.mockResolvedValue({ ok: true, data: {} });
     await open({ reasons: REASONS });
-    await userEvent.selectOptions(resultSelect(), 'NO_ANSWER');
+    await talked();
     await userEvent.selectOptions(reasonSelect(), 'LATE_INCOME');
     await userEvent.type(screen.getByLabelText('Cuándo espera cobrar'), tomorrow());
-    await userEvent.selectOptions(screen.getByLabelText('Quién responde por el crédito'), 'GUARANTOR');
     await userEvent.click(screen.getByRole('button', { name: 'Registrar' }));
     await waitFor(() => expect(post).toHaveBeenCalled());
-    expect(post.mock.calls[0]![1]).toMatchObject({
-      type: 'CALL',
-      result: 'NO_ANSWER',
-      reasonCode: 'LATE_INCOME',
-      expectedIncomeDate: tomorrow(),
-      payerParty: 'GUARANTOR',
-    });
+    const body = post.mock.calls[0]![1] as Record<string, unknown>;
+    expect(body).toMatchObject({ type: 'CALL', result: 'CONTACTED', reasonCode: 'LATE_INCOME', expectedIncomeDate: tomorrow() });
+    expect('payerParty' in body).toBe(false);
   });
 
   it('🔴 sin tocar el bloque no manda nada nuevo: la gestión es la de siempre', async () => {
@@ -269,7 +295,7 @@ describe('RegisterActivityButton — motivo y quién responde (F4/13 · E4)', ()
   it('una fecha sin pedirla el motivo no viaja', async () => {
     post.mockResolvedValue({ ok: true, data: {} });
     await open({ reasons: REASONS });
-    await userEvent.selectOptions(resultSelect(), 'NO_ANSWER');
+    await talked();
     await userEvent.selectOptions(reasonSelect(), 'LATE_INCOME');
     await userEvent.type(screen.getByLabelText('Cuándo espera cobrar'), tomorrow());
     await userEvent.selectOptions(reasonSelect(), 'FORGOT'); // cambia a uno que no la pide
@@ -278,3 +304,117 @@ describe('RegisterActivityButton — motivo y quién responde (F4/13 · E4)', ()
     expect('expectedIncomeDate' in (post.mock.calls[0]![1] as Record<string, unknown>)).toBe(false);
   });
 });
+
+describe('RegisterActivityButton — lo mismo que se pide al agendar (teléfono, dirección, canal)', () => {
+  const CTX = {
+    contacts: [
+      { id: 'ct1', value: '70000001', isPrimary: false },
+      { id: 'ct2', value: '70000002', isPrimary: true },
+    ],
+    locations: [
+      { id: 'l1', address: 'Calle 1', zone: 'Centro' },
+      { id: 'l2', address: 'Calle 2' },
+    ],
+  };
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => CTX })));
+  });
+
+  it('una llamada pide el teléfono (arranca el principal) y lo manda', async () => {
+    post.mockResolvedValue({ ok: true, data: {} });
+    await open({ clientId: 'cl1' });
+    const tel = (await screen.findByLabelText('Teléfono o correo')) as HTMLSelectElement;
+    await waitFor(() => expect(tel.value).toBe('ct2'));
+    await userEvent.selectOptions(resultSelect(), 'NO_ANSWER');
+    await userEvent.click(screen.getByRole('button', { name: 'Registrar' }));
+    await waitFor(() => expect(post).toHaveBeenCalled());
+    expect(post.mock.calls[0]![1]).toMatchObject({ type: 'CALL', contactId: 'ct2' });
+    expect(post.mock.calls[0]![1]).not.toHaveProperty('locationId');
+  });
+
+  it('una visita pide la dirección visitada y la manda; no pide teléfono', async () => {
+    post.mockResolvedValue({ ok: true, data: {} });
+    await open({ clientId: 'cl1' });
+    await userEvent.selectOptions(screen.getByLabelText('Qué se hizo'), 'VISIT');
+    const dir = (await screen.findByLabelText('Dirección visitada')) as HTMLSelectElement;
+    await waitFor(() => expect(within(dir).getAllByRole('option').length).toBeGreaterThan(2));
+    expect(screen.queryByLabelText('Teléfono o correo')).toBeNull();
+    await userEvent.selectOptions(dir, 'l2');
+    await userEvent.selectOptions(resultSelect(), 'NOT_FOUND');
+    await userEvent.click(screen.getByRole('button', { name: 'Registrar' }));
+    await waitFor(() => expect(post).toHaveBeenCalled());
+    expect(post.mock.calls[0]![1]).toMatchObject({ type: 'VISIT', locationId: 'l2' });
+    expect(post.mock.calls[0]![1]).not.toHaveProperty('contactId');
+  });
+
+  it('un mensaje pide canal y teléfono; el canal arranca en WhatsApp', async () => {
+    post.mockResolvedValue({ ok: true, data: {} });
+    await open({ clientId: 'cl1' });
+    await userEvent.selectOptions(screen.getByLabelText('Qué se hizo'), 'MESSAGE');
+    const canal = screen.getByLabelText('Canal') as HTMLSelectElement;
+    await waitFor(() => expect(canal.value).toBe('WHATSAPP'));
+    await userEvent.selectOptions(canal, 'EMAIL');
+    await userEvent.selectOptions(resultSelect(), 'NO_ANSWER');
+    await userEvent.click(screen.getByRole('button', { name: 'Registrar' }));
+    await waitFor(() => expect(post).toHaveBeenCalled());
+    expect(post.mock.calls[0]![1]).toMatchObject({ type: 'MESSAGE', channel: 'EMAIL' });
+  });
+});
+
+describe('RegisterActivityButton — la fecha de la gestión', () => {
+  it('🔴 el PRIMER campo es la fecha, con hoy preseleccionado y sin permitir días futuros', async () => {
+    await open();
+    const dateField = screen.getByLabelText(/Fecha de la gestión/) as HTMLInputElement;
+    expect(dateField).toHaveAttribute('type', 'date');
+    expect(dateField.value).toBe(today());
+    expect(dateField).toHaveAttribute('max', today());
+    // Va antes que «Qué se hizo».
+    const type = screen.getByLabelText('Qué se hizo');
+    expect(dateField.compareDocumentPosition(type) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('sin tocarla, la gestión se registra con la fecha de hoy', async () => {
+    post.mockResolvedValue({ ok: true, status: 201, data: { id: 'a1', type: 'CALL', createdAt: 'x', episodeId: null } });
+    await open();
+    await userEvent.selectOptions(resultSelect(), 'NO_ANSWER');
+    await userEvent.click(screen.getByRole('button', { name: 'Registrar' }));
+    await waitFor(() => expect(post).toHaveBeenCalled());
+    expect(post.mock.calls[0]![1]).toMatchObject({ activityDate: today(), type: 'CALL', result: 'NO_ANSWER' });
+  });
+
+  it('una gestión de un día anterior viaja con su fecha', async () => {
+    post.mockResolvedValue({ ok: true, status: 201, data: { id: 'a1', type: 'CALL', createdAt: 'x', episodeId: null } });
+    await open();
+    fireEvent.change(screen.getByLabelText(/Fecha de la gestión/), { target: { value: daysAgo(3) } });
+    await userEvent.selectOptions(resultSelect(), 'NO_ANSWER');
+    await userEvent.click(screen.getByRole('button', { name: 'Registrar' }));
+    await waitFor(() => expect(post).toHaveBeenCalled());
+    expect(post.mock.calls[0]![1]).toMatchObject({ activityDate: daysAgo(3) });
+  });
+
+  it('🔴 una fecha futura no se manda, y lo dice', async () => {
+    await open();
+    fireEvent.change(screen.getByLabelText(/Fecha de la gestión/), { target: { value: tomorrow() } });
+    await userEvent.selectOptions(resultSelect(), 'NO_ANSWER');
+    await userEvent.click(screen.getByRole('button', { name: 'Registrar' }));
+    expect(post).not.toHaveBeenCalled();
+    expect(screen.getByText(/no una fecha futura/)).toBeInTheDocument();
+  });
+
+  it('sin fecha tampoco se manda', async () => {
+    await open();
+    fireEvent.change(screen.getByLabelText(/Fecha de la gestión/), { target: { value: '' } });
+    await userEvent.selectOptions(resultSelect(), 'NO_ANSWER');
+    await userEvent.click(screen.getByRole('button', { name: 'Registrar' }));
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('al cerrar y volver a abrir vuelve a hoy', async () => {
+    await open();
+    fireEvent.change(screen.getByLabelText(/Fecha de la gestión/), { target: { value: daysAgo(5) } });
+    await userEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Registrar gestión' }));
+    expect((screen.getByLabelText(/Fecha de la gestión/) as HTMLInputElement).value).toBe(today());
+  });
+});
+
