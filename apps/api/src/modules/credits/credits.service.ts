@@ -421,7 +421,7 @@ export class CreditsService {
     const found = await this.tx(async (tx) => {
       const credit = await tx.credit.findFirst({
         where: { id, deletedAt: null },
-        include: { installments: { orderBy: { number: 'asc' } }, arrears: true, latePolicyVersion: true, lateActivation: true, _count: { select: { payments: true } } },
+        include: { installments: { orderBy: { number: 'asc' } }, latePolicyVersion: true, lateActivation: true, _count: { select: { payments: true } } },
       });
       if (!credit) return null;
       await this.assertInScope(tx, id);
@@ -993,7 +993,7 @@ export class CreditsService {
       // Cartera de un core ajeno: manda el valor del archivo "hasta la siguiente carga" (spec §6).
       // Sin esta guarda, un recálculo le borraba la mora que trajo la importación.
       if (isExternalOrigin(meta.origin)) {
-        return { daysOverdue: credit.daysPastDue, overdueAmount: 0, interest: 0, penalty: 0, overdueInstallmentIds: [], skipped: 'EXTERNAL_ORIGIN' as const };
+        return { daysOverdue: credit.daysPastDue, overdueAmount: 0, overdueInstallmentIds: [], skipped: 'EXTERNAL_ORIGIN' as const };
       }
 
       /*
@@ -1007,7 +1007,7 @@ export class CreditsService {
       if (meta.moraSince) {
         const daysOverdue = manualArrears(meta.moraSince, Number(credit.outstandingBalance), asOf);
         await tx.credit.update({ where: { id }, data: { daysPastDue: daysOverdue } });
-        return { daysOverdue, overdueAmount: daysOverdue > 0 ? Number(credit.outstandingBalance) : 0, interest: 0, penalty: 0, overdueInstallmentIds: [], skipped: 'MANUAL_ARREARS' as const };
+        return { daysOverdue, overdueAmount: daysOverdue > 0 ? Number(credit.outstandingBalance) : 0, overdueInstallmentIds: [], skipped: 'MANUAL_ARREARS' as const };
       }
 
       // Crédito sin cronograma (el del móvil): la mora sale de la próxima fecha, no de las cuotas.
@@ -1031,7 +1031,7 @@ export class CreditsService {
               : {}),
           },
         });
-        return { daysOverdue, overdueAmount: daysOverdue > 0 ? Number(credit.outstandingBalance) : 0, interest: 0, penalty: 0, overdueInstallmentIds: [] };
+        return { daysOverdue, overdueAmount: daysOverdue > 0 ? Number(credit.outstandingBalance) : 0, overdueInstallmentIds: [] };
       }
 
       const arrear = computeArrears(
@@ -1069,19 +1069,6 @@ export class CreditsService {
           ...(reading.arrearsSince !== meta.arrearsSince
             ? { metadata: stripUndefined({ ...meta, arrearsSince: reading.arrearsSince }) as Prisma.InputJsonValue }
             : {}),
-        },
-      });
-      // Snapshot único por crédito (idempotente): reemplaza el anterior.
-      await tx.arrear.deleteMany({ where: { creditId: id } });
-      await tx.arrear.create({
-        data: {
-          accountId: this.tenant.accountId,
-          creditId: id,
-          daysOverdue: arrear.daysOverdue,
-          overdueAmount: arrear.overdueAmount,
-          interest: arrear.interest,
-          penalty: arrear.penalty,
-          calculatedAt: new Date(), // el instante real del cálculo; `asOf` es sólo el día civil
         },
       });
       return arrear;

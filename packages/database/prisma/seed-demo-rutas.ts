@@ -246,9 +246,6 @@ async function seedPerson(acc: string, branchId: string | null, ownerId: string,
       },
     });
     await prisma.creditInstallment.createMany({ data: installments });
-    await prisma.arrear.create({
-      data: { accountId: acc, creditId: id, daysOverdue: c.dpd, overdueAmount: round2(overdueAmount), interest: round2(overdueAmount * 0.02), penalty: round2(overdueAmount * 0.01) },
-    });
     await prisma.creditAssignment.create({
       data: { accountId: acc, creditId: id, userId: ownerId, kind: CreditAssignmentKind.PRINCIPAL, startsAt: new Date(D(-(c.dpd + 20)).getTime() + 13 * 3_600_000), grantedBy },
     });

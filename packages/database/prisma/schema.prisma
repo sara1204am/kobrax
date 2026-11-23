@@ -1172,10 +1172,9 @@ model Credit {
   client            Client                   @relation(fields: [clientId], references: [id])
   branch            Branch?                  @relation(fields: [branchId], references: [id])
   installments      CreditInstallment[]
-  arrears           Arrear[]
   payments          Payment[]
-  lateActivation    CreditLateActivation?
   lateWaivers       CreditLateWaiver[]
+  lateActivation    CreditLateActivation?
   guarantors        CreditGuarantor[]
   collaterals       CollateralCredit[]
   assignments       CreditAssignment[]
@@ -1360,7 +1359,7 @@ enum ArrearEpisodeSource {
 }
 
 /// **Un periodo de mora de un crédito.** El historial que no existía: `credits.days_past_due` sólo
-/// dice cuántos días lleva hoy, y `arrears` es una foto que se borra y se vuelve a escribir.
+/// dice cuántos días lleva hoy, y la foto `arrears` que existía antes se eliminó (F17 · F0b).
 ///
 /// 🔴 **Lo escribe un TRIGGER sobre `credits`, no la aplicación** (`credits_track_arrear_episode`,
 /// migración 20261003020000), como los totales de la cartera: la mora cambia desde el trabajo diario,
@@ -1593,24 +1592,6 @@ model CreditInstallment {
   @@index([accountId, creditId])
   @@index([accountId, status])
   @@map("credit_installments")
-}
-
-/// Mora: días de atraso, interés y penalización calculados sobre un crédito.
-model Arrear {
-  id            String   @id @default(uuid())
-  accountId     String   @map("account_id")
-  creditId      String   @map("credit_id")
-  daysOverdue   Int      @default(0) @map("days_overdue")
-  overdueAmount Decimal  @default(0) @map("overdue_amount") @db.Decimal(14, 2)
-  interest      Decimal  @default(0) @db.Decimal(14, 2)
-  penalty       Decimal  @default(0) @db.Decimal(14, 2)
-  calculatedAt  DateTime @default(now()) @map("calculated_at")
-  createdAt     DateTime @default(now()) @map("created_at")
-
-  credit Credit @relation(fields: [creditId], references: [id])
-
-  @@index([accountId, creditId])
-  @@map("arrears")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2608,6 +2589,25 @@ model LatePolicyVersion {
   version           Int
   kind              LatePolicyKind  @default(NONE)
   /// Sólo `ANNUAL_RATE`: tasa nominal anual en % (p. ej. 12.0000).
+  annualRate        Decimal?        @map("annual_rate") @db.Decimal(7, 4)
+  /// Sólo `ANNUAL_RATE`: convención de días del año (360 ó 365).
+  dayCount          Int?            @map("day_count") @db.SmallInt
+  /// Días tras el vencimiento antes de que cuente la mora.
+  graceDays         Int             @default(0) @map("grace_days") @db.SmallInt
+  /// Sólo `ANNUAL_RATE`, opcional (D5): tope acumulado del interés moratorio de una cuota, en % de su capital vencido. NULL = sin tope.
+  capPctOfPrincipal Decimal?        @map("cap_pct_of_principal") @db.Decimal(7, 4)
+  effectiveFrom     DateTime        @default(now()) @map("effective_from")
+  createdBy         String?         @map("created_by")
+  createdAt         DateTime        @default(now()) @map("created_at")
+
+  account     Account                @relation(fields: [accountId], references: [id])
+  credits     Credit[]
+  activations CreditLateActivation[]
+
+  @@index([accountId, scope, typeCode])
+  @@map("late_policy_versions")
+}
+
 /// F17·F3-e — activación EXPLÍCITA del interés moratorio en un crédito que nació sin él (D8). Un hecho append-only, único por crédito:
 /// sella la política de la cuenta vigente al activar y el primer día en que puede correr el devengo (siempre posterior al día de la activación,
 /// nunca retroactivo). No toca `credits.late_policy_version_id` (inmutable): la política efectiva del crédito es la de esta fila si existe.
@@ -2628,25 +2628,6 @@ model CreditLateActivation {
 
   @@index([accountId, creditId])
   @@map("credit_late_activations")
-}
-
-  annualRate        Decimal?        @map("annual_rate") @db.Decimal(7, 4)
-  /// Sólo `ANNUAL_RATE`: convención de días del año (360 ó 365).
-  dayCount          Int?            @map("day_count") @db.SmallInt
-  /// Días tras el vencimiento antes de que cuente la mora.
-  graceDays         Int             @default(0) @map("grace_days") @db.SmallInt
-  /// Sólo `ANNUAL_RATE`, opcional (D5): tope acumulado del interés moratorio de una cuota, en % de su capital vencido. NULL = sin tope.
-  capPctOfPrincipal Decimal?        @map("cap_pct_of_principal") @db.Decimal(7, 4)
-  effectiveFrom     DateTime        @default(now()) @map("effective_from")
-  createdBy         String?         @map("created_by")
-  createdAt         DateTime        @default(now()) @map("created_at")
-
-  account     Account                @relation(fields: [accountId], references: [id])
-  credits     Credit[]
-  activations CreditLateActivation[]
-
-  @@index([accountId, scope, typeCode])
-  @@map("late_policy_versions")
 }
 
 enum LatePolicyScope {

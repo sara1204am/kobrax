@@ -70,22 +70,15 @@ export function scheduleIsBalanced(principal: number, items: ScheduleItem[]): bo
 
 // ── Mora ──────────────────────────────────────────────────────────────────────
 export interface ArrearParams {
-  /** Interés moratorio por día (fracción, p.ej. 0.001 = 0.1%/día). */
-  dailyMoratoriumRate: number;
-  /** Penalización única como fracción del monto en mora (p.ej. 0.02 = 2%). */
-  penaltyRate: number;
   /** Días de gracia antes de considerar mora. */
   graceDays: number;
 }
 
 /**
- * 🔴 **Sin cargos por mora por defecto.** Antes `dailyMoratoriumRate` arrancaba en 0,001 (36,5 % anual): la API calculaba y exponía (`arrears.interest`)
- * un interés moratorio que nadie configuró ni consta en ningún contrato. Un cargo así sólo puede existir si la cuenta lo definió de forma explícita
- * (la política de mora por cuenta/producto, que se sella en cada crédito). Hasta entonces el atraso se mide y se muestra, sin cargos adicionales.
+ * 🔴 **La mora de `computeArrears` mide el atraso y NUNCA suma cargos** (F17 · F0b): antes calculaba `interest` y `penalty` con tasas que nadie configuró ni constan
+ * en ningún contrato. El interés moratorio, si la cuenta lo define, es la política sellada por crédito (`late_policy_versions`) y se devenga por cuota (F3).
  */
 export const DEFAULT_ARREAR_PARAMS: ArrearParams = {
-  dailyMoratoriumRate: 0,
-  penaltyRate: 0,
   graceDays: 0,
 };
 
@@ -100,8 +93,6 @@ export interface ArrearInstallment {
 export interface ArrearResult {
   daysOverdue: number;
   overdueAmount: number;
-  interest: number;
-  penalty: number;
   overdueInstallmentIds: string[];
 }
 
@@ -121,7 +112,7 @@ export function computeArrears(
     (i) => i.status !== 'PAID' && addMonthsDays(i.dueDate, params.graceDays).getTime() < asOf.getTime(),
   );
   if (overdue.length === 0) {
-    return { daysOverdue: 0, overdueAmount: 0, interest: 0, penalty: 0, overdueInstallmentIds: [] };
+    return { daysOverdue: 0, overdueAmount: 0, overdueInstallmentIds: [] };
   }
   const overdueAmount = round2(overdue.reduce((s, i) => s + (i.amount - i.paidAmount), 0));
   const oldest = overdue.reduce((min, i) => (i.dueDate < min ? i.dueDate : min), overdue[0]!.dueDate);
@@ -129,13 +120,9 @@ export function computeArrears(
     0,
     Math.floor((asOf.getTime() - addMonthsDays(oldest, params.graceDays).getTime()) / DAY_MS),
   );
-  const interest = round2(overdueAmount * params.dailyMoratoriumRate * daysOverdue);
-  const penalty = round2(overdueAmount * params.penaltyRate);
   return {
     daysOverdue,
     overdueAmount,
-    interest,
-    penalty,
     overdueInstallmentIds: overdue.map((i) => i.id),
   };
 }

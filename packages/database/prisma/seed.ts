@@ -667,7 +667,6 @@ async function flushPayments(ctx: Ctx): Promise<number> {
 async function createAppCredits(ctx: Ctx, specs: AppCreditSpec[], branchOf: (ownerKey: string) => string | undefined): Promise<void> {
   const credits: Prisma.CreditCreateManyInput[] = [];
   const installments: Prisma.CreditInstallmentCreateManyInput[] = [];
-  const arrears: Prisma.ArrearCreateManyInput[] = [];
   const assignments: Prisma.CreditAssignmentCreateManyInput[] = [];
 
   for (const s of specs) {
@@ -767,9 +766,6 @@ async function createAppCredits(ctx: Ctx, specs: AppCreditSpec[], branchOf: (own
         ...(s.paidOff ? {} : { nextDueDate: isoOf(dueOf(firstUnpaid)) }),
       }),
     });
-    if (s.dpd > 0) {
-      arrears.push({ accountId: ctx.acc, creditId: id, daysOverdue: s.dpd, overdueAmount: round2(overdueAmount), interest: round2(overdueAmount * 0.02), penalty: round2(overdueAmount * 0.01) });
-    }
     // El responsable: la fila PRINCIPAL de `credit_assignments` + `assigned_manager_id` (lo que escribe AssignmentService).
     assignments.push({
       accountId: ctx.acc,
@@ -783,7 +779,6 @@ async function createAppCredits(ctx: Ctx, specs: AppCreditSpec[], branchOf: (own
   }
   await prisma.credit.createMany({ data: credits });
   await prisma.creditInstallment.createMany({ data: installments });
-  if (arrears.length > 0) await prisma.arrear.createMany({ data: arrears });
   await prisma.creditAssignment.createMany({ data: assignments });
 }
 
@@ -1847,7 +1842,7 @@ async function wipeDataset(accountIds: string[]): Promise<void> {
   const tables = [
     'field_evidences', 'field_visits', 'route_stops', 'route_plans', 'notifications', 'agenda_items', 'credit_activities', 'credit_notes',
     'payment_requests', 'payment_applications', 'payments', 'credit_guarantors', 'collateral_credits', 'collaterals',
-    'credit_installments', 'arrears', 'credit_external_snapshots', 'credit_arrear_episodes', 'credit_assignments',
+    'credit_installments', 'credit_external_snapshots', 'credit_arrear_episodes', 'credit_assignments',
     'client_import_run_items', 'client_import_runs', 'client_external_keys', 'client_contacts', 'client_locations', 'client_relations',
     'client_attachments', 'client_income_profiles', 'credits', 'clients',
   ];

@@ -28,8 +28,6 @@ function makeService(
     creditCreate: [] as Record<string, unknown>[],
     creditUpdate: [] as Record<string, unknown>[],
     agendaCreate: [] as Record<string, unknown>[],
-    arrearCreate: [] as Record<string, unknown>[],
-    arrearDeleteMany: 0,
     installmentDeleteMany: 0,
     installmentCreateMany: [] as Record<string, unknown>[][],
     audit: [] as { action: string; entity: string }[],
@@ -104,16 +102,8 @@ function makeService(
       },
     },
     account: { findFirst: async () => ({ timezone: null, countryCode: 'BO' }), findUnique: async () => ({ currencyCode: 'BOB', configuration: opts.config ?? {}, settings: opts.settings ?? {} }) },
-    arrear: {
-      deleteMany: async () => {
-        calls.arrearDeleteMany += 1;
-        return { count: 1 };
-      },
-      create: async (args: { data: Record<string, unknown> }) => {
-        calls.arrearCreate.push(args.data);
-        return args.data;
-      },
-    },
+    // F0b: la tabla `arrears` ya no existe. Si el servicio vuelve a tocarla, esta prueba falla.
+    arrear: new Proxy({}, { get: () => { throw new Error('credits.service ya no debe escribir ni leer `arrears` (F17 · F0b)'); } }),
   };
   const prisma = {
     withTenant: async (_acc: string, fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
@@ -730,22 +720,19 @@ describe('CreditsService.create — con condiciones (F4/06 · D14)', () => {
 });
 
 describe('CreditsService.recalculateArrears', () => {
-  it('calcula mora, actualiza daysPastDue y reemplaza el snapshot (idempotente)', async () => {
+  it('calcula mora y actualiza daysPastDue; ya no escribe ninguna foto `arrears` (F0b)', async () => {
     const credit = {
       id: 'cr1',
       installments: [
         { id: 'i1', dueDate: new Date('2026-01-01T00:00:00Z'), amount: 100, paidAmount: 0, status: 'PENDING' },
       ],
     };
-    const { service, calls } = makeService({ credit, config: { arrears: { dailyMoratoriumRate: 0.001, penaltyRate: 0.02, graceDays: 0 } } });
+    const { service, calls } = makeService({ credit, config: { arrears: { graceDays: 0 } } });
     const r = await service.recalculateArrears('cr1', '2026-01-11T00:00:00Z');
 
     assert.equal(r.daysOverdue, 10);
     assert.equal(r.overdueAmount, 100);
-    assert.equal(r.interest, 1);
     assert.equal(calls.creditUpdate[0]!.daysPastDue, 10);
-    assert.equal(calls.arrearDeleteMany, 1); // snapshot reemplazado
-    assert.equal(calls.arrearCreate[0]!.daysOverdue, 10);
     assert.deepEqual(calls.audit.map((a) => a.action), ['ARREARS_RECALC']);
   });
 

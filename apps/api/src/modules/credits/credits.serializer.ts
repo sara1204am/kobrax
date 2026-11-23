@@ -1,4 +1,4 @@
-import type { Arrear, Credit, CreditInstallment, LatePolicyVersion } from '@prisma/client';
+import type { Credit, CreditInstallment, LatePolicyVersion } from '@prisma/client';
 import {
   balanceBasisOf,
   calculateCredit,
@@ -52,22 +52,12 @@ export function serializeInstallment(i: CreditInstallment) {
   };
 }
 
-export function serializeArrear(a: Arrear) {
-  return {
-    id: a.id,
-    daysOverdue: a.daysOverdue,
-    overdueAmount: num(a.overdueAmount),
-    interest: num(a.interest),
-    penalty: num(a.penalty),
-    calculatedAt: a.calculatedAt,
-  };
-}
-
 type CreditWithRelations = Credit & {
   installments?: CreditInstallment[];
   /** Sólo en la ficha: la política de mora con que nació el crédito (sellada, inmutable). */
   latePolicyVersion?: LatePolicyVersion | null;
-  arrears?: Arrear[];
+  /** Sólo en la ficha: la activación explícita del interés moratorio (F3-e), si la hay. */
+  lateActivation?: { startsOn: Date; reason: string; createdAt: Date } | null;
   /** Sólo en la ficha: si hay pagos, las condiciones ya no se redefinen (D13). */
   _count?: { payments?: number };
 };
@@ -175,7 +165,6 @@ export function serializeCredit(
     oldestUnpaid: oldestUnpaidOf(credit.installments, view.terms, view.nextDueDate),
     hasPayments: credit._count?.payments !== undefined ? credit._count.payments > 0 : undefined,
     installments: credit.installments?.map(serializeInstallment),
-    arrears: credit.arrears?.map(serializeArrear),
     plan: plan ?? undefined,
     // La política de mora con que nació el crédito: sellada, no cambia aunque la cuenta cambie la suya después.
     latePolicy: credit.latePolicyVersion
@@ -189,6 +178,13 @@ export function serializeCredit(
           effectiveFrom: credit.latePolicyVersion.effectiveFrom,
         }
       : undefined,
+    // F3-e: activación explícita del interés moratorio en un crédito que nació sin él (`undefined` fuera de la ficha, `null` si no tiene).
+    lateActivation:
+      credit.lateActivation === undefined
+        ? undefined
+        : credit.lateActivation
+          ? { startsOn: credit.lateActivation.startsOn.toISOString().slice(0, 10), reason: credit.lateActivation.reason, createdAt: credit.lateActivation.createdAt }
+          : null,
   };
 }
 
