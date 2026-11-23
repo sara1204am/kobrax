@@ -73,7 +73,7 @@ export function emptyRelation(id: string): RelationRow {
 }
 
 export function emptyCollateral(id: string): CollateralRow {
-  return { id, type: '', description: '', estimatedValue: '', currency: '', photoUrls: [], creditIds: [] };
+  return { id, type: '', typeOther: '', description: '', estimatedValue: '', currency: '', photoUrls: [], creditIds: [] };
 }
 
 export function initialCliente(): ClienteForm {
@@ -199,6 +199,7 @@ export function hydrateCliente(d: {
   collaterals?: {
     id: string;
     type?: string;
+    typeOther?: string;
     description: string;
     estimatedValue?: number;
     currency?: string;
@@ -235,6 +236,7 @@ export function hydrateCliente(d: {
       id: g.id,
       serverId: g.id,
       type: g.type ?? '',
+      typeOther: g.typeOther ?? '',
       description: g.description,
       estimatedValue: g.estimatedValue != null ? String(g.estimatedValue) : '',
       currency: g.currency ?? '',
@@ -367,6 +369,8 @@ export function relationPayload(r: RelationRow): NewRelationInput {
 export function collateralPayload(g: CollateralRow): NewCollateralInput {
   return {
     type: g.type || undefined,
+    // «Otro»: qué es. Con cualquier otro tipo viaja vacío para que la API lo borre al cambiar de tipo.
+    typeOther: g.type === 'OTHER' ? (g.typeOther ?? '').trim() || undefined : '',
     description: g.description.trim(),
     estimatedValue: parseNum(g.estimatedValue),
     currency: g.currency || undefined,
@@ -377,11 +381,29 @@ export function collateralPayload(g: CollateralRow): NewCollateralInput {
 }
 
 /**
- * ¿La fila de garantía tiene algo? **La descripción es lo que la hace existir**: una garantía que
- * dice sólo «vehículo» y no cuál no le sirve a nadie que salga a buscarla.
+ * ¿La fila de garantía tiene algo? Cualquiera de: tipo, valor, descripción o fotos. Una fila totalmente vacía (la que se agregó
+ * y no se llenó) se descarta; una a medio llenar **se conserva y se marca** (`collateralMissing`), no se pierde en silencio.
  */
 export function hasCollateralData(g: CollateralRow): boolean {
-  return g.description.trim().length > 0;
+  return (
+    g.type.trim().length > 0 ||
+    g.description.trim().length > 0 ||
+    g.estimatedValue.trim().length > 0 ||
+    g.photoUrls.length > 0
+  );
+}
+
+/**
+ * Lo que le falta a una garantía para poder guardarse en el panel: el **tipo**, el **qué tipo** si es «Otro» y el **valor**
+ * (mayor que cero). La descripción, las fotos y a qué créditos respalda son opcionales.
+ */
+export function collateralMissing(g: CollateralRow): ('type' | 'typeOther' | 'value')[] {
+  const out: ('type' | 'typeOther' | 'value')[] = [];
+  if (g.type.trim() === '') out.push('type');
+  else if (g.type === 'OTHER' && (g.typeOther ?? '').trim() === '') out.push('typeOther');
+  const v = parseNum(g.estimatedValue);
+  if (v === undefined || v <= 0) out.push('value');
+  return out;
 }
 
 /** Garantías → payload, descartando las filas sin descripción. */

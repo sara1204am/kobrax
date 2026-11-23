@@ -1,5 +1,5 @@
 import { useLocale, useTranslations } from 'next-intl';
-import type { CreditScheduleRow } from '@kobrax/shared';
+import { remainingAfter, type CreditScheduleRow } from '@kobrax/shared';
 import { Badge } from '@/components/panel-ui';
 import { dayDate, money } from '@/lib/format';
 
@@ -24,11 +24,14 @@ export function PaymentPlanTable({
   currency,
   paidCount,
   onPaidChange,
+  informal,
 }: {
   rows: CreditScheduleRow[];
   currency: string;
   paidCount?: number;
   onPaidChange?: (paidCount: number) => void;
+  /** Crédito de monto o cuota acordados: sin capital ni interés, y el saldo es lo que queda por cobrar. */
+  informal?: boolean;
 }) {
   const t = useTranslations('portfolio.creditForm.plan');
   const tp = useTranslations('portfolio.creditForm.paid');
@@ -36,6 +39,7 @@ export function PaymentPlanTable({
   // D18: las columnas de seguro y cargos sólo si el crédito los tiene.
   const extras = rows.some((r) => r.insurance !== undefined);
   const withStatus = paidCount !== undefined;
+  const left = informal ? remainingAfter(rows) : [];
 
   return (
     <div className="overflow-x-auto">
@@ -44,17 +48,17 @@ export function PaymentPlanTable({
           <tr className="border-b border-k-border text-left text-k-xs font-semibold uppercase tracking-wide text-k-text-2">
             <th scope="col" className="py-2 pr-4">{t('number')}</th>
             <th scope="col" className="py-2 pr-4">{t('dueDate')}</th>
-            <th scope="col" className="py-2 pr-4 text-right">{t('principal')}</th>
-            <th scope="col" className="py-2 pr-4 text-right">{t('interest')}</th>
+            {!informal && <th scope="col" className="py-2 pr-4 text-right">{t('principal')}</th>}
+            {!informal && <th scope="col" className="py-2 pr-4 text-right">{t('interest')}</th>}
             {extras && <th scope="col" className="py-2 pr-4 text-right">{t('insurance')}</th>}
             {extras && <th scope="col" className="py-2 pr-4 text-right">{t('charges')}</th>}
             <th scope="col" className="py-2 pr-4 text-right">{t('amount')}</th>
-            <th scope="col" className={`py-2 text-right ${withStatus ? 'pr-4' : ''}`}>{t('balance')}</th>
+            <th scope="col" className={`py-2 text-right ${withStatus ? 'pr-4' : ''}`}>{informal ? t('remaining') : t('balance')}</th>
             {withStatus && <th scope="col" className="py-2">{tp('status')}</th>}
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => {
+          {rows.map((r, i) => {
             const paid = withStatus && r.number <= paidCount;
             // Marcar la última dejaría todo pago: no se ofrece.
             const canToggle = onPaidChange && (paid || r.number < rows.length);
@@ -62,13 +66,13 @@ export function PaymentPlanTable({
               <tr key={r.number} className={`border-b border-k-border last:border-0 ${paid ? 'bg-k-success-bg/40' : ''}`}>
                 <td className="py-2 pr-4 text-k-text-2">{r.number}</td>
                 <td className="py-2 pr-4 whitespace-nowrap">{dayDate(r.dueDate, locale)}</td>
-                <td className="py-2 pr-4 text-right tabular-nums">{money(r.principal, currency)}</td>
-                <td className="py-2 pr-4 text-right tabular-nums">{money(r.interest, currency)}</td>
+                {!informal && <td className="py-2 pr-4 text-right tabular-nums">{money(r.principal, currency)}</td>}
+                {!informal && <td className="py-2 pr-4 text-right tabular-nums">{money(r.interest, currency)}</td>}
                 {extras && <td className="py-2 pr-4 text-right tabular-nums">{money(r.insurance ?? 0, currency)}</td>}
                 {extras && <td className="py-2 pr-4 text-right tabular-nums">{money(r.charges ?? 0, currency)}</td>}
                 <td className="py-2 pr-4 text-right font-semibold tabular-nums text-k-text">{money(r.amount, currency)}</td>
                 <td className={`py-2 text-right tabular-nums text-k-text-2 ${withStatus ? 'pr-4' : ''}`}>
-                  {money(r.principalBalance, currency)}
+                  {money(informal ? left[i]! : r.principalBalance, currency)}
                 </td>
                 {withStatus && (
                   <td className="py-2 whitespace-nowrap">

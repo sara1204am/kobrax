@@ -223,3 +223,24 @@ describe('serializeMoraCredit — un crédito, un registro', () => {
     assert.equal(r.branchName, 'Centro');
   });
 });
+
+describe('serializeMoraCredit — monto vencido de un crédito con condiciones y SIN cronograma guardado (cuota fija)', () => {
+  // 4 cuotas de 300 los días 15 de ago-nov. Hoy (1/oct) están vencidas la 1 y la 2.
+  const terms = { definition: 'agreed_installment', principal: 1000, installmentAmount: 300, installmentsCount: 4, frequency: 'MONTHLY', firstDueDate: '2026-08-15' };
+  const meta = (over: Record<string, unknown> = {}) => ({ origin: 'manual', terms, termsVersion: 1, balanceBasis: 'total', nextDueDate: '2026-08-15', installmentAmount: 300, ...over });
+
+  it('🔴 antes salía vacío («—»): ahora es lo vencido del plan, descontando lo ya cubierto', () => {
+    assert.equal(serializeMoraCredit(row({ outstandingBalance: '1200', metadata: meta() }), opts).overdueAmount, 600);
+    assert.equal(serializeMoraCredit(row({ outstandingBalance: '900', metadata: meta() }), opts).overdueAmount, 300);
+    assert.equal(serializeMoraCredit(row({ outstandingBalance: '600', metadata: meta() }), opts).overdueAmount, 0);
+    assert.equal(serializeMoraCredit(row({ outstandingBalance: '1200', metadata: meta() }), opts).overdueSource, 'SCHEDULE');
+  });
+
+  it('sin saber que el saldo es el total del plan no se afirma nada (queda sin dato)', () => {
+    assert.equal(serializeMoraCredit(row({ outstandingBalance: '1200', metadata: meta({ balanceBasis: undefined }) }), opts).overdueAmount, undefined);
+  });
+
+  it('mora marcada a mano sigue sin monto vencido afirmable, aunque tenga condiciones', () => {
+    assert.equal(serializeMoraCredit(row({ outstandingBalance: '1200', metadata: meta({ moraSince: '2026-08-20' }) }), opts).overdueAmount, undefined);
+  });
+});

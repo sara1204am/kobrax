@@ -34,6 +34,8 @@ export function candidatePins(
     skip: Set<string>;
     detail: (c: AvailableCredit) => string;
     typeLabel: (type: string) => string;
+    /** Se dibujan como sugerencia (pin naranja con bombilla) y no como un candidato más. */
+    suggestion?: boolean;
   },
 ): MapPoint[] {
   return rows.flatMap((c) =>
@@ -47,6 +49,7 @@ export function candidatePins(
           label: c.clientName ?? undefined,
           detail: [opts.detail(c), describeLocation(loc, opts.typeLabel)].filter(Boolean).join(' · '),
           picked: false,
+          ...(opts.suggestion ? { tone: 'suggestion' as const } : {}),
           photoUrl: loc.photoUrl,
         })),
   );

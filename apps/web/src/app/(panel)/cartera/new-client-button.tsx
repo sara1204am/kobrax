@@ -18,6 +18,7 @@ import { usePermissions } from '@/components/permissions';
 import { useToast } from '@/components/toast';
 import { postJson } from '@/lib/client';
 import type { OfficeOption } from '@/lib/offices';
+import { missingClientFields } from '@/lib/client-missing';
 import { duplicateBlocks, nameSignature, useDuplicateCheck } from '@/lib/duplicate-check';
 import { DocumentTaken, NamesTaken } from './duplicate-notice';
 
@@ -144,7 +145,8 @@ function NewClientModal({
   const namesAccepted = acceptedFor === nameSignature(form);
   const blocked = duplicateBlocks(dup, namesAccepted);
 
-  const valid = canSubmitCliente(form);
+  const missing = missingClientFields(form);
+  const valid = canSubmitCliente(form) && missing.length === 0;
 
   async function guardar(e: React.FormEvent) {
     e.preventDefault();
@@ -207,10 +209,22 @@ function NewClientModal({
       >
         <p className="mb-3 text-k-sm text-k-text-2">{t('newSubtitle')}</p>
         <ErrorBanner message={error} />
-        {/* El mínimo que exige el servidor: quién es (nombre y apellido, o razón social) y un
-            teléfono. Se dice, en vez de dejar el botón apagado sin explicar por qué. */}
-        {!valid && <p className="mb-3 mt-2 text-k-sm text-k-muted">{t('form.minimum')}</p>}
-        {checking && <p className="mb-3 mt-2 text-k-sm text-k-muted">{t('duplicate.checking')}</p>}
+        {/*
+          Una sola franja de ALTURA FIJA para «qué falta» y «buscando duplicados». Antes cada uno aparecía y desaparecía a
+          medida que se escribía, y todo el formulario subía y bajaba con cada tecla. El espacio está siempre reservado; lo
+          único que cambia es el texto.
+        */}
+        <p
+          role="status"
+          aria-live="polite"
+          className={`mb-3 mt-2 h-5 truncate text-k-sm ${checking || valid ? 'text-k-muted' : 'text-k-danger'}`}
+        >
+          {checking
+            ? t('duplicate.checking')
+            : valid
+              ? ''
+              : t('form.missingList', { fields: missing.map((k) => t(`form.missingField.${k}`)).join(', ') })}
+        </p>
 
         {/* El carnet tomado no va acá: va bajo su campo. Si además hay homónimos, se ve el carnet
             primero, que es lo que bloquea. */}
@@ -243,6 +257,7 @@ function NewClientModal({
           occupations={occupations}
           currency={currency}
           documentNotice={dup?.document ? <DocumentTaken match={dup.document} /> : undefined}
+          showRequired
         />
       </Modal>
     </form>

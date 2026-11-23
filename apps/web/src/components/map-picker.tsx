@@ -5,7 +5,7 @@ import { useEffect, useRef } from 'react';
 import { Map as MapLibreMap, Marker, NavigationControl } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { DEFAULT_ZOOM, FALLBACK_CENTER, MAP_LOCALE, MAP_STYLE } from '@/lib/map-style';
-import { addLocateControl } from './map-locate';
+import { addLocateControl, centerOnUser } from './map-locate';
 
 /** Al que se acerca cuando ya hay un punto: la manzana, no la ciudad. */
 const PIN_ZOOM = 16;
@@ -84,6 +84,8 @@ export function MapPicker({
     });
     m.addControl(new NavigationControl({ showCompass: false }), 'top-right');
     addLocateControl(m);
+    // Sin punto ni lugar cercano que mostrar, se abre donde está la persona y no en Santa Cruz. Si llega un punto antes, manda el punto.
+    if (latitude == null && longitude == null && !center) centerOnUser(m, () => lastCentered.current == null);
     m.on('click', (e) => cb.current?.({ latitude: e.lngLat.lat, longitude: e.lngLat.lng }));
     // Marcando, el cursor es una mira: con la manito de arrastrar no se nota que tocar el mapa pone el pin.
     if (cb.current) m.getCanvasContainer().style.cursor = 'crosshair';

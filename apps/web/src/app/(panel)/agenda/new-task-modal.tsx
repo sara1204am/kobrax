@@ -157,7 +157,12 @@ export function NewTaskModal({
     if (!assign) return;
     void fetch('/api/agenda/assignees')
       .then((r) => r.json())
-      .then((b) => setAssignees(Array.isArray(b?.data) ? b.data : []))
+      .then((b) => {
+        const list: AgendaAssignee[] = Array.isArray(b?.data) ? b.data : [];
+        setAssignees(list);
+        // Si no hay nadie más a quien asignar (cuenta de una persona), el responsable es uno mismo sin tener que elegirlo.
+        if (!editing && list.length === 1) setAssigneeId((prev) => prev || list[0].userId);
+      })
       .catch(() => setAssignees([]));
   }, [assign]);
 

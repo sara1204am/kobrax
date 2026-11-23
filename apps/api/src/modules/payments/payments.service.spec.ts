@@ -23,8 +23,11 @@ function makeService(opts: { credit?: unknown; idempotentExisting?: unknown; max
     creditUpdate: [] as Record<string, unknown>[],
     audit: [] as string[],
     events: [] as string[],
+    applications: [] as Record<string, unknown>[],
   };
   const tx = {
+    // Sin promesas pendientes: lo que importa de estos tests no es el cierre de promesas (eso vive en settle-promises.spec.ts).
+    agendaItem: { findMany: async () => [] },
     payment: {
       findFirst: async () => (opts.uniqueRace ? (raced ? opts.idempotentExisting : null) : opts.idempotentExisting ?? null),
       aggregate: async () => ({ _max: { receiptNumber: opts.maxReceipt ?? 0 } }),
@@ -45,6 +48,17 @@ function makeService(opts: { credit?: unknown; idempotentExisting?: unknown; max
       },
     },
     creditInstallment: { update: async () => ({}) },
+    // Imputación a cuotas: el candado del crédito, el correlativo del recibo y las aplicaciones guardadas.
+    account: { findFirst: async () => ({ timezone: null, countryCode: 'BO' }) },
+    $queryRaw: async () => [],
+    $executeRaw: async () => 0,
+    paymentApplication: {
+      findMany: async () => [],
+      createMany: async (args: { data: Record<string, unknown>[] }) => {
+        calls.applications.push(...args.data);
+        return { count: args.data.length };
+      },
+    },
     // F4/12: el cobro puede decir en qué visita se hizo.
     fieldVisit: { findFirst: async () => ('visit' in opts ? opts.visit : { creditId: 'cr1' }) },
   };
@@ -243,6 +257,8 @@ describe('PaymentsService.register', () => {
 function makeLister(rows: unknown[] = [], aggAmount: number | null | (number | null)[] = null) {
   const calls: { orderBy?: Record<string, unknown>; where?: Record<string, unknown>; aggWhere?: Record<string, unknown>; aggs: Record<string, unknown>[] } = { aggs: [] };
   const tx = {
+    // Sin promesas pendientes: lo que importa de estos tests no es el cierre de promesas (eso vive en settle-promises.spec.ts).
+    agendaItem: { findMany: async () => [] },
     payment: {
       findMany: async (args: { orderBy: Record<string, unknown>; where: Record<string, unknown> }) => {
         calls.orderBy = args.orderBy;
@@ -372,6 +388,8 @@ describe('PaymentsService.listRequests — la bandeja', () => {
   function makeRequests(rows: unknown[], credits: unknown[] = []) {
     const calls: { where?: Record<string, unknown>; orderBy?: unknown; creditQueries: number } = { creditQueries: 0 };
     const tx = {
+    // Sin promesas pendientes: lo que importa de estos tests no es el cierre de promesas (eso vive en settle-promises.spec.ts).
+    agendaItem: { findMany: async () => [] },
       paymentRequest: {
         findMany: async (a: { where: Record<string, unknown>; orderBy: unknown }) => {
           calls.where = a.where;
@@ -572,6 +590,8 @@ describe('PaymentsService.findOne — quién cobró y la visita', () => {
   function makeFinder(payment: unknown, visit: unknown = null) {
     const lookups: string[][] = [];
     const tx = {
+    // Sin promesas pendientes: lo que importa de estos tests no es el cierre de promesas (eso vive en settle-promises.spec.ts).
+    agendaItem: { findMany: async () => [] },
       payment: { findFirst: async () => payment },
       fieldVisit: { findFirst: async () => visit },
       userAccount: {
@@ -623,6 +643,8 @@ describe('PaymentsService — alcance por oficina (D-7)', () => {
   function makeScoped(can: (p: string) => boolean, visibleIds: string[] = ['cr-vis']) {
     const seen: { payments: Record<string, unknown>[]; aggs: Record<string, unknown>[]; requests: Record<string, unknown>[]; findFirst: Record<string, unknown>[]; raw: number } = { payments: [], aggs: [], requests: [], findFirst: [], raw: 0 };
     const tx = {
+    // Sin promesas pendientes: lo que importa de estos tests no es el cierre de promesas (eso vive en settle-promises.spec.ts).
+    agendaItem: { findMany: async () => [] },
       $queryRaw: async () => {
         seen.raw += 1;
         return visibleIds.map((id) => ({ id }));
@@ -699,6 +721,8 @@ describe('PaymentsService — escrituras fuera de alcance (S-2)', () => {
   function make(can: (p: string) => boolean, inScope: boolean) {
     const writes: string[] = [];
     const tx = {
+    // Sin promesas pendientes: lo que importa de estos tests no es el cierre de promesas (eso vive en settle-promises.spec.ts).
+    agendaItem: { findMany: async () => [] },
       $queryRaw: async () => (inScope ? [{ id: 'cr-1' }] : []),
       credit: {
         findFirst: async () => {

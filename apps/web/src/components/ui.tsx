@@ -302,9 +302,12 @@ export function Field({
   label,
   hint,
   error,
+  required,
   children,
 }: {
   label: string;
+  /** Pinta un asterisco: el campo es obligatorio. */
+  required?: boolean;
   hint?: string;
   /** Mensaje de error del campo: texto rojo pequeño debajo (reemplaza al `hint`). */
   error?: string | null;
@@ -312,7 +315,8 @@ export function Field({
 }) {
   return (
     <label className="block space-y-2">
-      <span className="text-k-base font-medium text-k-text">{label}</span>
+      {/* El asterisco es un pseudo-elemento: se ve, pero no es parte del nombre accesible del campo. */}
+      <span className={`text-k-base font-medium text-k-text ${required ? "after:ml-0.5 after:text-k-danger after:content-['*']" : ''}`}>{label}</span>
       {children}
       {error ? (
         <span role="alert" className="block text-k-xs font-normal text-k-danger">

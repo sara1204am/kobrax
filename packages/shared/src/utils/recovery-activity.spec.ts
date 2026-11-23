@@ -157,3 +157,18 @@ describe('validateRecoveryActivity — plantilla elegida (F4/13 · E5)', () => {
     expect(v({ type: 'MESSAGE', result: 'CONTACTED', templateCode: '' })).toBe('TEMPLATE_INVALID');
   });
 });
+
+describe('validateActivityTarget', () => {
+  it('la dirección es de una visita y el canal de un mensaje', async () => {
+    const { validateActivityTarget } = await import('./recovery-activity.js');
+    expect(validateActivityTarget({ locationId: 'l1' }, 'VISIT')).toBeNull();
+    expect(validateActivityTarget({ locationId: 'l1' }, 'CALL')).toBe('LOCATION_NOT_ALLOWED');
+    expect(validateActivityTarget({ channel: 'EMAIL' }, 'MESSAGE')).toBeNull();
+    expect(validateActivityTarget({ channel: 'EMAIL' }, 'VISIT')).toBe('CHANNEL_NOT_ALLOWED');
+    expect(validateActivityTarget({ channel: 'PALOMA' }, 'MESSAGE')).toBe('CHANNEL_INVALID');
+    expect(validateActivityTarget({ contactId: 'c1' }, 'CALL')).toBeNull();
+    expect(validateActivityTarget({ contactId: 'c1' }, 'MESSAGE')).toBeNull();
+    expect(validateActivityTarget({ contactId: 'c1' }, 'VISIT')).toBe('CONTACT_NOT_ALLOWED');
+    expect(validateActivityTarget({}, 'NOTE')).toBeNull();
+  });
+});

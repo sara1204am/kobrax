@@ -75,6 +75,8 @@ const PERMISSIONS: PermRow[] = [
   ['payment:read', 'payments', 'READ', 'ACCOUNT'],
   ['payment:write', 'payments', 'CREATE', 'OWN'],
   ['payment:approve', 'payments', 'APPROVE', 'ACCOUNT'],
+  ['payment:waive_late', 'payments', 'EXECUTE', 'ACCOUNT'],
+  ['payment:activate_late', 'payments', 'EXECUTE', 'ACCOUNT'],
   ['route:read', 'routes', 'READ', 'ACCOUNT'],
   ['route:write', 'routes', 'UPDATE', 'BRANCH'],
   ['route:assign', 'routes', 'UPDATE', 'BRANCH'],
@@ -646,6 +648,18 @@ async function flushPayments(ctx: Ctx): Promise<number> {
   const rows = [...ctx.payments].sort((a, b) => (a.paymentDate as Date).getTime() - (b.paymentDate as Date).getTime());
   rows.forEach((r, i) => ((r as { receiptNumber?: number }).receiptNumber = i + 1));
   if (rows.length > 0) await prisma.payment.createMany({ data: rows });
+
+  // Imputación a cuotas (`payment_applications`): el seed escribe los pagos directo, sin pasar por el servicio, así que deja también el reparto.
+  // Cada pago de la app nace ligado a SU cuota (`installmentId`): esa es la imputación, tal cual, sin reproducir nada. Los de PSF no tienen cuotas.
+  const numberOf = new Map<string, number>();
+  for (const c of Object.values(ctx.credits)) for (const i of c.installments) numberOf.set(i.id, i.number);
+  const applications: Prisma.PaymentApplicationCreateManyInput[] = [];
+  for (const r of rows) {
+    const installmentNumber = r.installmentId ? numberOf.get(r.installmentId) : undefined;
+    if (installmentNumber === undefined || !r.id) continue;
+    applications.push({ accountId: r.accountId, paymentId: r.id, creditId: r.creditId, installmentNumber, amount: Number(r.amount) });
+  }
+  if (applications.length > 0) await prisma.paymentApplication.createMany({ data: applications });
   return rows.length;
 }
 
@@ -653,7 +667,6 @@ async function flushPayments(ctx: Ctx): Promise<number> {
 async function createAppCredits(ctx: Ctx, specs: AppCreditSpec[], branchOf: (ownerKey: string) => string | undefined): Promise<void> {
   const credits: Prisma.CreditCreateManyInput[] = [];
   const installments: Prisma.CreditInstallmentCreateManyInput[] = [];
-  const arrears: Prisma.ArrearCreateManyInput[] = [];
   const assignments: Prisma.CreditAssignmentCreateManyInput[] = [];
 
   for (const s of specs) {
@@ -753,9 +766,6 @@ async function createAppCredits(ctx: Ctx, specs: AppCreditSpec[], branchOf: (own
         ...(s.paidOff ? {} : { nextDueDate: isoOf(dueOf(firstUnpaid)) }),
       }),
     });
-    if (s.dpd > 0) {
-      arrears.push({ accountId: ctx.acc, creditId: id, daysOverdue: s.dpd, overdueAmount: round2(overdueAmount), interest: round2(overdueAmount * 0.02), penalty: round2(overdueAmount * 0.01) });
-    }
     // El responsable: la fila PRINCIPAL de `credit_assignments` + `assigned_manager_id` (lo que escribe AssignmentService).
     assignments.push({
       accountId: ctx.acc,
@@ -769,7 +779,6 @@ async function createAppCredits(ctx: Ctx, specs: AppCreditSpec[], branchOf: (own
   }
   await prisma.credit.createMany({ data: credits });
   await prisma.creditInstallment.createMany({ data: installments });
-  if (arrears.length > 0) await prisma.arrear.createMany({ data: arrears });
   await prisma.creditAssignment.createMany({ data: assignments });
 }
 
@@ -1832,8 +1841,8 @@ async function wipeDataset(accountIds: string[]): Promise<void> {
   // Hijos primero.
   const tables = [
     'field_evidences', 'field_visits', 'route_stops', 'route_plans', 'notifications', 'agenda_items', 'credit_activities', 'credit_notes',
-    'payment_requests', 'payments', 'credit_guarantors', 'collateral_credits', 'collaterals',
-    'credit_installments', 'arrears', 'credit_external_snapshots', 'credit_arrear_episodes', 'credit_assignments',
+    'payment_requests', 'payment_applications', 'payments', 'credit_guarantors', 'collateral_credits', 'collaterals',
+    'credit_installments', 'credit_external_snapshots', 'credit_arrear_episodes', 'credit_assignments',
     'client_import_run_items', 'client_import_runs', 'client_external_keys', 'client_contacts', 'client_locations', 'client_relations',
     'client_attachments', 'client_income_profiles', 'credits', 'clients',
   ];

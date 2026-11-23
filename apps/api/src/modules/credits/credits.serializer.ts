@@ -1,4 +1,4 @@
-import type { Arrear, Credit, CreditInstallment } from '@prisma/client';
+import type { Credit, CreditInstallment, LatePolicyVersion } from '@prisma/client';
 import {
   balanceBasisOf,
   calculateCredit,
@@ -16,6 +16,7 @@ import {
   isReportStale,
   moraSituation,
   type ArrearRange,
+  type UpdatedPlan,
 } from '@kobrax/shared';
 
 /** Lo que sólo la ficha (`GET /credits/:id`) calcula: la situación y la categoría de mora (F4/08 · D1). */
@@ -51,20 +52,12 @@ export function serializeInstallment(i: CreditInstallment) {
   };
 }
 
-export function serializeArrear(a: Arrear) {
-  return {
-    id: a.id,
-    daysOverdue: a.daysOverdue,
-    overdueAmount: num(a.overdueAmount),
-    interest: num(a.interest),
-    penalty: num(a.penalty),
-    calculatedAt: a.calculatedAt,
-  };
-}
-
 type CreditWithRelations = Credit & {
   installments?: CreditInstallment[];
-  arrears?: Arrear[];
+  /** Sólo en la ficha: la política de mora con que nació el crédito (sellada, inmutable). */
+  latePolicyVersion?: LatePolicyVersion | null;
+  /** Sólo en la ficha: la activación explícita del interés moratorio (F3-e), si la hay. */
+  lateActivation?: { startsOn: Date; reason: string; createdAt: Date } | null;
   /** Sólo en la ficha: si hay pagos, las condiciones ya no se redefinen (D13). */
   _count?: { payments?: number };
 };
@@ -74,6 +67,8 @@ export function serializeCredit(
   labels: Record<string, string> = DEFAULT_CREDIT_LABELS,
   staleAfterDays: number = DEFAULT_REPORT_STALE_AFTER_DAYS,
   mora?: CreditMoraContext,
+  /** Sólo la ficha: el plan actualizado (plan original + pagos imputados), de `loadCreditPlan`. */
+  plan?: UpdatedPlan | null,
 ) {
   // Sólo con contexto (la ficha): `situation` del episodio abierto y `category` por días de mora (nunca se guarda;
   // ninguna si el crédito está al día —< 1 día— o ningún rango lo cubre).
@@ -154,7 +149,8 @@ export function serializeCredit(
     // D9: pasado el umbral desde el corte, la mora y el saldo reportados ya no se presentan como de hoy.
     reportedStale: credit.syncStatus ? isReportStale(credit.reportedAsOf, new Date(), staleAfterDays) : undefined,
     reportStaleAfterDays: credit.syncStatus ? staleAfterDays : undefined,
-    suggestedPaymentAmount: suggestedPaymentAmount({
+    // Con plan, lo que se sugiere cobrar es el PRÓXIMO PAGO del plan actualizado (lo vencido, o lo que falta de la siguiente cuota), nunca más que el saldo.
+    suggestedPaymentAmount: plan?.nextPayment ? Math.min(plan.nextPayment.amount, num(credit.outstandingBalance)) : suggestedPaymentAmount({
       external: view.locked,
       outstandingBalance: num(credit.outstandingBalance),
       installmentAmount,
@@ -169,7 +165,26 @@ export function serializeCredit(
     oldestUnpaid: oldestUnpaidOf(credit.installments, view.terms, view.nextDueDate),
     hasPayments: credit._count?.payments !== undefined ? credit._count.payments > 0 : undefined,
     installments: credit.installments?.map(serializeInstallment),
-    arrears: credit.arrears?.map(serializeArrear),
+    plan: plan ?? undefined,
+    // La política de mora con que nació el crédito: sellada, no cambia aunque la cuenta cambie la suya después.
+    latePolicy: credit.latePolicyVersion
+      ? {
+          kind: credit.latePolicyVersion.kind,
+          scope: credit.latePolicyVersion.scope,
+          version: credit.latePolicyVersion.version,
+          graceDays: credit.latePolicyVersion.graceDays,
+          annualRate: credit.latePolicyVersion.annualRate != null ? Number(credit.latePolicyVersion.annualRate) : undefined,
+          dayCount: credit.latePolicyVersion.dayCount ?? undefined,
+          effectiveFrom: credit.latePolicyVersion.effectiveFrom,
+        }
+      : undefined,
+    // F3-e: activación explícita del interés moratorio en un crédito que nació sin él (`undefined` fuera de la ficha, `null` si no tiene).
+    lateActivation:
+      credit.lateActivation === undefined
+        ? undefined
+        : credit.lateActivation
+          ? { startsOn: credit.lateActivation.startsOn.toISOString().slice(0, 10), reason: credit.lateActivation.reason, createdAt: credit.lateActivation.createdAt }
+          : null,
   };
 }
 

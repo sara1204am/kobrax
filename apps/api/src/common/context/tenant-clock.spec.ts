@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { civilDayStartInstant, civilMonthStartUTC, civilTodayUTC } from './tenant-clock.service';
+import { accountToday, civilDayStartInstant, civilMonthStartUTC, civilTodayUTC } from './tenant-clock.service';
 
 /** El caso que motivó todo esto: 22:40 del 17 en La Paz ya es el 18 en UTC. */
 const NOCHE_EN_LA_PAZ = new Date('2026-08-18T02:40:00.000Z');
@@ -59,5 +59,24 @@ describe('civilDayStartInstant', () => {
 
   it('una zona inválida cae a medianoche UTC en vez de explotar', () => {
     assert.equal(civilDayStartInstant('2026-09-30', 'No/Existe').toISOString(), '2026-09-30T00:00:00.000Z');
+  });
+});
+
+describe('accountToday', () => {
+  const txOf = (account: { timezone: string | null; countryCode: string | null } | null) => ({ account: { findFirst: async () => account } });
+
+  it('a las 22:40 en La Paz el «hoy» de la cuenta sigue siendo el 17, aunque UTC ya esté en el 18', async () => {
+    const today = await accountToday(txOf({ timezone: null, countryCode: 'BO' }), 'acc', NOCHE_EN_LA_PAZ);
+    assert.equal(today.toISOString().slice(0, 10), '2026-08-17');
+  });
+
+  it('con zona propia manda la zona de la cuenta sobre la de su país', async () => {
+    const today = await accountToday(txOf({ timezone: 'Asia/Tokyo', countryCode: 'BO' }), 'acc', NOCHE_EN_LA_PAZ);
+    assert.equal(today.toISOString().slice(0, 10), '2026-08-18');
+  });
+
+  it('sin cuenta ni país cae a UTC', async () => {
+    const today = await accountToday(txOf(null), 'acc', NOCHE_EN_LA_PAZ);
+    assert.equal(today.toISOString().slice(0, 10), '2026-08-18');
   });
 });

@@ -16,6 +16,7 @@ import {
   IsString,
   IsUUID,
   Length,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -46,7 +47,8 @@ export class CreateCreditDto {
 
   @IsUUID() clientId!: string;
   @IsOptional() @IsUUID() branchId?: string;
-  @IsOptional() @IsString() code?: string;
+  // Opcional al crear: si no viene, el servidor asigna el siguiente según la máscara de la cuenta.
+  @IsOptional() @IsString() @MaxLength(64) @Matches(/\S/, { message: 'El Nº de crédito no puede quedar vacío' }) code?: string;
   /** Qué clase de crédito es → catálogo `CREDIT_TYPE` del tenant. El móvil no lo pregunta. */
   @IsOptional() @IsString() @MaxLength(64) typeCode?: string;
 
@@ -116,7 +118,8 @@ export class UpdateCreditDto {
   @IsOptional() @IsEnum(CreditStatus) status?: CreditStatus;
   @IsOptional() @IsUUID() assignedManagerId?: string;
   @IsOptional() @IsUUID() branchId?: string;
-  @IsOptional() @IsString() code?: string;
+  // El Nº de crédito es obligatorio: al crear, si no viene lo asigna el servidor (máscara de la cuenta); al editar no puede quedar vacío.
+  @IsOptional() @IsString() @MaxLength(64) @Matches(/\S/, { message: 'El Nº de crédito no puede quedar vacío' }) code?: string;
   @IsOptional() @IsString() @MaxLength(64) typeCode?: string;
   // ── Datos operativos editables desde la ficha (§4). BLOQUEADOS si el crédito es importado (§4.3).
   @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @IsPositive() principalAmount?: number;

@@ -9,6 +9,8 @@
  * tiene monto vencido calculable. Todo lo opcional llega `undefined` y la pantalla muestra «—»; un 0
  * inventado haría pasar un dato desconocido por uno conocido.
  */
+import type { UpdatedPlan } from '../utils/payment-plan.js';
+import type { LateInterestView } from './payment.types.js';
 import type { ArrearsSource, ExternalSyncStatus } from '../enums/credit.enum.js';
 import type { CollectionPriority, CreditAssignmentKind, MoraSituation } from './sin-caso.types.js';
 import type { CreditOrigin, PaymentFrequency } from '../enums/credit.enum.js';
@@ -153,6 +155,10 @@ export interface MoraActivityItem {
   /** Sólo `ASSIGNMENT`: nombre de la persona a quien se asignó. */
   assignedToName?: string;
   episodeId?: string;
+  /** Visita: la dirección visitada. Llamada o mensaje: el teléfono/correo. Mensaje: el canal. */
+  locationId?: string;
+  contactId?: string;
+  channel?: string;
   createdAt: string;
 }
 
@@ -161,9 +167,15 @@ export interface MoraActivityItem {
  * más el historial de gestiones del caso abierto. Sin caso, `activities` viene vacío.
  */
 export interface MoraCreditDetail extends MoraCreditListItem {
+  /** Quién responde por el crédito (`HOLDER`, `GUARANTOR`…). Dato del crédito, se edita en el card. */
+  payerParty?: string;
   activities: MoraActivityItem[];
   /** Las asignaciones vigentes del crédito: PRINCIPAL, TEMPORAL (con vencimiento) y APOYO. */
   assignments: MoraAssignment[];
+  /** El MISMO plan actualizado que Cartera (`CreditDetail.plan`): vencido, próximo pago y desglose por pago. */
+  plan?: UpdatedPlan;
+  /** F17: interés moratorio a hoy. `null`/ausente = el crédito no devenga. */
+  lateInterest?: LateInterestView | null;
 }
 
 /** Cómo terminó una mora. `SOURCE_ABSENT` NO es una recuperación: sólo dice que la fuente dejó de reportarla. */

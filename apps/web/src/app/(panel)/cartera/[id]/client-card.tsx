@@ -1,5 +1,6 @@
 'use client';
 
+import { riskSegmentOf } from '@/lib/risk-segment';
 import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -251,7 +252,7 @@ export function ClientCard({
             <dl className="flex flex-wrap items-center gap-x-6 gap-y-1.5 text-k-sm">
               <Dato label={t('fields.document')} value={shown.nationalId || '—'} />
               {shown.taxId && <Dato label={t('fields.taxId')} value={shown.taxId} />}
-              {shown.riskSegment && <Dato label={t('fields.risk')} value={shown.riskSegment} />}
+              {shown.riskSegment && <Dato label={t('fields.risk')} value={riskSegmentOf(shown.riskSegment) ? t(`risk.${riskSegmentOf(shown.riskSegment)}`) : shown.riskSegment} />}
               {shown.preferredContactChannel && (
                 <Dato
                   label={t('form.preferredChannel')}
@@ -370,6 +371,7 @@ export function ClientCard({
               client={shown}
               currency={currency}
               types={collateralTypes}
+              credits={creditOptions}
               canWrite={canWrite}
               onEdit={() => void editar('collaterals')}
             />

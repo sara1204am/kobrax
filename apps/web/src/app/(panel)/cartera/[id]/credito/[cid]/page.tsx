@@ -1,9 +1,10 @@
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { CatalogType, type Assignee, type CreditDetail, type Member } from '@kobrax/shared';
 import { apiCall } from '@/lib/bff';
 import { EmptyState } from '@/components/panel-ui';
 import { isUuid } from '@/lib/uuid';
+import { CreditSync } from '@/components/credit-sync';
 import { CreditCard } from './credit-card';
 
 /**
@@ -36,13 +37,20 @@ export default async function CreditoPage({ params }: { params: { id: string; ci
     return <EmptyState title={t('noAccess')} text={credit.body.error?.message} />;
   }
 
+  // El cliente de la URL tiene que ser el DEL crédito: con otro, «Volver al cliente» y la miga llevarían a una persona ajena.
+  const owner = credit.body.data.clientId;
+  if (owner && owner !== params.id) redirect(`/cartera/${owner}/credito/${params.cid}`);
+
   return (
-    <CreditCard
-      credit={credit.body.data}
-      clientId={params.id}
-      team={team.body.data ?? []}
-      assignees={assignees.body.data ?? []}
-      types={types.body.data ?? []}
-    />
+    <>
+      <CreditSync creditId={params.cid} />
+      <CreditCard
+        credit={credit.body.data}
+        clientId={params.id}
+        team={team.body.data ?? []}
+        assignees={assignees.body.data ?? []}
+        types={types.body.data ?? []}
+      />
+    </>
   );
 }

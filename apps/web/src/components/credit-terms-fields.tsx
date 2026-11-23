@@ -499,7 +499,7 @@ export function CreditQuotePanel({
   function exportPlan() {
     if (!schedule) return;
     downloadText(
-      paymentPlanCsv(schedule),
+      paymentPlanCsv(schedule, { informal: state.terms.definition !== CreditDefinition.CALCULATED }),
       paymentPlanFileName(clientName, state.terms.firstDueDate),
     );
   }

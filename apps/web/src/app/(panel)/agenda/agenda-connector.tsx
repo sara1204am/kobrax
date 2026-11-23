@@ -2,8 +2,10 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { AgendaListItem, Member } from '@kobrax/shared';
+import { AgendaItemType, type AgendaListItem, type Member } from '@kobrax/shared';
 import { AgendaScreen } from './agenda-screen';
+import { ItemActions } from './[id]/item-actions';
+import type { CatalogOption } from './[id]/page';
 import { NewTaskModal } from './new-task-modal';
 
 /**
@@ -30,10 +32,22 @@ export function AgendaConnector(props: {
   supervises: boolean;
   /** Quién puede asignar (`agenda:assign`) y quién es: habilita el selector «Asignar a» del alta. */
   assign?: { meId: string };
+  /** Lo que necesitan los diálogos del menú «⋮» para abrirse aquí mismo. */
+  dialogs?: { canWrite: boolean; cancelReasons: CatalogOption[]; rescheduleReasons: CatalogOption[]; reasons: CatalogOption[]; templates: CatalogOption[] };
 }) {
   const router = useRouter();
   /** Con qué día y hora se abre el alta. `null` = cerrada. */
-  const { assign, ...screenProps } = props;
+  const { assign, dialogs, ...screenProps } = props;
+  /** Qué diálogo está abierto sobre la lista: la gestión y qué se le hace. */
+  const [acting, setActing] = useState<{ id: string; action: 'complete' | 'reschedule' | 'cancel' | 'edit' | 'delete' } | null>(null);
+  const actingItem = acting ? [...props.items, ...props.monthItems, ...props.overdue].find((i) => i.id === acting.id) : undefined;
+  /** Abre el diálogo aquí; sin los catálogos (o sin la gestión a mano) cae al detalle, que ya sabe hacerlo. */
+  const act = (id: string, action: NonNullable<typeof acting>['action'], accion: string) => {
+    const it = [...props.items, ...props.monthItems, ...props.overdue].find((i) => i.id === id);
+    // Una visita se completa desde su parada de ruta (GPS y evidencia): el detalle sabe mandarla ahí.
+    if (!dialogs || !it || (action === 'complete' && it.type === AgendaItemType.VISIT)) return router.push(`/agenda/${id}?accion=${accion}`);
+    setActing({ id, action });
+  };
   const [creando, setCreando] = useState<{ date: string; time?: string } | null>(null);
 
   return (
@@ -50,13 +64,38 @@ export function AgendaConnector(props: {
           onCreateRequest: ({ date, time }) => setCreando({ date, time }),
           onViewRequest: (id) => router.push(`/agenda/${id}`),
           // Completar, reagendar y cancelar terminan en el detalle, que abre directo el diálogo pedido (`?accion=`).
-          onCompleteRequest: (id) => router.push(`/agenda/${id}?accion=completar`),
-          onRescheduleRequest: (id) => router.push(`/agenda/${id}?accion=reagendar`),
-          onCancelRequest: (id) => router.push(`/agenda/${id}?accion=cancelar`),
-          onEditRequest: (id) => router.push(`/agenda/${id}?accion=editar`),
-          onDeleteRequest: (id) => router.push(`/agenda/${id}?accion=eliminar`),
+          // 🔴 Los diálogos se abren AQUÍ, sobre la lista: antes el menú «⋮» abría el diálogo pero además llevaba al detalle.
+          onCompleteRequest: (id) => act(id, 'complete', 'completar'),
+          onRescheduleRequest: (id) => act(id, 'reschedule', 'reagendar'),
+          onCancelRequest: (id) => act(id, 'cancel', 'cancelar'),
+          onEditRequest: (id) => act(id, 'edit', 'editar'),
+          onDeleteRequest: (id) => act(id, 'delete', 'eliminar'),
         }}
       />
+
+      {/* Los diálogos de la gestión elegida en el menú «⋮». Se montan al abrir y se desmontan al cerrar: el borrador arranca limpio. */}
+      {acting && actingItem && dialogs && (
+        <ItemActions
+          key={`${acting.id}:${acting.action}`}
+          hideTriggers
+          onClose={() => setActing(null)}
+          itemId={actingItem.id}
+          type={actingItem.type}
+          clientId={actingItem.clientId}
+          details={actingItem.details}
+          initialAction={acting.action}
+          today={props.today}
+          cancelReasons={dialogs.cancelReasons}
+          rescheduleReasons={dialogs.rescheduleReasons}
+          canExecute={dialogs.canWrite}
+          editable={dialogs.canWrite && actingItem.canEdit ? actingItem : undefined}
+          schedule={{ timeMode: actingItem.timeMode, scheduledTime: actingItem.scheduledTime, timeSlot: actingItem.timeSlot }}
+          assign={assign}
+          reasons={dialogs.reasons}
+          templates={actingItem.type === AgendaItemType.WHATSAPP ? dialogs.templates : []}
+          initialTemplateCode={actingItem.type === AgendaItemType.WHATSAPP && typeof actingItem.details?.templateCode === 'string' ? actingItem.details.templateCode : undefined}
+        />
+      )}
 
       {/* Se monta al abrir: el borrador arranca limpio cada vez sin un solo efecto de reset. */}
       {creando && (

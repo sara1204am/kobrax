@@ -582,6 +582,25 @@ describe('AgendaService.complete (ejecutar S4)', () => {
     assert.equal(calls.events.length, 0);
   });
 
+  it('conserva lo que se agendó: la dirección de la visita, el teléfono de la llamada y el canal del WhatsApp', async () => {
+    const visita = makeService({ item: row({ type: 'VISIT', status: 'SCHEDULED', details: { locationId: 'loc-1' } }) });
+    await visita.service.complete('a1', { outcome: 'CONTACTED' } as never);
+    assert.equal(visita.calls.activity!.locationId, 'loc-1');
+    const llamada = makeService({ item: row({ type: 'CALL', status: 'SCHEDULED', details: { contactId: 'ct-1' } }) });
+    await llamada.service.complete('a1', { outcome: 'CONTACTED' } as never);
+    assert.equal(llamada.calls.activity!.contactId, 'ct-1');
+    const wa = makeService({ item: row({ type: 'WHATSAPP', status: 'SCHEDULED', details: { contactId: 'ct-2' } }) });
+    await wa.service.complete('a1', { outcome: 'CONTACTED' } as never);
+    assert.equal(wa.calls.activity!.channel, 'WHATSAPP');
+    assert.equal(wa.calls.activity!.contactId, 'ct-2');
+  });
+
+  it('una dirección en una llamada se rechaza, sin escribir nada', async () => {
+    const { service, calls } = makeService({ item: row({ type: 'CALL', status: 'SCHEDULED' }) });
+    await expectError(() => service.complete('a1', { outcome: 'CONTACTED', locationId: 'loc-1' } as never), 'AGENDA_INVALID_CONTEXT');
+    assert.equal(calls.activity, undefined);
+  });
+
   it('con una mora abierta, la actividad queda ligada a ese episodio', async () => {
     const { service, calls } = makeService({ item: row({ type: 'VISIT', status: 'SCHEDULED' }), episode: { id: 'ep-1' } });
     await service.complete('a1', { outcome: 'CONTACTED' } as never);

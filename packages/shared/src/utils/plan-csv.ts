@@ -14,7 +14,28 @@ function cell(v: string | number): string {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-export function paymentPlanCsv(rows: CreditScheduleRow[]): string {
+/**
+ * Lo que queda por cobrar después de cada cuota, sobre el total del plan. Es el «saldo» de un crédito acordado, que no
+ * tiene capital ni interés pactados: sólo un monto y cuántas veces se paga.
+ */
+export function remainingAfter(rows: CreditScheduleRow[]): number[] {
+  let left = Math.round(rows.reduce((s, r) => s + r.amount, 0) * 100);
+  return rows.map((r) => {
+    left -= Math.round(r.amount * 100);
+    return left / 100;
+  });
+}
+
+/**
+ * `informal` (crédito de monto o cuota acordados): sólo cuota, fecha, monto y saldo por cobrar. El reparto capital/interés
+ * del motor existe por dentro, pero nadie lo pactó y mostrarlo confunde.
+ */
+export function paymentPlanCsv(rows: CreditScheduleRow[], opts: { informal?: boolean } = {}): string {
+  if (opts.informal) {
+    const left = remainingAfter(rows);
+    const lines = rows.map((r, i) => [r.number, r.dueDate, r.amount.toFixed(2), left[i]!.toFixed(2)].map(cell).join(','));
+    return `${BOM}${['Cuota', 'Fecha', 'Monto de la cuota', 'Saldo por cobrar'].map(cell).join(',')}\n${lines.join('\n')}\n`;
+  }
   const extras = rows.some((r) => r.insurance !== undefined);
   const header = ['Cuota', 'Fecha', 'Capital', 'Interés', ...(extras ? ['Seguro', 'Cargos'] : []), 'Total cuota', 'Saldo de capital'];
   const lines = rows.map((r) =>

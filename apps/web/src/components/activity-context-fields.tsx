@@ -1,19 +1,18 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { PAYER_PARTIES, reasonsFor } from '@kobrax/shared';
+import { reasonsFor } from '@kobrax/shared';
 import type { CatalogOption } from '@/components/client-form';
 import { Field, Input, Select } from '@/components/ui';
 import { todayIso } from '@/lib/format';
 
-/** Lo que se captura en el bloque «Motivo y quién responde» (F4/13 · E4). Todo es texto: vacío = no se eligió. */
+/** Lo que se captura en el bloque «Motivo de no pago» (F4/13 · E4). Todo es texto: vacío = no se eligió. «Quién responde» ya no va acá: es un dato del crédito. */
 export interface ActivityContext {
   reasonCode: string;
   expectedIncomeDate: string;
-  payerParty: string;
 }
 
-export const emptyActivityContext = (): ActivityContext => ({ reasonCode: '', expectedIncomeDate: '', payerParty: '' });
+export const emptyActivityContext = (): ActivityContext => ({ reasonCode: '', expectedIncomeDate: '' });
 
 /** ¿El motivo elegido pide la fecha en que el cliente espera cobrar? Lo dice el `metadata` del catálogo. */
 export function asksIncomeDate(reasons: CatalogOption[], reasonCode: string): boolean {
@@ -27,16 +26,15 @@ export function asksIncomeDate(reasons: CatalogOption[], reasonCode: string): bo
 export function activityContextPayload(
   ctx: ActivityContext,
   reasons: CatalogOption[],
-): { reasonCode?: string; expectedIncomeDate?: string; payerParty?: string } {
+): { reasonCode?: string; expectedIncomeDate?: string } {
   return {
     ...(ctx.reasonCode ? { reasonCode: ctx.reasonCode } : {}),
     ...(ctx.reasonCode && ctx.expectedIncomeDate && asksIncomeDate(reasons, ctx.reasonCode) ? { expectedIncomeDate: ctx.expectedIncomeDate } : {}),
-    ...(ctx.payerParty ? { payerParty: ctx.payerParty } : {}),
   };
 }
 
 /**
- * El bloque «Motivo y quién responde», el mismo de la ficha de mora (`activity-form.tsx`) para las otras dos vías que
+ * El bloque «Motivo de no pago», el mismo de la ficha de mora (`activity-form.tsx`) para las otras dos vías que
  * registran una gestión: completar una agendada y la visita de una ruta (F4/13 · alineación web ↔ móvil).
  *
  * **Opcional**: dejarlo en blanco no es un error. Los motivos que se ofrecen dependen de la fuente de ingreso del
@@ -76,25 +74,13 @@ export function ActivityContextFields({
   );
   const suggestion = typeof selected?.metadata?.suggestion === 'string' ? selected.metadata.suggestion : null;
   const dateInput = <Input type="date" min={todayIso()} value={value.expectedIncomeDate} onChange={(e) => set({ expectedIncomeDate: e.target.value })} disabled={disabled} />;
-  const payerSelect = (
-    <Select value={value.payerParty} onChange={(e) => set({ payerParty: e.target.value })} disabled={disabled}>
-      <option value="">{tf('payerPlaceholder')}</option>
-      {PAYER_PARTIES.map((p) => (
-        <option key={p} value={p}>
-          {tf(`payers.${p}`)}
-        </option>
-      ))}
-    </Select>
-  );
 
   return (
-    <fieldset className={`rounded-xl border border-k-border bg-k-bg p-3 ${compact ? 'space-y-3' : 'space-y-4'}`}>
-      <legend className="px-1 text-k-xs font-semibold uppercase tracking-wide text-k-text-2">{tf('context')}</legend>
-      <p className="text-k-xs text-k-muted">{tf('contextHint')}</p>
+    // Sin tarjeta, sin título ni ayuda: los campos van al mismo nivel que los demás del formulario.
+    <div className={compact ? 'space-y-3' : 'space-y-4'}>
       <Field label={tf('reason')}>{reasonSelect}</Field>
       {suggestion && <p className="text-k-xs text-k-text-2">{suggestion}</p>}
       {asksDate && <Field label={tf('expectedIncome')}>{dateInput}</Field>}
-      <Field label={tf('payer')}>{payerSelect}</Field>
-    </fieldset>
+    </div>
   );
 }

@@ -33,7 +33,7 @@ export interface MetricActivity {
 export interface MetricPayment {
   amount: number;
   paymentDate: string | Date;
-  /** Default `KOBRAX_COLLECTED`. Lo confirmado por un canal de la entidad no es plata que Kobrax cobró. */
+  /** Default `KOBRAX_COLLECTED`. `EXTERNAL_CONFIRMED` = lo cobró otro (la entidad, otra persona): cuenta como pagado, aparte de lo que cobró el cobrador. */
   channel?: string | null;
 }
 
@@ -75,11 +75,14 @@ export interface RecoveryMetrics {
    * registró desde el principio, los dos números coinciden y no hace falta repetirlo.
    */
   sinceTracking?: { daysToFirstContact?: number; daysToFirstVisit?: number; daysToFirstPayment?: number };
-  /** Plata cobrada por Kobrax dentro de la ventana, y cuántos pagos fueron. */
+  /** Plata pagada por el deudor dentro de la ventana, **sin importar quién la cobró**, y cuántos pagos fueron. */
   recoveredAmount: number;
   paymentsCount: number;
   /** Lo mismo pero de toda la vida del crédito. */
   recoveredAllTime: number;
+  /** De `recoveredAmount`, lo que cobró Kobrax (el cobrador) y lo que se cobró por otro canal (la entidad, otra persona). Suman `recoveredAmount`. */
+  collectedByKobrax: number;
+  collectedByOthers: number;
   /** Gestiones de cobranza: llamadas, visitas y mensajes. Las notas no cuentan como gestión. */
   activities: { total: number; calls: number; visits: number; messages: number };
   notes: number;
@@ -119,7 +122,9 @@ export function computeRecoveryMetrics(input: RecoveryMetricsInput): RecoveryMet
   const messages = count('MESSAGE');
   const contactActs = acts.filter((a) => a.type !== 'NOTE' && (CONTACT_RESULTS as readonly string[]).includes(a.result ?? ''));
 
-  const collected = input.payments.filter(isKobraxCollected);
+  // 🔴 Todo pago del deudor cuenta como recuperado, lo haya cobrado Kobrax o no: la deuda baja igual y es lo que importa. El canal solo
+  // sirve para distinguir cuánto cobró el cobrador y cuánto otro (`collectedByKobrax` / `collectedByOthers`).
+  const collected = input.payments;
   const windowPayments = collected.filter((p) => inWindow(p.paymentDate));
 
   const firstContact = earliest(contactActs.map((a) => a.createdAt));
@@ -152,6 +157,8 @@ export function computeRecoveryMetrics(input: RecoveryMetricsInput): RecoveryMet
           },
     recoveredAmount: round2(windowPayments.reduce((s, p) => s + p.amount, 0)),
     paymentsCount: windowPayments.length,
+    collectedByKobrax: round2(windowPayments.filter(isKobraxCollected).reduce((s, p) => s + p.amount, 0)),
+    collectedByOthers: round2(windowPayments.filter((p) => !isKobraxCollected(p)).reduce((s, p) => s + p.amount, 0)),
     recoveredAllTime: round2(collected.reduce((s, p) => s + p.amount, 0)),
     activities: { total: calls + visits + messages, calls, visits, messages },
     notes: count('NOTE'),

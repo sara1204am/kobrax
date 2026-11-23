@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyPayment, creditPatchAfterPayment, daysPastDue, type InstallmentLite } from './payment-apply';
+import { buildUpdatedPlan, type PlanScheduleRow } from '@kobrax/shared';
+import { applyPayment, creditPatchAfterPayment, creditPatchFromPlan, daysPastDue, planSourceOf, type InstallmentLite } from './payment-apply';
 
 const inst = (id: string, number: number, amount: number, paidAmount = 0, status = 'PENDING', dueDate = new Date('2026-06-01')): InstallmentLite => ({ id, number, amount, paidAmount, status, dueDate });
 
@@ -155,3 +156,69 @@ describe('creditPatchAfterPayment — método de mora (D20)', () => {
     assert.equal(p.daysPastDue, 42);
   });
 });
+
+describe('planSourceOf — de dónde sale el plan original', () => {
+  const TERMS = { definition: 'agreed_total', principal: 1000, agreedTotal: 1200, repayment: 'installments', installmentsCount: 4, frequency: 'MONTHLY', firstDueDate: '2026-08-01' };
+
+  it('con cronograma guardado, esas filas (y hay que mantener sus copias)', () => {
+    const src = planSourceOf({ metadata: {}, installments: [{ number: 2, dueDate: new Date('2026-09-01'), amount: '300.00' }, { number: 1, dueDate: new Date('2026-08-01'), amount: '300.00' }] });
+    assert.equal(src?.stored, true);
+    assert.deepEqual(src?.rows.map((r) => [r.number, r.dueDate, r.amount]), [[2, '2026-09-01', 300], [1, '2026-08-01', 300]]);
+  });
+
+  it('sin filas pero con condiciones, el plan que regenera el motor y las cuotas ya pagadas al registrar', () => {
+    const src = planSourceOf({ metadata: { origin: 'manual', terms: TERMS, termsVersion: 1, initialState: { paidInstallments: 1, daysPastDue: 0 } }, installments: [] });
+    assert.equal(src?.stored, false);
+    assert.equal(src?.rows.length, 4);
+    assert.equal(src?.rows[0]?.dueDate, '2026-08-01');
+    assert.equal(src?.prepaidInstallments, 1);
+    assert.equal(Math.round(src!.rows.reduce((s, r) => s + r.amount * 100, 0)), 120000);
+  });
+
+  it('sin filas ni condiciones (préstamo abierto) no hay plan: manda la lógica de siempre', () => {
+    assert.equal(planSourceOf({ metadata: { origin: 'manual', installmentAmount: 300 }, installments: [] }), null);
+  });
+});
+
+describe('creditPatchFromPlan — mora y próxima fecha desde el plan actualizado', () => {
+  const ROWS: PlanScheduleRow[] = [
+    { number: 1, dueDate: '2026-06-01', amount: 300 },
+    { number: 2, dueDate: '2026-07-01', amount: 300 },
+    { number: 3, dueDate: '2026-08-01', amount: 300 },
+  ];
+  const plan = (paid: number) =>
+    buildUpdatedPlan({ rows: ROWS, payments: paid > 0 ? [{ id: 'p', amount: paid, registeredAt: '2026-07-13T10:00:00Z' }] : [], asOf: NOW });
+
+  it('sin pagar nada: en mora desde la cuota 1 (42 días) y la fecha no cambia', () => {
+    const patch = creditPatchFromPlan({ metadata: meta({ nextDueDate: '2026-06-01' }), plan: plan(0), creditPaid: false, now: NOW });
+    assert.equal(patch.daysPastDue, 42);
+    assert.equal(patch.metadata, undefined);
+  });
+
+  it('🔴 pagos que acumulan lo vencido (600 = cuotas 1 y 2) → al día y la próxima fecha pasa a la cuota 3', () => {
+    const patch = creditPatchFromPlan({ metadata: meta({ nextDueDate: '2026-06-01' }), plan: plan(600), creditPaid: false, now: NOW });
+    assert.equal(patch.daysPastDue, 0);
+    assert.equal(patch.metadata?.nextDueDate, '2026-08-01');
+  });
+
+  it('un pago que cubre sólo parte de lo vencido baja la mora a la cuota que sigue impaga', () => {
+    const patch = creditPatchFromPlan({ metadata: meta({ nextDueDate: '2026-06-01' }), plan: plan(300), creditPaid: false, now: NOW });
+    assert.equal(patch.daysPastDue, 12); // desde el 1/jul (cuota 2), con el método de siempre
+    assert.equal(patch.metadata?.nextDueDate, '2026-07-01');
+  });
+
+  it('método bancario: mientras quede algo vencido la mora sigue contando desde el primer atraso; al día se borra', () => {
+    const bank = { arrearsMethod: 'first_default', arrearsSince: '2026-06-01', nextDueDate: '2026-06-01' };
+    const partial = creditPatchFromPlan({ metadata: meta(bank), plan: plan(300), creditPaid: false, now: NOW });
+    assert.equal(partial.daysPastDue, 42);
+    const current = creditPatchFromPlan({ metadata: meta(bank), plan: plan(600), creditPaid: false, now: NOW });
+    assert.equal(current.daysPastDue, 0);
+    assert.equal('arrearsSince' in (current.metadata ?? {}), false);
+  });
+
+  it('saldado: mora 0 aunque el plan no coincida con el saldo', () => {
+    const patch = creditPatchFromPlan({ metadata: meta({ nextDueDate: '2026-06-01' }), plan: plan(0), creditPaid: true, now: NOW });
+    assert.equal(patch.daysPastDue, 0);
+  });
+});
+

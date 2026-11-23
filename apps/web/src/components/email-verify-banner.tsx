@@ -2,9 +2,10 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Button } from '@/components/ui';
+import { Button, TextButton } from '@/components/ui';
 import { useToast } from '@/components/toast';
 import { postJson } from '@/lib/client';
+import { useMinimizedNotice } from '@/lib/notice-minimize';
 
 /**
  * Aviso «Confirma tu correo» del panel, mientras la persona no haya confirmado que el correo es suyo. No bloquea nada: entrar y trabajar
@@ -14,6 +15,7 @@ export function EmailVerifyBanner({ email }: { email: string }) {
   const t = useTranslations('emailVerify.banner');
   const toast = useToast();
   const [loading, setLoading] = useState(false);
+  const [minimized, setMinimized] = useMinimizedNotice('email-verify');
 
   async function resend() {
     setLoading(true);
@@ -21,6 +23,19 @@ export function EmailVerifyBanner({ email }: { email: string }) {
     setLoading(false);
     if (!ok) return toast(data.error?.message ?? t('error'), 'danger');
     toast((data as { sent?: boolean }).sent ? t('sent', { email }) : t('wait'), 'success');
+  }
+
+  if (minimized) {
+    return (
+      <TextButton
+        onClick={() => setMinimized(false)}
+        aria-expanded={false}
+        tone="muted"
+        className="mb-4 inline-flex items-center gap-2 rounded-full border border-k-warning bg-k-warning-bg px-3 py-1 text-k-xs font-semibold text-k-warning-text hover:opacity-80 !no-underline !text-k-warning-text"
+      >
+        ⚠ {t('minimizedLabel')} <span aria-hidden>▾</span>
+      </TextButton>
+    );
   }
 
   return (
@@ -31,6 +46,9 @@ export function EmailVerifyBanner({ email }: { email: string }) {
       <Button variant="secondary" size="sm" fullWidth={false} loading={loading} onClick={resend}>
         {t('resend')}
       </Button>
+      <TextButton onClick={() => setMinimized(true)} tone="muted" className="!text-k-xs !text-k-warning-text">
+        {t('minimize')}
+      </TextButton>
     </div>
   );
 }

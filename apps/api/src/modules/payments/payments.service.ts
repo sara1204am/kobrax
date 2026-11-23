@@ -1,17 +1,21 @@
 import { Injectable } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import type { Payment, PaymentChannel, PaymentMethod, PrismaClient } from '@prisma/client';
-import { CreditStatus, Prisma } from '@prisma/client';
-import { isExternalOrigin, readCreditMetadata, resolvePagination, type ApiResponse, ResponseDto } from '@kobrax/shared';
+import { CreditStatus, InstallmentStatus, Prisma } from '@prisma/client';
+import { PAYMENT_BACKDATE_DAYS, allocatePayments, allocateWithLateInterest, type PlanAllocation, buildUpdatedPlan, isExternalOrigin, readCreditMetadata, resolvePagination, type ApiResponse, ResponseDto } from '@kobrax/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { TenantContextService } from '../../common/context/tenant-context.service';
-import { TenantClockService, civilDayStartInstant, civilMonthStartUTC, civilTodayUTC } from '../../common/context/tenant-clock.service';
+import { TenantClockService, accountTimezone, accountToday, civilDayOf, civilDayStartInstant, civilMonthStartUTC, civilTodayUTC } from '../../common/context/tenant-clock.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { EventBusService, DomainEvent } from '../../common/events/event-bus.service';
-import { applyPayment, creditPatchAfterPayment } from './payment-apply';
+import { creditPatchAfterPayment, creditPatchFromPlan, planSourceOf } from './payment-apply';
+import { settlePromisesFromPayments } from './settle-promises';
+import { LATE_POLICY_INCLUDE, lateParamsOf, loadLateContext } from './late-context';
+import { lateSummaryOfCredit } from './late-summary';
 import { loadNames } from '../mora/mora-names';
 import { moraScopeOf, seesWholeAccount, visibleCreditIdsSql } from '../mora/mora-query';
 import { serializePayment, serializePaymentRequest } from './payments.serializer';
+import { loadCreditPlan } from '../credits/credit-plan';
 import { ConfirmPaymentRequestDto, CreatePaymentDto, CreatePaymentRequestDto, ListPaymentRequestsQueryDto, ListPaymentsQueryDto } from './dto/payment.dto';
 import { creditNotActive, paymentDuplicate, paymentInvalid, requestNotPending, resourceNotFound } from './payments.errors';
 
@@ -21,7 +25,7 @@ const round2 = (x: number): number => Math.round(x * 100) / 100;
  * Hasta cuántos días atrás puede fecharse un cobro. Cubre al cobrador que pasa una semana sin señal y
  * sincroniza al volver; más atrás ya no es un pago offline, es una corrección de historia.
  */
-export const PAYMENT_BACKDATE_DAYS = 30;
+export { PAYMENT_BACKDATE_DAYS };
 /** Tolerancia al reloj del teléfono: unos minutos adelantado no es un pago «del futuro». */
 const CLOCK_SKEW_MS = 10 * 60 * 1000;
 
@@ -94,7 +98,10 @@ export class PaymentsService {
         const existing = await tx.payment.findFirst({ where: { idempotencyKey } });
         if (existing) return { payment: existing, replay: true, external: false }; // reintento → no duplica
       }
-      const { payment, external } = await this.applyCore(tx, { ...dto, registeredVia: dto.registeredVia ?? viaHint, idempotencyKey });
+      const applied = await this.applyCore(tx, { ...dto, registeredVia: dto.registeredVia ?? viaHint, idempotencyKey });
+      // Con el candado del crédito ya tomado, otro envío con la misma clave pudo haber registrado el pago: se responde como un reintento.
+      if (applied.replay) return { payment: applied.payment, replay: true, external: false };
+      const { payment, external } = applied;
       // S-11: el rastro del cobro va EN la misma transacción: un pago sin su auditoría no queda (ni la auditoría de un pago que se deshizo).
       // Qué se cobró, cuándo y por qué canal, y si fue sobre una operación externa: con esto y los snapshots del reporte se contesta
       // «quién consiguió el pago, cuándo y cómo» (§13).
@@ -111,6 +118,8 @@ export class PaymentsService {
           receiptReference: payment.receiptReference ?? undefined,
           visitId: payment.visitId ?? undefined,
           externalCredit: external,
+          // A qué cuotas fue cada centavo (imputación FIFO): el reparto también vive en `payment_applications`.
+          applications: applied.allocations.length > 0 ? applied.allocations : undefined,
         },
       });
       return { payment, replay: false, external };
@@ -128,13 +137,28 @@ export class PaymentsService {
     return { ...serializePayment(payment), idempotentReplay: replay };
   }
 
-  /** Aplicación atómica del pago a la deuda (cuota → saldo → mora). Dentro de una transacción. */
-  private async applyCore(tx: PrismaClient, p: ApplyParams): Promise<{ payment: Payment; creditPaid: boolean; external: boolean }> {
+  /**
+   * Aplicación atómica del pago a la deuda (cuota → saldo → mora). Dentro de una transacción.
+   *
+   * 🔴 **El crédito se bloquea (`FOR UPDATE`) antes de leerlo.** Antes se leía el saldo, se calculaba `saldo - monto` en memoria y se
+   * escribía el valor absoluto: dos pagos simultáneos sobre el mismo crédito se pisaban (uno se perdía). Con el candado el segundo espera,
+   * lee el saldo ya descontado y aplica sobre lo que de verdad queda. La idempotencia se vuelve a mirar DESPUÉS del candado, porque el
+   * intento en vivo y la cola offline pueden llegar a la vez con la misma clave.
+   */
+  private async applyCore(
+    tx: PrismaClient,
+    p: ApplyParams,
+  ): Promise<{ payment: Payment; creditPaid: boolean; external: boolean; replay: boolean; allocations: { installmentNumber: number; amount: number }[] }> {
     if (p.amount <= 0) throw paymentInvalid('El monto debe ser mayor a 0');
     if (p.paymentDate) assertPaymentDate(new Date(p.paymentDate));
 
     await this.assertCreditInScope(tx, p.creditId);
-    const credit = await tx.credit.findFirst({ where: { id: p.creditId, deletedAt: null }, include: { installments: true } });
+    await tx.$queryRaw`SELECT id FROM credits WHERE id = ${p.creditId} AND account_id = ${this.tenant.accountId} FOR UPDATE`;
+    if (p.idempotencyKey) {
+      const existing = await tx.payment.findFirst({ where: { idempotencyKey: p.idempotencyKey } });
+      if (existing) return { payment: existing, creditPaid: false, external: false, replay: true, allocations: [] };
+    }
+    const credit = await tx.credit.findFirst({ where: { id: p.creditId, deletedAt: null }, include: { installments: true, ...LATE_POLICY_INCLUDE } });
     if (!credit) throw resourceNotFound();
     // El cobro dice en qué visita se hizo: esa visita tiene que existir y ser de ESTE crédito.
     if (p.visitId) {
@@ -147,60 +171,149 @@ export class PaymentsService {
      * saldo (D3).** El saldo, la mora y el estado los informa el reporte; el próximo reporte los
      * actualiza. Por eso esta rama no mira el estado ni el saldo reportado —un pago cobrado offline
      * que sube después de un reporte con saldo menor no se pierde— y no toca cuotas, saldo, mora,
-     * estado. Lo único que escribe es el `Payment`, que es lo que cuenta como recuperado.
+     * estado ni aplicaciones. Lo único que escribe es el `Payment`, que es lo que cuenta como recuperado.
      */
     if (isExternalOrigin(readCreditMetadata(credit.metadata, credit.origin).origin)) {
       const payment = await this.insertPayment(tx, credit, p);
-      return { payment, creditPaid: false, external: true };
+      await this.settlePromises(tx, credit);
+      return { payment, creditPaid: false, external: true, replay: false, allocations: [] };
     }
 
     if (credit.status !== CreditStatus.ACTIVE) throw creditNotActive();
 
     const balance = Number(credit.outstandingBalance);
-    if (p.amount > balance + 0.005) throw paymentInvalid('El monto excede el saldo pendiente');
+    const now = new Date();
+    // Los días de atraso se cuentan contra el día civil de la cuenta, no contra el instante UTC (`now` queda para `paidAt`).
+    const today = await accountToday(tx, this.tenant.accountId, now);
+    const source = planSourceOf(credit);
 
-    const lite = credit.installments.map((i) => ({ id: i.id, number: i.number, amount: Number(i.amount), paidAmount: Number(i.paidAmount), status: i.status, dueDate: i.dueDate }));
-    const result = applyPayment(lite, p.amount);
-    for (const u of result.updates) {
-      await tx.creditInstallment.update({ where: { id: u.id }, data: { paidAmount: u.paidAmount, status: u.status, paidAt: u.paidAt } });
+    /*
+     * F17 · F3-c — interés moratorio. SÓLO si el crédito nació con una política `ANNUAL_RATE` sellada y tiene plan con partición capital/interés.
+     * Sin política (la cuenta lo tiene apagado, o el crédito es anterior) `late` queda en `null` y TODO lo de abajo es el camino de siempre.
+     * La mora se calcula a la fecha de cobro del pago (D4), acotada a hoy; el pago puede cubrir saldo del plan + mora pendiente.
+     */
+    const lateParams = source ? lateParamsOf(credit.latePolicyVersion, credit.lateActivation) : null;
+    let late: { ctx: Awaited<ReturnType<typeof loadLateContext>>; result: ReturnType<typeof allocateWithLateInterest> } | null = null;
+    if (source && lateParams) {
+      const tz = await accountTimezone(tx, this.tenant.accountId);
+      const todayIso = today.toISOString().slice(0, 10);
+      const payDay = p.paymentDate ? civilDayOf(new Date(p.paymentDate), tz) : todayIso;
+      const ctx = await loadLateContext(tx, {
+        accountId: this.tenant.accountId,
+        creditId: credit.id,
+        tz,
+        rows: source.rows,
+        policy: lateParams,
+        // D7: castigado ⇒ el devengo se congela en el día del castigo.
+        stopAt: credit.writtenOffAt ? civilDayOf(credit.writtenOffAt, tz) : null,
+        prepaidInstallments: source.prepaidInstallments,
+        storedPaid: source.stored ? Object.fromEntries(credit.installments.map((i) => [i.number, Number(i.paidAmount)])) : undefined,
+      });
+      const result = allocateWithLateInterest({ ...ctx, amount: p.amount, date: payDay > todayIso ? todayIso : payDay });
+      if (p.amount > result.payable + 0.005) throw paymentInvalid('El monto excede el saldo pendiente más el interés moratorio');
+      late = { ctx, result };
+    } else if (p.amount > balance + 0.005) {
+      throw paymentInvalid('El monto excede el saldo pendiente');
     }
 
-    // El pago SIEMPRE descuenta el saldo (spec §5.4). Antes se restaba `result.applied`, que es 0
-    // cuando el crédito no tiene cronograma (el del móvil): el dinero se registraba y la deuda
-    // quedaba intacta. El cronograma dice a qué cuota imputar, no cuánto vale el pago.
-    const now = new Date();
-    const newBalance = round2(Math.max(0, balance - p.amount));
-    const creditPaid = newBalance <= 0.005;
-
-    // Estado efectivo del cronograma tras el pago → días de mora.
-    const byId = new Map(result.updates.map((u) => [u.id, u]));
-    const effective = lite.map((i) => ({ ...i, status: byId.get(i.id)?.status ?? i.status, paidAmount: byId.get(i.id)?.paidAmount ?? i.paidAmount }));
-
-    await tx.credit.update({
-      where: { id: credit.id },
-      data: {
-        outstandingBalance: newBalance,
-        ...(creditPaid ? { status: CreditStatus.PAID } : {}),
-        ...creditPatchAfterPayment({
-          metadata: credit.metadata,
-          installments: effective,
-          amount: p.amount,
-          newBalance,
-          creditPaid,
-          now,
-        }),
-      },
-    });
-
-    // Saldada la deuda el crédito queda `PAID` y el trigger de episodios termina la mora (F4/08): el pago
-    // cuelga solo del crédito.
+    // El pago descuenta el saldo del PLAN (spec §5.4); con mora, sólo lo que fue a cuotas (la mora no es parte del plan, P5).
+    // D6: con mora pendiente el crédito no pasa a `PAID` aunque el plan esté saldado.
+    const newBalance = round2(Math.max(0, balance - (late ? late.result.scheduledApplied : p.amount)));
+    const creditPaid = newBalance <= 0.005 && (late ? late.result.latePendingAfter <= 0.005 : true);
 
     const payment = await this.insertPayment(tx, credit, p);
-    return { payment, creditPaid, external: false };
+    let allocations: { installmentNumber: number; amount: number }[] = [];
+
+    if (source) {
+      /*
+       * Con plan (cronograma guardado o condiciones): la imputación FIFO de ESTE pago sobre lo que ya estaba cubierto, guardada como
+       * hechos en `payment_applications` (orden de REGISTRO). Lo ya cubierto sale de las aplicaciones previas y, en un cronograma guardado,
+       * de su `paid_amount` (que además incluye lo pagado antes de que existieran las aplicaciones).
+       */
+      const covered: Record<number, number> = {};
+      if (late) {
+        Object.assign(covered, late.ctx.scheduledPaid);
+      } else if (source.stored) {
+        for (const i of credit.installments) covered[i.number] = Number(i.paidAmount);
+      } else {
+        const previous = await tx.paymentApplication.findMany({
+          where: { accountId: this.tenant.accountId, creditId: credit.id, component: 'SCHEDULED' },
+          select: { installmentNumber: true, amount: true },
+        });
+        for (const a of previous) covered[a.installmentNumber] = round2((covered[a.installmentNumber] ?? 0) + Number(a.amount));
+      }
+      const fresh: PlanAllocation[] = late
+        ? late.result.allocations.filter((a) => a.component === 'SCHEDULED').map((a) => ({ paymentId: payment.id, installmentNumber: a.installmentNumber, amount: a.amount }))
+        : allocatePayments({
+            rows: source.rows,
+            prepaidInstallments: source.prepaidInstallments,
+            priorPaid: covered,
+            payments: [{ id: payment.id, amount: p.amount, registeredAt: payment.createdAt }],
+          }).allocations;
+      allocations = (late ? late.result.allocations : fresh).map((a) => ({ installmentNumber: a.installmentNumber, amount: a.amount }));
+      const rowsToWrite = late
+        ? late.result.allocations.map((a) => ({ installmentNumber: a.installmentNumber, amount: a.amount, component: a.component, policyVersion: 2 }))
+        : fresh.map((a) => ({ installmentNumber: a.installmentNumber, amount: a.amount }));
+      if (rowsToWrite.length > 0) {
+        await tx.paymentApplication.createMany({
+          data: rowsToWrite.map((a) => ({ accountId: this.tenant.accountId, paymentId: payment.id, creditId: credit.id, ...a })),
+        });
+      }
+      const plan = buildUpdatedPlan({ rows: source.rows, prepaidInstallments: source.prepaidInstallments, priorPaid: covered, allocations: fresh, asOf: today });
+
+      // Cronograma guardado: las filas son una COPIA de lectura del plan actualizado (el estado sale de las aplicaciones).
+      if (source.stored) {
+        for (const row of plan.rows) {
+          const stored = credit.installments.find((i) => i.number === row.number);
+          if (!stored || row.paid === Number(stored.paidAmount)) continue;
+          const full = row.pending === 0;
+          await tx.creditInstallment.update({
+            where: { id: stored.id },
+            data: { paidAmount: row.paid, status: full ? InstallmentStatus.PAID : InstallmentStatus.PARTIAL, paidAt: full ? now : null },
+          });
+        }
+      }
+
+      await tx.credit.update({
+        where: { id: credit.id },
+        data: {
+          outstandingBalance: newBalance,
+          ...(creditPaid ? { status: CreditStatus.PAID } : {}),
+          ...creditPatchFromPlan({ metadata: credit.metadata, plan, creditPaid, now: today }),
+        },
+      });
+    } else {
+      // Sin plan (préstamo abierto o sin condiciones): no hay cuotas a las que imputar. Se conserva la lógica de siempre (sin aplicaciones).
+      await tx.credit.update({
+        where: { id: credit.id },
+        data: {
+          outstandingBalance: newBalance,
+          ...(creditPaid ? { status: CreditStatus.PAID } : {}),
+          ...creditPatchAfterPayment({ metadata: credit.metadata, installments: [], amount: p.amount, newBalance, creditPaid, now: today }),
+        },
+      });
+    }
+
+    // Saldada la deuda el crédito queda `PAID` y el trigger de episodios termina la mora (F4/08): el pago cuelga solo del crédito.
+    await this.settlePromises(tx, credit);
+    return { payment, creditPaid, external: false, replay: false, allocations };
+  }
+
+  /**
+   * Con el pago ya escrito, las promesas del crédito que lo pagado cubre pasan solas a «cumplida». Va en la misma transacción y deja su
+   * rastro de auditoría: quién la cerró no fue una persona, fue el pago.
+   */
+  private async settlePromises(tx: PrismaClient, credit: { id: string; clientId: string }): Promise<void> {
+    const kept = await settlePromisesFromPayments(tx, { accountId: this.tenant.accountId, creditId: credit.id, clientId: credit.clientId, userId: this.tenant.userId });
+    for (const id of kept) {
+      await this.audit.recordInTx(tx, { entity: 'agenda_item', entityId: id, action: 'EXECUTE', after: { id, creditId: credit.id, outcome: 'PROMISE_KEPT', by: 'PAYMENT' } });
+    }
   }
 
   /** La fila del ledger (inmutable), con su número de recibo. La comparten el crédito propio y el externo. */
   private async insertPayment(tx: PrismaClient, credit: { id: string; branchId: string | null }, p: ApplyParams): Promise<Payment> {
+    // El correlativo es `max + 1` por empresa: sin candado, dos pagos de créditos distintos tomaban el mismo número y uno fallaba por la unicidad.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'receipt:' + this.tenant.accountId}))`;
     const agg = await tx.payment.aggregate({ _max: { receiptNumber: true } });
     const receiptNumber = (agg._max.receiptNumber ?? 0) + 1;
     try {
@@ -311,6 +424,61 @@ export class PaymentsService {
         ...(windows ? { todayAmount: round2(Number(extra.today ?? 0)), monthAmount: round2(Number(extra.month ?? 0)) } : {}),
       },
     );
+  }
+
+  /**
+   * El historial de pagos de UN crédito, con a qué cuotas se aplicó cada uno y el saldo del plan después de cada movimiento.
+   *
+   * Sale de lo persistido (`payment_applications`) y del MISMO plan actualizado que ven Cartera y Mora (`loadCreditPlan`): nada se
+   * recalcula acá. Mismo alcance que la lectura del crédito: fuera de él, 404 (no se confirma que exista). Sin período por defecto:
+   * es TODO el historial, a diferencia del ledger general que se mira por mes.
+   */
+  async forCredit(creditId: string) {
+    const out = await this.tx(async (tx) => {
+      await this.assertCreditInScope(tx, creditId);
+      const credit = await tx.credit.findFirst({ where: { id: creditId, deletedAt: null }, include: { installments: true } });
+      if (!credit) return null;
+      const [payments, plan] = await Promise.all([
+        tx.payment.findMany({ where: { creditId }, orderBy: [{ createdAt: 'asc' }, { receiptNumber: 'asc' }] }),
+        accountToday(tx, this.tenant.accountId).then((today) => loadCreditPlan(tx, this.tenant.accountId, credit, today)),
+      ]);
+      const names = await loadNames(tx, this.tenant.accountId, payments.map((p) => p.registeredBy));
+      const lateInterest = credit.latePolicyVersionId ? await lateSummaryOfCredit(tx, this.tenant.accountId, creditId) : null;
+      return { credit, payments, plan, names, lateInterest };
+    });
+    if (!out) throw resourceNotFound();
+    const byPayment = new Map((out.plan?.payments ?? []).map((b) => [b.paymentId, b]));
+    return {
+      creditId,
+      code: out.credit.code ?? undefined,
+      clientId: out.credit.clientId,
+      currency: out.credit.currency,
+      // F17: interés moratorio del crédito (línea aparte del plan, P5). `null` = no devenga.
+      lateInterest: out.lateInterest,
+      // `null` = sin plan (préstamo abierto) o una operación de una fuente externa: se listan los pagos sin imputación.
+      plan: out.plan
+        ? {
+            planTotal: out.plan.planTotal,
+            prepaidAmount: out.plan.prepaidAmount,
+            collectedAmount: out.plan.collectedAmount,
+            balance: out.plan.balance,
+            overdueAmount: out.plan.overdueAmount,
+            situation: out.plan.situation,
+            nextPayment: out.plan.nextPayment,
+          }
+        : null,
+      // Del más reciente al más antiguo, como un ledger; el saldo posterior se calculó en el orden en que se registraron.
+      payments: [...out.payments].reverse().map((p) => {
+        const b = byPayment.get(p.id);
+        return {
+          ...serializePayment(p, out.names),
+          // «Registrado» es el único estado hoy: no hay anulación. Cuando exista, sale de acá.
+          status: 'REGISTERED' as const,
+          registeredAt: p.createdAt,
+          imputation: b ? { allocations: b.allocations, applied: b.applied, unapplied: b.unapplied, balanceAfter: b.balanceAfter, unrecorded: b.unrecorded === true } : undefined,
+        };
+      }),
+    };
   }
 
   /** Hoy y este mes **civiles de la empresa**: a las 21:00 en La Paz ya es mañana en UTC, y no por eso se cobró «mañana». */

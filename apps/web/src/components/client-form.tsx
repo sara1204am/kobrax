@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import { useFormatter, useTranslations } from 'next-intl';
 import { CollectionFields } from '@/components/collection-fields';
@@ -19,13 +19,14 @@ import {
   type ClienteForm,
   type CollateralRow,
   type ContactRow,
-  type CoordMode,
   type CreditOption,
   type LocationRow,
   type RelationRow,
 } from '@kobrax/shared';
-import { Field, Input, Select, TextButton } from '@/components/ui';
+import { Button, Field, Input, Select, TextButton } from '@/components/ui';
 import { useWorkspace } from '@/components/workspace';
+import { missingClientFields } from '@/lib/client-missing';
+import { RISK_SEGMENTS, riskSegmentOf } from '@/lib/risk-segment';
 
 /**
  * MapLibre son ~250 kB y el formulario se abre mucho más de lo que se marca un punto: el chunk baja
@@ -87,12 +88,14 @@ export function IdentityFields({
   onChange,
   disabled,
   documentNotice,
+  showRequired,
 }: {
   form: ClienteForm;
   onChange: (next: ClienteForm) => void;
   disabled?: boolean;
   /** Aviso bajo el carnet (el alta lo usa para «este carnet ya es de…»). Con aviso, el campo va en rojo. */
   documentNotice?: ReactNode;
+  showRequired?: boolean;
 }) {
   const t = useTranslations('portfolio');
   // F15 · P3: género y canal preferido se pueden ocultar; un cliente que ya trae un valor lo sigue mostrando (R7). Se decide con lo que
@@ -115,9 +118,10 @@ export function IdentityFields({
         </Select>
       </Field>
 
-      <Field label={t('fields.document')}>
+      <Field label={t('fields.document')} required={showRequired}>
         <Input
           value={form.nationalId}
+          required={showRequired}
           onChange={(e) => set({ nationalId: e.target.value })}
           disabled={disabled}
           placeholder={t('form.documentPlaceholder')}
@@ -130,7 +134,7 @@ export function IdentityFields({
           servidor (`assertIdentity`), así que el formulario cambia con el tipo. */}
       {form.clientType === 'PERSON' ? (
         <>
-          <Field label={t('form.firstName')}>
+          <Field label={t('form.firstName')} required>
             <Input
               value={form.firstName}
               onChange={(e) => set({ firstName: e.target.value })}
@@ -138,7 +142,7 @@ export function IdentityFields({
               required
             />
           </Field>
-          <Field label={t('form.lastName')}>
+          <Field label={t('form.lastName')} required>
             <Input
               value={form.lastName}
               onChange={(e) => set({ lastName: e.target.value })}
@@ -148,7 +152,7 @@ export function IdentityFields({
           </Field>
         </>
       ) : (
-        <Field label={t('form.businessName')}>
+        <Field label={t('form.businessName')} required>
           <Input
             value={form.businessName}
             onChange={(e) => set({ businessName: e.target.value })}
@@ -182,11 +186,20 @@ export function IdentityFields({
       )}
 
       <Field label={t('fields.risk')}>
-        <Input
-          value={form.riskSegment}
+        <Select
+          value={riskSegmentOf(form.riskSegment) ?? form.riskSegment}
           onChange={(e) => set({ riskSegment: e.target.value })}
           disabled={disabled}
-        />
+        >
+          <option value="">{t('risk.none')}</option>
+          {RISK_SEGMENTS.map((r) => (
+            <option key={r} value={r}>
+              {t(`risk.${r}`)}
+            </option>
+          ))}
+          {/* Un texto libre de antes (que el motor no entiende) se conserva a la vista, para poder corregirlo. */}
+          {form.riskSegment && !riskSegmentOf(form.riskSegment) && <option value={form.riskSegment}>{form.riskSegment}</option>}
+        </Select>
       </Field>
 
       {/* F4/13 · E2: el campo existía en la base y en la API, pero ninguna pantalla lo mostraba. */}
@@ -254,7 +267,7 @@ export function ContactRows({
         return (
           <li key={c.id} className="rounded-xl border border-k-border bg-k-bg p-4">
             <div className="grid gap-4 sm:grid-cols-[160px,1fr]">
-              <Field label={t('form.contactType')}>
+              <Field label={t('form.contactType')} required>
                 <Select
                   value={c.contactType}
                   onChange={(e) =>
@@ -269,7 +282,7 @@ export function ContactRows({
                   ))}
                 </Select>
               </Field>
-              <Field label={t('form.contactValue')}>
+              <Field label={t('form.contactValue')} required>
                 {/*
                  * 🔴 **El navegador valida la forma, y no lo hacía nadie.**
                  *
@@ -287,6 +300,7 @@ export function ContactRows({
                   {...(esMail ? {} : { pattern: PHONE_PATTERN, maxLength: 32 })}
                   title={esMail ? undefined : t('form.phoneHint')}
                   placeholder={t('form.contactPlaceholder')}
+                  required
                 />
               </Field>
             </div>
@@ -358,8 +372,9 @@ export function LocationRows({
           onChange(replaceAt(rows, i, { ...l, ...patch }));
         return (
           <li key={l.id} className="rounded-xl border border-k-border bg-k-bg p-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label={t('form.locationType')}>
+            <CoordFields row={l} onChange={set} disabled={disabled} />
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <Field label={t('form.locationType')} required>
                 <Select
                   value={l.locationType}
                   onChange={(e) =>
@@ -382,11 +397,12 @@ export function LocationRows({
                 />
               </Field>
               <div className="sm:col-span-2">
-                <Field label={t('form.address')}>
+                <Field label={t('form.address')} required>
                   <Input
                     value={l.address}
                     onChange={(e) => set({ address: e.target.value })}
                     disabled={disabled}
+                    required
                   />
                 </Field>
               </div>
@@ -400,7 +416,6 @@ export function LocationRows({
                 </Field>
               </div>
             </div>
-            <CoordFields row={l} onChange={set} disabled={disabled} />
             {modalities && (
               <CollectionFields
                 value={l.collection ?? emptyCollectionForm()}
@@ -436,164 +451,100 @@ function coordNum(v: string): number | undefined {
   return v.trim() === '' || Number.isNaN(n) ? undefined : n;
 }
 
-const COORD_MODES = [
-  { value: 'manual', label: 'coordManual' },
-  { value: 'gps', label: 'coordGps' },
-  { value: 'map', label: 'coordMap' },
-] as const satisfies readonly { value: CoordMode; label: string }[];
-
 /**
- * El punto de una dirección: **las mismas tres formas que el móvil** —escribirlo, tomar el GPS o
- * marcarlo en el mapa—, sobre el mismo `coordMode` de `LocationRow`. Sirve igual a las direcciones
- * del cliente y a las del garante, porque las dos pasan por `LocationRows`.
+ * El punto de una dirección: **sólo el mapa**, con la latitud y la longitud encima.
  *
- * 🔴 **Las tres escriben la MISMA coordenada.** Cambiar de modo no borra nada: quien capturó el GPS
- * y pasa al mapa ve el pin ahí y lo arrastra unos metros. `coordMode` no viaja a la API —el diff lo
- * ignora—: es sólo qué controles se ven.
+ * Se marca tocando el mapa o arrastrando el pin (eso rellena los dos campos), o se escribe una
+ * coordenada y se pulsa «Ir»: el mapa viaja ahí y el pin queda puesto para comprobar a ojo que es el
+ * lugar correcto. Lo escrito no mueve el mapa hasta pulsar «Ir» (ni se guarda a medias): una
+ * coordenada a medio teclear no es una coordenada. El GPS sigue en el control de ubicación del mapa.
  *
- * El mapa se pinta sólo en modo «Mapa»: un garante con tres direcciones serían tres MapLibre vivos
- * en el modal por un modo que casi nadie abre en todas.
+ * `coordMode` ya no se usa en la web (sigue en el tipo porque el móvil lo comparte).
  */
-function CoordFields({
+export function CoordFields({
   row,
   onChange,
   disabled,
+  center,
 }: {
-  row: LocationRow;
-  onChange: (patch: Partial<LocationRow>) => void;
+  row: Pick<LocationRow, 'latitude' | 'longitude'>;
+  onChange: (patch: Partial<Pick<LocationRow, 'latitude' | 'longitude'>>) => void;
   disabled?: boolean;
+  /** Dónde abrir el mapa mientras no hay punto (p. ej. otra dirección del mismo cliente). */
+  center?: { latitude: number; longitude: number };
 }) {
   const t = useTranslations('portfolio');
-  const [ubicando, setUbicando] = useState(false);
-  const [geoError, setGeoError] = useState<string | null>(null);
   const lat = coordNum(row.latitude);
   const lng = coordNum(row.longitude);
-  const conPunto = lat != null && lng != null;
+  const [draftLat, setDraftLat] = useState(row.latitude);
+  const [draftLng, setDraftLng] = useState(row.longitude);
+  const [error, setError] = useState<string | null>(null);
 
-  /*
-   * El GPS del navegador. Si lo niegan no se bloquea nada: los otros dos modos siguen ahí y el
-   * punto es opcional. `toFixed(6)` como el móvil: ~10 cm, más que lo que da cualquier GPS.
-   */
-  function capturar() {
-    setGeoError(null);
-    if (!navigator.geolocation) return setGeoError(t('form.noGeo'));
-    setUbicando(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setUbicando(false);
-        onChange({
-          latitude: pos.coords.latitude.toFixed(6),
-          longitude: pos.coords.longitude.toFixed(6),
-        });
-      },
-      () => {
-        setUbicando(false);
-        setGeoError(t('form.geoDenied'));
-      },
-      { enableHighAccuracy: true, timeout: 15_000 },
-    );
+  // El mapa (clic, arrastre) o el control de ubicación escribieron el punto: los campos lo muestran.
+  useEffect(() => {
+    setDraftLat(row.latitude);
+    setDraftLng(row.longitude);
+    setError(null);
+  }, [row.latitude, row.longitude]);
+
+  function ir() {
+    const la = coordNum(draftLat.replace(',', '.'));
+    const lo = coordNum(draftLng.replace(',', '.'));
+    if (la == null || lo == null || la < -90 || la > 90 || lo < -180 || lo > 180) {
+      return setError(t('form.coordInvalid'));
+    }
+    setError(null);
+    onChange({ latitude: String(la), longitude: String(lo) });
   }
 
-  const punto = conPunto ? t('form.pinAt', { lat: row.latitude, lng: row.longitude }) : null;
+  const punto = lat != null && lng != null ? t('form.pinAt', { lat: row.latitude, lng: row.longitude }) : null;
 
   return (
-    <div className="mt-4 space-y-3">
-      <div>
-        <p className="mb-2 text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">
-          {t('form.coordMode')}
-        </p>
-        <div
-          role="radiogroup"
-          aria-label={t('form.coordMode')}
-          className="inline-flex rounded-xl border border-k-border bg-white p-1"
-        >
-          {COORD_MODES.map((m) => (
-            <button
-              key={m.value}
-              type="button"
-              role="radio"
-              aria-checked={row.coordMode === m.value}
-              disabled={disabled}
-              onClick={() => {
-                setGeoError(null);
-                onChange({ coordMode: m.value });
-              }}
-              className={`rounded-lg px-3 py-1.5 text-k-sm font-medium transition-colors disabled:opacity-50 ${
-                row.coordMode === m.value
-                  ? 'bg-k-highlight text-k-periwinkle'
-                  : 'text-k-text-2 hover:text-k-text'
-              }`}
-            >
-              {t(`form.${m.label}`)}
-            </button>
-          ))}
+    <div className="space-y-2">
+      <p className="text-k-2xs font-semibold uppercase tracking-wide text-k-text-2">{t('form.coordMode')}</p>
+      <div className="relative">
+        <MapPicker
+          latitude={lat}
+          longitude={lng}
+          onChange={
+            disabled
+              ? undefined
+              : ({ latitude, longitude }) =>
+                  onChange({ latitude: latitude.toFixed(6), longitude: longitude.toFixed(6) })
+          }
+          height={260}
+          label={t('form.mapPick')}
+          center={center}
+        />
+        <div className="absolute left-3 top-3 z-10 flex max-w-[calc(100%-4rem)] flex-wrap items-center gap-2 rounded-xl bg-white/95 p-2 shadow">
+          <Input
+            aria-label={t('form.latitude')}
+            placeholder={t('form.latitude')}
+            value={draftLat}
+            onChange={(e) => setDraftLat(e.target.value)}
+            disabled={disabled}
+            inputMode="decimal"
+            className="!h-9 !w-28 !px-2 !text-k-sm"
+          />
+          <Input
+            aria-label={t('form.longitude')}
+            placeholder={t('form.longitude')}
+            value={draftLng}
+            onChange={(e) => setDraftLng(e.target.value)}
+            disabled={disabled}
+            inputMode="decimal"
+            className="!h-9 !w-28 !px-2 !text-k-sm"
+          />
+          <Button type="button" size="sm" fullWidth={false} onClick={ir} disabled={disabled}>
+            {t('form.coordGo')}
+          </Button>
         </div>
       </div>
-
-      {row.coordMode === 'manual' && (
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label={t('form.latitude')}>
-            <Input
-              value={row.latitude}
-              onChange={(e) => onChange({ latitude: e.target.value })}
-              disabled={disabled}
-              type="number"
-              step="any"
-              min={-90}
-              max={90}
-            />
-          </Field>
-          <Field label={t('form.longitude')}>
-            <Input
-              value={row.longitude}
-              onChange={(e) => onChange({ longitude: e.target.value })}
-              disabled={disabled}
-              type="number"
-              step="any"
-              min={-180}
-              max={180}
-            />
-          </Field>
-        </div>
+      {error ? (
+        <p className="text-k-xs text-k-danger">{error}</p>
+      ) : (
+        <p className="text-k-xs text-k-text-2">{punto ?? t('form.pinHint')}</p>
       )}
-
-      {row.coordMode === 'gps' && (
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={capturar}
-            disabled={disabled || ubicando}
-            className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg bg-k-highlight px-3 text-k-sm font-medium text-k-periwinkle hover:bg-k-light-bg disabled:opacity-50"
-          >
-            {ubicando
-              ? t('form.locating')
-              : conPunto
-                ? t('form.recaptureLocation')
-                : t('form.captureLocation')}
-          </button>
-          {punto && <span className="text-k-xs text-k-text-2">{punto}</span>}
-        </div>
-      )}
-
-      {row.coordMode === 'map' && (
-        <>
-          <MapPicker
-            latitude={lat}
-            longitude={lng}
-            onChange={
-              disabled
-                ? undefined
-                : ({ latitude, longitude }) =>
-                    onChange({ latitude: latitude.toFixed(6), longitude: longitude.toFixed(6) })
-            }
-            height={240}
-            label={t('form.mapPick')}
-          />
-          <p className="text-k-xs text-k-text-2">{punto ?? t('form.pinHint')}</p>
-        </>
-      )}
-
-      {geoError && <p className="text-k-xs text-k-danger">{geoError}</p>}
     </div>
   );
 }
@@ -692,6 +643,7 @@ export function ClientFormFields({
   occupations = [],
   currency,
   documentNotice,
+  showRequired,
 }: {
   form: ClienteForm;
   onChange: (next: ClienteForm) => void;
@@ -714,8 +666,15 @@ export function ClientFormFields({
   currency: string;
   /** Ver `IdentityFields`. */
   documentNotice?: ReactNode;
+  /** Alta desde el panel: marca con * los obligatorios y avisa en el encabezado de cada sección lo que falta. */
+  showRequired?: boolean;
 }) {
   const t = useTranslations('portfolio');
+  const miss = showRequired ? missingClientFields(form) : [];
+  const badge = (keys: string[]) => {
+    const hit = miss.filter((k) => keys.includes(k));
+    return hit.length > 0 ? t('form.missingBadge', { fields: hit.map((k) => t(`form.missingField.${k}`)).join(', ') }) : undefined;
+  };
   // F15 · P3: Ingresos, Garantes y Garantías se pueden ocultar. Lo que el cliente ya tiene cargado se muestra igual (R7), decidido al
   // abrir: quitar la última fila de garantes no hace desaparecer la sección (no habría cómo volver a agregar una).
   const workspace = useWorkspace();
@@ -728,8 +687,9 @@ export function ClientFormFields({
 
   return (
     <div className="space-y-3">
-      <Acordeon title={t('sections.identity')} open>
+      <Acordeon title={t('sections.identity')} open missing={badge(['document', 'firstName', 'lastName', 'businessName'])}>
         <IdentityFields
+          showRequired={showRequired}
           form={form}
           onChange={onChange}
           disabled={disabled}
@@ -751,6 +711,7 @@ export function ClientFormFields({
 
       <Acordeon
         title={t('sections.contacts')}
+        missing={badge(['phone', 'contactEmpty'])}
         count={form.contacts.length}
         onAdd={
           disabled ? undefined : () => set({ contacts: [...form.contacts, nuevaFila.contact()] })
@@ -766,6 +727,7 @@ export function ClientFormFields({
 
       <Acordeon
         title={t('sections.locations')}
+        missing={badge(['locationAddress'])}
         count={form.locations.length}
         onAdd={
           disabled ? undefined : () => set({ locations: [...form.locations, nuevaFila.location()] })
@@ -803,6 +765,7 @@ export function ClientFormFields({
       {(workspace.shows('client.collateral') || had.collaterals) && (
         <Acordeon
           title={t('sections.collaterals')}
+          missing={badge(['collateral'])}
           count={form.collaterals.length}
           onAdd={
             disabled
@@ -913,12 +876,13 @@ function CollateralFields({
       <div className="grid gap-4 sm:grid-cols-2">
         {/* Con catálogo cargado, desplegable; sin catálogo, texto libre. Un `<select>` vacío sería
             un campo que no se puede llenar, y el catálogo del tenant arranca vacío. */}
-        <Field label={t('form.collateralType')}>
+        <Field label={t('form.collateralType')} required>
           {opciones.length > 0 ? (
             <Select
               value={row.type}
               onChange={(e) => set({ type: e.target.value })}
               disabled={disabled}
+              required
             >
               <option value="">{t('form.collateralTypeUnset')}</option>
               {opciones.map((c) => (
@@ -933,23 +897,35 @@ function CollateralFields({
               onChange={(e) => set({ type: e.target.value })}
               disabled={disabled}
               maxLength={64}
+              required
             />
           )}
         </Field>
+        {/* «Otro»: hay que decir qué es. Con cualquier otro tipo el campo no existe (y la API borra lo que hubiera). */}
+        {row.type === 'OTHER' && (
+          <Field label={t('form.collateralTypeOther')} required>
+            <Input
+              value={row.typeOther ?? ''}
+              onChange={(e) => set({ typeOther: e.target.value })}
+              disabled={disabled}
+              maxLength={80}
+              required
+              placeholder={t('form.collateralTypeOtherPlaceholder')}
+            />
+          </Field>
+        )}
         <div className="sm:col-span-2">
-          {/* La descripción es lo que hace existir a la garantía (`hasCollateralData`): sin ella la
-              fila se descarta en silencio. Por eso es `required` y lo dice el rótulo. */}
+          {/* Opcional: qué es exactamente. Lo obligatorio de una garantía es su tipo y su valor. */}
           <Field label={t('form.collateralDescription')}>
             <Input
               value={row.description}
               onChange={(e) => set({ description: e.target.value })}
               disabled={disabled}
               maxLength={500}
-              required
             />
           </Field>
         </div>
-        <Field label={t('form.collateralValue')}>
+        <Field label={t('form.collateralValue')} required>
           {/*
            * 🔴 **Número de verdad, no texto que se parsea al final.** Como texto, `7.000,50` se
            * convertía en `NaN`, se mandaba `undefined` y la garantía se guardaba **sin valor**, con
@@ -961,8 +937,9 @@ function CollateralFields({
             onChange={(e) => set({ estimatedValue: e.target.value })}
             disabled={disabled}
             type="number"
-            min={0}
+            min={0.01}
             step="0.01"
+            required
           />
         </Field>
         <Field label={t('form.collateralCurrency')}>
@@ -984,6 +961,17 @@ function CollateralFields({
             ))}
           </Select>
         </Field>
+      </div>
+
+      {/* Fotos de la garantía (opcionales): las mismas que las de una dirección, mismo componente y mismo `/upload`. */}
+      <div className="mt-4">
+        <LocationPhotos
+          value={row.photoUrls}
+          onChange={(photoUrls) => set({ photoUrls })}
+          disabled={disabled}
+          title={t('form.collateralPhotos')}
+          hint={t('form.collateralPhotosHint')}
+        />
       </div>
 
       <div className="mt-4 border-t border-k-border pt-4">
@@ -1145,11 +1133,14 @@ function Acordeon({
   title,
   count,
   open,
+  missing,
   onAdd,
   addLabel,
   children,
 }: {
   title: string;
+  /** Texto de un aviso en el encabezado (visible aunque la sección esté cerrada): «Falta: Teléfono». */
+  missing?: string;
   count?: number;
   open?: boolean;
   onAdd?: () => void;
@@ -1168,6 +1159,11 @@ function Acordeon({
             <span className="ml-1.5 font-normal text-k-muted">({count})</span>
           )}
         </span>
+        {missing && (
+          <span role="status" className="rounded-full bg-k-danger-bg px-2.5 py-0.5 text-k-xs font-semibold text-k-danger">
+            {missing}
+          </span>
+        )}
       </summary>
       <div className="border-t border-k-border p-4">
         {onAdd && (

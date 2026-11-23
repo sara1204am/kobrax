@@ -10,11 +10,11 @@ import { FilterPanel } from '@/components/data-table-filters';
 import { SearchBox } from '@/components/search-box';
 import { AvailableList } from '@/components/route-planner/available-list';
 import { MapPanel, type PlanArea } from '@/components/route-planner/map-panel';
-import { candidatePins, describeLocation, parsePinId } from '@/components/route-planner/candidate-pins';
+import { candidatePins, describeLocation, nearbySuggestions, parsePinId } from '@/components/route-planner/candidate-pins';
 import type { MapPoint } from '@/components/route-planner/points-map';
 import { postJson } from '@/lib/client';
 import { dayDate, money } from '@/lib/format';
-import { AVAILABLE_LIMIT, defaultLocation, shiftDays, withinRadius, type AvailableCredit } from '@/lib/plan';
+import { AVAILABLE_LIMIT, defaultLocation, shiftDays, SUGGEST_KM, withinRadius, type AvailableCredit } from '@/lib/plan';
 import type { PlanRow } from '@/app/api/routes/plan/route';
 import { planFilterDefs, PLAN_FILTER_KEYS } from './plan-filters';
 import { PlanLocationDialog, type ChosenLocation } from './plan-location-dialog';
@@ -106,7 +106,7 @@ export function PlanScreen({
   const filters = planFilterDefs(tFilters, categories, tOutcome);
   // El panel abre solo si ya hay un filtro puesto: si no, uno activo quedaría escondido y la lista
   // saldría corta sin que nada lo explique. Mismo criterio que el `DataTable`.
-  const [panelOpen, setPanelOpen] = useState(filtered);
+  const [panelOpen, setPanelOpen] = useState(true);
   const [step, setStep] = useState<Step>(firstStep);
   const [picked, setPicked] = useState<string[]>([]);
   const [area, setArea] = useState<PlanArea | null>(null);
@@ -213,13 +213,15 @@ export function PlanScreen({
   async function confirmar() {
     setBusy(true);
     setError(null);
+    // Sin nadie marcado pero con visitas agendadas, la ruta se arma con ellas (no con toda la mora del cobrador, que es lo que haría la API sin lista).
+    const sent = picked.length > 0 ? picked : [...new Set(visits.map((v) => v.creditId))];
     const locations = Object.fromEntries(picked.flatMap((id) => {
       const p = placeOf(id);
       return p.id ? [[id, p.id] as const] : [];
     }));
     const { ok, data } = await postJson<{ rows: PlanRow[] }>('/api/routes/plan', {
       plannedDate: day,
-      assignments: [{ collectorId, creditIds: picked, locations }],
+      assignments: [{ collectorId, creditIds: sent, locations }],
       // Sin punto en el mapa no se publica (decisión 6): la API lo exige y dice cuáles faltan.
       requirePoints: true,
     });
@@ -228,7 +230,7 @@ export function PlanScreen({
 
     const row = data.rows[0];
     if (row?.error) return setError(row.error);
-    setDone(t('routeDone', { name: actual ? memberName(actual) : '', n: picked.length }));
+    setDone(t('routeDone', { name: actual ? memberName(actual) : '', n: sent.length }));
     setPicked([]);
     setStep(firstStep());
     // La ruta recién creada tiene que aparecer en el progreso y su mora salir de la lista.
@@ -270,7 +272,21 @@ export function PlanScreen({
         ],
       }];
     });
-    if (!area) return pickedPins;
+    if (!area) {
+      /*
+       * 🔴 **Sugerencias**: la mora sin ruta que queda a menos de `SUGGEST_KM` de alguna parada ya elegida se dibuja como pin
+       * por elegir —«ya voy a estar por ahí»—. Un toque la suma con esa ubicación. Es lo mismo que ofrece el editor de una ruta.
+       */
+      const stops = pickedPins.map((p) => ({ latitude: p.latitude, longitude: p.longitude }));
+      const near = nearbySuggestions(available.filter((c) => !picked.includes(c.id)), stops, SUGGEST_KM).map((n) => n.credit);
+      const suggested = candidatePins(near, {
+        skip: new Set(picked),
+        suggestion: true,
+        typeLabel: (type) => tType(type as 'HOME'),
+        detail: (c) => [t('suggestedTag'), money(c.amount, c.currency ?? 'BOB'), c.daysPastDue ? t('days', { n: c.daysPastDue }) : null].filter(Boolean).join(' · '),
+      });
+      return [...suggested, ...pickedPins];
+    }
     // Con área puesta, **cada ubicación** de lo que se puede elegir ahí adentro: es lo que se está buscando.
     const around = candidatePins(filas, {
       skip: new Set(picked),
@@ -280,7 +296,7 @@ export function PlanScreen({
     return [...around, ...pickedPins];
     // `placeOf` lee `chosen` y `byId`: están en las dependencias de abajo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [area, filas, picked, chosen, byId, t, plannedIds, visitTime]);
+  }, [area, filas, available, picked, chosen, byId, t, plannedIds, visitTime]);
 
   /** Un pin de candidato lo elige **con su ubicación**; uno ya elegido lo saca. */
   function pickPin(pin: string) {
@@ -481,6 +497,12 @@ export function PlanScreen({
                 </div>
 
                 <Card>
+                  {visits.length > 0 && (
+                    <p className="mb-4 flex items-start gap-2 rounded-lg bg-k-info-bg px-3 py-2 text-k-sm text-k-slate">
+                      <span aria-hidden>ⓘ</span>
+                      {t('visits.inRoute', { n: visits.length, names: visits.map((v) => v.clientName ?? '—').join(', ') })}
+                    </p>
+                  )}
                   <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <h2 className="text-k-lg font-semibold text-k-navy">{t('assigning', { name: actual ? memberName(actual) : '' })}</h2>
@@ -492,6 +514,35 @@ export function PlanScreen({
                     <p className="text-k-base font-medium tabular-nums text-k-text">{t('picked', { n: picked.length, min: minStops })}</p>
                   </div>
 
+                  {/* Armar la jornada rápido: lo más urgente hasta el mínimo, o todo lo que dejó el filtro. */}
+                  {(() => {
+                    const libres = filas.filter((c) => !picked.includes(c.id) && !plannedIds.has(c.id));
+                    const faltan = Math.max(0, minStops - picked.length);
+                    const urgentes = [...libres].sort((a, b) => (b.daysPastDue ?? 0) - (a.daysPastDue ?? 0)).slice(0, faltan);
+                    return (
+                      <div className="mb-3 flex flex-wrap gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          fullWidth={false}
+                          disabled={urgentes.length === 0}
+                          onClick={() => setPicked((prev) => [...prev, ...urgentes.map((c) => c.id).filter((id) => !prev.includes(id))])}
+                        >
+                          {t('markUrgent', { n: faltan })}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          fullWidth={false}
+                          disabled={libres.length === 0}
+                          onClick={() => setPicked((prev) => [...prev, ...libres.map((c) => c.id).filter((id) => !prev.includes(id))])}
+                        >
+                          {t('markFiltered', { n: libres.length })}
+                        </Button>
+                      </div>
+                    );
+                  })()}
+
                   <AvailableList
                     rows={filas}
                     picked={picked}
@@ -501,6 +552,7 @@ export function PlanScreen({
                     emptyText={filtered ? t('noResultsText') : t('noAvailableText')}
                     remoteSort={params.get('sort')}
                     remoteDir={params.get('dir') === 'asc' ? 'asc' : 'desc'}
+                    locked={plannedIds}
                     onSortRemote={(key) => go({ sort: key, dir: params.get('sort') === key && params.get('dir') === 'desc' ? 'asc' : 'desc' })}
                   />
                 </Card>
@@ -548,7 +600,13 @@ export function PlanScreen({
                 onRemove={toggle}
                 initialOrderOpen
                 height={420}
-                counter={area ? t('mapInArea', { n: puntos.length, km: area.radiusKm }) : t('mapPoints', { n: puntos.length, total: picked.length })}
+                counter={
+                  area
+                    ? t('mapInArea', { n: puntos.length, km: area.radiusKm })
+                    : puntos.length > picked.length
+                      ? t('mapSuggested', { total: picked.length, s: puntos.filter((p) => !p.picked).length })
+                      : t('mapPoints', { n: puntos.length, total: picked.length })
+                }
               />
               <p className="rounded-xl border border-k-border bg-k-bg px-4 py-2.5 text-k-sm text-k-text-2">{t('orderHint')}</p>
             </>
@@ -558,7 +616,8 @@ export function PlanScreen({
             <PlanPreview stops={previewStops} start={start} onStart={setStart} onApplyOrder={(ids) => setPicked(ids)} extraVisits={extraVisits} />
           )}
 
-          {/* La barra de abajo: atrás, adelante, y recién en el último paso, publicar. */}
+          {/* La barra de abajo: atrás, adelante, y recién en el último paso, publicar. Fija al borde de la ventana: no depende de lo larga que sea la lista. */}
+          <div className="sticky bottom-3 z-20 rounded-2xl shadow-k-card">
           <Card>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-3">
@@ -589,21 +648,22 @@ export function PlanScreen({
                   <span className="block sm:w-56">
                     <Button
                       onClick={() => setStep(STEPS[stepIndex + 1]!)}
-                      disabled={step !== 'date' && (picked.length === 0 || missing.length > 0)}
+                      disabled={step !== 'date' && ((picked.length === 0 && visits.length === 0) || missing.length > 0)}
                     >
                       {t('nextStep')}
                     </Button>
                   </span>
                 ) : (
                   <span className="block sm:w-72">
-                    <Button onClick={() => void confirmar()} loading={busy} disabled={picked.length === 0 || missing.length > 0}>
-                      {t('publish', { n: picked.length })}
+                    <Button onClick={() => void confirmar()} loading={busy} disabled={(picked.length === 0 && visits.length === 0) || missing.length > 0}>
+                      {t('publish', { n: picked.length || visits.length })}
                     </Button>
                   </span>
                 )}
               </div>
             </div>
           </Card>
+          </div>
         </>
       )}
 

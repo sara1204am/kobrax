@@ -6,6 +6,9 @@ import {
   arrearsByMethod,
   arrearsFromDueDate,
   arrearsMethodOf,
+  creditCodeMaskOf,
+  creditCodePattern,
+  formatCreditCode,
   ArrearsMethod,
   DEFAULT_ARREARS_METHOD,
   oldestUnpaid,
@@ -39,6 +42,7 @@ import { TenantContextService } from '../../common/context/tenant-context.servic
 import { AuditService } from '../../common/audit/audit.service';
 import { PlanLimitsService } from '../../common/plan/plan-limits.service';
 import { OfficeScopeService } from '../../common/office-scope/office-scope.service';
+import { TenantClockService, accountToday } from '../../common/context/tenant-clock.service';
 import { officeInvalid, officeOutOfScope } from '../../common/office-scope/office-scope.errors';
 import { AssignmentService } from '../assignments/assignment.service';
 import { moraAccessConditions, moraScopeOf, seesWholeAccount, visibleCredits } from '../mora/mora-query';
@@ -51,6 +55,8 @@ import {
   type ArrearParams,
 } from './credit-math';
 import { serializeCredit, type CreditMoraContext } from './credits.serializer';
+import { loadCreditPlan } from './credit-plan';
+import { lateSummaryOfCredit, type LateSummary } from '../payments/late-summary';
 import { ClearArrearsDto, CreateCreditDto, ListCreditsQueryDto, ReassignOfficeDto, UpdateCreditDto } from './dto/credit.dto';
 import {
   arrearsDateNotFuture,
@@ -82,6 +88,7 @@ interface AccountConfig {
   arrears: ArrearParams;
   /** Método de mora por defecto de los créditos nuevos (D20), de `accounts.settings`. */
   arrearsMethod: ArrearsMethod;
+  creditCodeMask: string;
 }
 
 /** Lo que el serializer toma de la config: etiquetas y umbral del dato viejo. */
@@ -101,7 +108,17 @@ export class CreditsService {
     private readonly arrearsPriority: ArrearsPriorityService,
     private readonly office: OfficeScopeService,
     private readonly authz: AuthorizationService = new AuthorizationService(tenant),
+    /** El día civil de la cuenta. Opcional sólo para las pruebas que arman el servicio a mano: en la app lo inyecta Nest (módulo `@Global`). */
+    private readonly clock?: TenantClockService,
   ) {}
+
+  /**
+   * «Hoy» para contar días de atraso: el día civil de la cuenta (medianoche UTC de su fecha), no el instante UTC. En Bolivia, desde las 20:00 el
+   * servidor ya está en «mañana» y un crédito que vence hoy contaría un día de mora de más. Sin reloj inyectado (pruebas) cae al instante.
+   */
+  private today(): Promise<Date> {
+    return this.clock ? this.clock.today() : Promise.resolve(new Date());
+  }
 
   private tx<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
     return this.prisma.withTenant(this.tenant.accountId, fn);
@@ -121,6 +138,7 @@ export class CreditsService {
       staleAfterDays: staleAfterDaysOf(cfg.importConfig?.staleAfterDays),
       arrears: { ...DEFAULT_ARREAR_PARAMS, ...(cfg.arrears ?? {}) },
       arrearsMethod: arrearsMethodOf(account?.settings),
+      creditCodeMask: creditCodeMaskOf(account?.settings),
     };
   }
 
@@ -147,7 +165,7 @@ export class CreditsService {
     if (dto.initialState && dto.daysPastDue !== undefined) throw creditTermsConflict('daysPastDue');
     const registered = resolved && dto.initialState ? registeredState(resolved.terms, dto.initialState) : undefined;
     if (registered && !registered.ok) throw creditInitialStateInvalid(registered.code);
-    const asOf = new Date();
+    const asOf = await this.today();
     /*
      * Cuota variable (capital fijo): no hay UNA cuota que congelar. Se guarda el cronograma del motor
      * fila por fila y de ahí salen los pagos, la mora y la próxima fecha, como en los créditos con
@@ -222,15 +240,20 @@ export class CreditsService {
     // Mora declarada al registrarlo (apps viejas) → marca manual, como en la edición. Si no se declaró, la
     // calcula la fecha de la primera cuota impaga (k+1) con el método del crédito.
     const moraSince = registered?.ok && registered.daysPastDue > 0 ? moraSinceFromDays(registered.daysPastDue, asOf) : undefined;
+    // Con condiciones y sin «ya en curso»: la primera cuota es la más antigua impaga. Si su fecha ya pasó (se carga un crédito con
+    // fecha de inicio pasada), nace en mora —igual que lo muestra el detalle— y no «vigente» hasta que corra el job nocturno.
+    const freshOverdueFrom = !registered && resolved && dto.daysPastDue === undefined ? resolved.nextDueDate : undefined;
     const initialArrears =
       registered?.ok && !moraSince
         ? arrearsByMethod({ method: arrearsMethod, oldestUnpaidDue: registered.nextDueDate, balance: registered.outstandingBalance, asOf })
-        : undefined;
+        : freshOverdueFrom
+          ? arrearsByMethod({ method: arrearsMethod, oldestUnpaidDue: freshOverdueFrom, balance: outstandingBalance, asOf })
+          : undefined;
     const daysPastDue = registered?.ok
       ? moraSince
         ? registered.daysPastDue
         : initialArrears!.daysPastDue
-      : (dto.daysPastDue ?? 0);
+      : (initialArrears?.daysPastDue ?? dto.daysPastDue ?? 0);
 
     const metadata: CreditMetadata = {
       frequency: resolved?.frequency ?? dto.frequency ?? PaymentFrequency.MONTHLY,
@@ -304,7 +327,8 @@ export class CreditsService {
           accountId,
           clientId: dto.clientId,
           branchId,
-          code: dto.code,
+          // Sin Nº de crédito propio (el formulario web no lo pide), el servidor asigna el siguiente de la cuenta.
+          code: dto.code?.trim() || (await this.nextCreditCode(tx, accountId, config.creditCodeMask)),
           typeCode: dto.typeCode,
           // Espejo en columna de `metadata.origin` (D1). El alta sólo admite los de Kobrax.
           origin: dto.origin === CreditOrigin.QUICK_BATCH ? CreditDataOrigin.QUICK_BATCH : CreditDataOrigin.MANUAL,
@@ -392,12 +416,12 @@ export class CreditsService {
   }
 
   // D-7: la ficha respeta el mismo alcance que el listado: un crédito fuera de él es 404, como si no existiera.
-  async findOne(id: string): Promise<ReturnType<typeof serializeCredit>> {
+  async findOne(id: string): Promise<ReturnType<typeof serializeCredit> & { lateInterest: LateSummary | null }> {
     const config = await this.accountConfig();
     const found = await this.tx(async (tx) => {
       const credit = await tx.credit.findFirst({
         where: { id, deletedAt: null },
-        include: { installments: { orderBy: { number: 'asc' } }, arrears: true, _count: { select: { payments: true } } },
+        include: { installments: { orderBy: { number: 'asc' } }, latePolicyVersion: true, lateActivation: true, _count: { select: { payments: true } } },
       });
       if (!credit) return null;
       await this.assertInScope(tx, id);
@@ -406,14 +430,22 @@ export class CreditsService {
         tx.creditArrearEpisode.count({ where: { creditId: id, endedAt: null } }),
         tx.arrearCategory.findMany({ where: { accountId: this.tenant.accountId }, orderBy: [{ sortOrder: 'asc' }, { fromDays: 'asc' }] }),
       ]);
-      return { credit, open, categories };
+      // El plan actualizado sale de lo persistido (aplicaciones de los pagos): la misma fuente que la ficha de Mora.
+      const plan = await loadCreditPlan(tx, this.tenant.accountId, credit, await accountToday(tx, this.tenant.accountId));
+      const lateInterest = credit.latePolicyVersionId ? await lateSummaryOfCredit(tx, this.tenant.accountId, id) : null;
+      return { credit, open, categories, plan, lateInterest };
     });
     if (!found) throw resourceNotFound();
     const mora: CreditMoraContext = {
       hasOpenEpisode: found.open > 0,
       categories: found.categories.map((r) => ({ code: r.code, name: r.name, color: r.color, fromDays: r.fromDays, toDays: r.toDays })),
     };
-    return serializeCredit(found.credit, config.labels, config.staleAfterDays, mora);
+    // F17: interés moratorio (devengado / cobrado / exonerado / pendiente). `null` = el crédito no devenga.
+    const view = serializeCredit(found.credit, config.labels, config.staleAfterDays, mora, found.plan);
+    // El monto sugerido para cobrar incluye la mora pendiente (se cobra primero): sin esto el cobrador dejaría mora sin cobrar sin saberlo.
+    const late = found.lateInterest?.pending ?? 0;
+    const suggested = late > 0 && view.suggestedPaymentAmount !== undefined ? Math.round((view.suggestedPaymentAmount + late) * 100) / 100 : view.suggestedPaymentAmount;
+    return { ...view, suggestedPaymentAmount: suggested, lateInterest: found.lateInterest };
   }
 
   async getSchedule(id: string) {
@@ -448,7 +480,7 @@ export class CreditsService {
     // Al redefinir, el próximo vencimiento se deriva de las cuotas pagadas: no se manda aparte.
     if (redefine && dto.nextDueDate !== undefined) throw creditTermsConflict('nextDueDate');
 
-    const asOf = new Date();
+    const asOf = await this.today();
     const { before, after, assigned } = await this.tx(async (tx) => {
       const prev = await tx.credit.findFirst({
         where: { id, deletedAt: null },
@@ -865,7 +897,7 @@ export class CreditsService {
    * prioridad), así que la marca se guardaría y no haría nada. Mejor rebotar que mentir.
    */
   async markArrears(id: string, days?: number) {
-    const asOf = new Date();
+    const asOf = await this.today();
     const { credit } = await this.tx(async (tx) => {
       const found = await tx.credit.findFirst({ where: { id, deletedAt: null } });
       if (!found) throw resourceNotFound();
@@ -905,7 +937,7 @@ export class CreditsService {
    * de la base (motivo «al día») al quedar los días en cero; acá ya no se cierra nada a mano.
    */
   async clearArrears(id: string, dto: ClearArrearsDto) {
-    const asOf = new Date();
+    const asOf = await this.today();
     const { credit } = await this.tx(async (tx) => {
       const found = await tx.credit.findFirst({ where: { id, deletedAt: null } });
       if (!found) throw resourceNotFound();
@@ -947,7 +979,7 @@ export class CreditsService {
   // ── Mora ──────────────────────────────────────────────────────────────────
   async recalculateArrears(id: string, asOfInput?: string) {
     const config = await this.accountConfig();
-    const asOf = asOfInput ? new Date(asOfInput) : new Date();
+    const asOf = asOfInput ? new Date(asOfInput) : await this.today();
 
     const result = await this.tx(async (tx) => {
       const credit = await tx.credit.findFirst({
@@ -961,7 +993,7 @@ export class CreditsService {
       // Cartera de un core ajeno: manda el valor del archivo "hasta la siguiente carga" (spec §6).
       // Sin esta guarda, un recálculo le borraba la mora que trajo la importación.
       if (isExternalOrigin(meta.origin)) {
-        return { daysOverdue: credit.daysPastDue, overdueAmount: 0, interest: 0, penalty: 0, overdueInstallmentIds: [], skipped: 'EXTERNAL_ORIGIN' as const };
+        return { daysOverdue: credit.daysPastDue, overdueAmount: 0, overdueInstallmentIds: [], skipped: 'EXTERNAL_ORIGIN' as const };
       }
 
       /*
@@ -975,7 +1007,7 @@ export class CreditsService {
       if (meta.moraSince) {
         const daysOverdue = manualArrears(meta.moraSince, Number(credit.outstandingBalance), asOf);
         await tx.credit.update({ where: { id }, data: { daysPastDue: daysOverdue } });
-        return { daysOverdue, overdueAmount: daysOverdue > 0 ? Number(credit.outstandingBalance) : 0, interest: 0, penalty: 0, overdueInstallmentIds: [], skipped: 'MANUAL_ARREARS' as const };
+        return { daysOverdue, overdueAmount: daysOverdue > 0 ? Number(credit.outstandingBalance) : 0, overdueInstallmentIds: [], skipped: 'MANUAL_ARREARS' as const };
       }
 
       // Crédito sin cronograma (el del móvil): la mora sale de la próxima fecha, no de las cuotas.
@@ -999,7 +1031,7 @@ export class CreditsService {
               : {}),
           },
         });
-        return { daysOverdue, overdueAmount: daysOverdue > 0 ? Number(credit.outstandingBalance) : 0, interest: 0, penalty: 0, overdueInstallmentIds: [] };
+        return { daysOverdue, overdueAmount: daysOverdue > 0 ? Number(credit.outstandingBalance) : 0, overdueInstallmentIds: [] };
       }
 
       const arrear = computeArrears(
@@ -1039,24 +1071,25 @@ export class CreditsService {
             : {}),
         },
       });
-      // Snapshot único por crédito (idempotente): reemplaza el anterior.
-      await tx.arrear.deleteMany({ where: { creditId: id } });
-      await tx.arrear.create({
-        data: {
-          accountId: this.tenant.accountId,
-          creditId: id,
-          daysOverdue: arrear.daysOverdue,
-          overdueAmount: arrear.overdueAmount,
-          interest: arrear.interest,
-          penalty: arrear.penalty,
-          calculatedAt: asOf,
-        },
-      });
       return arrear;
     });
 
     await this.audit.record({ entity: 'credit', entityId: id, action: 'ARREARS_RECALC', after: result });
     return result;
+  }
+
+  /**
+   * Siguiente Nº de crédito según la máscara de la cuenta (`CR-######` por defecto). El candado por cuenta dura lo que la
+   * transacción: dos altas simultáneas no toman el mismo número. Cuenta también los eliminados, para no reciclar un código.
+   * Sólo mira los códigos que calzan con la máscara: los importados traen el suyo y no cuentan.
+   */
+  private async nextCreditCode(tx: Prisma.TransactionClient, accountId: string, mask: string): Promise<string> {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${'credit-code:' + accountId}))::text AS locked`;
+    const pattern = creditCodePattern(mask);
+    const [row] = await tx.$queryRaw<{ n: number }[]>`
+      SELECT (COALESCE(MAX(substring(code FROM ${pattern})::bigint), 0) + 1)::float8 AS n
+      FROM credits WHERE account_id = ${accountId} AND code ~ ${pattern}`;
+    return formatCreditCode(mask, Number(row?.n ?? 1));
   }
 }
 

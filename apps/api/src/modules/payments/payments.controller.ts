@@ -1,12 +1,40 @@
 import { Body, Controller, Get, Headers, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
-import { Permission } from '@kobrax/shared';
+import { Permission, ResponseDto } from '@kobrax/shared';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { PaymentsService } from './payments.service';
+import { LateInterestService } from './late-interest.service';
+import { CreateLateWaiverDto } from './dto/late-waiver.dto';
+import { CreateLateActivationDto } from './dto/late-activation.dto';
 import { ConfirmPaymentRequestDto, CreatePaymentDto, CreatePaymentRequestDto, ListPaymentRequestsQueryDto, ListPaymentsQueryDto } from './dto/payment.dto';
 
 @Controller()
 export class PaymentsController {
-  constructor(private readonly payments: PaymentsService) {}
+  constructor(
+    private readonly payments: PaymentsService,
+    private readonly lateInterest: LateInterestService,
+  ) {}
+
+  // ── Interés moratorio (F17 · F3-d) ───────────────────────────────────────────
+  /** Lo devengado, cobrado, exonerado y pendiente de un crédito; `null` si no devenga. */
+  @Get('credits/:creditId/late-interest')
+  @Roles(Permission.PAYMENT_READ)
+  lateOf(@Param('creditId', ParseUUIDPipe) creditId: string) {
+    return this.lateInterest.current(creditId).then((data) => ResponseDto.ok(data));
+  }
+
+  /** Perdonar mora de una cuota. Permiso aparte de `payment:write`; motivo obligatorio y auditado. */
+  @Post('credits/:creditId/late-interest/waivers')
+  @Roles(Permission.PAYMENT_WAIVE_LATE)
+  waiveLate(@Param('creditId', ParseUUIDPipe) creditId: string, @Body() dto: CreateLateWaiverDto) {
+    return this.lateInterest.waive(creditId, dto).then((data) => ResponseDto.ok(data));
+  }
+
+  /** Empezar a cobrar mora en un crédito que nació sin ella, desde una fecha futura. Permiso propio, motivo obligatorio y auditado. */
+  @Post('credits/:creditId/late-interest/activation')
+  @Roles(Permission.PAYMENT_ACTIVATE_LATE)
+  activateLate(@Param('creditId', ParseUUIDPipe) creditId: string, @Body() dto: CreateLateActivationDto) {
+    return this.lateInterest.activate(creditId, dto).then((data) => ResponseDto.ok(data));
+  }
 
   // ── Pagos ────────────────────────────────────────────────────────────────────
   @Post('payments')
@@ -20,6 +48,13 @@ export class PaymentsController {
   @Roles(Permission.PAYMENT_READ)
   list(@Query() query: ListPaymentsQueryDto) {
     return this.payments.list(query);
+  }
+
+  /** Historial de UN crédito con la imputación de cada pago. Va antes de `payments/:id` por claridad: son rutas distintas. */
+  @Get('credits/:creditId/payments')
+  @Roles(Permission.PAYMENT_READ)
+  forCredit(@Param('creditId', ParseUUIDPipe) creditId: string) {
+    return this.payments.forCredit(creditId);
   }
 
   @Get('payments/:id')

@@ -2,7 +2,8 @@
 
 import { useMemo } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import { ArrearsMethod, COUNTRY_CURRENCIES, type AccountInfo } from '@kobrax/shared';
+import { ArrearsMethod, COUNTRY_CURRENCIES, DEFAULT_CREDIT_CODE_MASK, formatCreditCode, parseCreditCodeMask, type AccountInfo } from '@kobrax/shared';
+import { Input } from '@/components/ui';
 import { Button, ErrorBanner, Field, Select } from '@/components/ui';
 import { Section } from '@/components/panel-ui';
 import { useAccountForm } from './use-account-form';
@@ -18,6 +19,8 @@ export function FinancialForm({ account }: { account: AccountInfo }) {
 
   // El nombre del país lo pone el navegador en el idioma activo. `shared` guarda la regla
   // (qué países y con qué moneda), no cómo se escriben.
+  const mask = form.creditCodeMask ?? DEFAULT_CREDIT_CODE_MASK;
+  const maskOk = parseCreditCodeMask(mask) !== null;
   const countries = useMemo(() => {
     const names = new Intl.DisplayNames([locale], { type: 'region' });
     return COUNTRY_CURRENCIES.map((c) => ({ ...c, name: names.of(c.code) ?? c.code })).sort((a, b) =>
@@ -95,13 +98,29 @@ export function FinancialForm({ account }: { account: AccountInfo }) {
           ))}
         </Select>
       </Field>
+
+      {/* Nº de crédito automático: los `#` son la parte numérica, lo demás es texto fijo. Las importaciones traen su propio código. */}
+      <Field
+        label={t('creditCodeMask')}
+        hint={maskOk ? t('creditCodeMaskExample', { first: formatCreditCode(mask, 1), next: formatCreditCode(mask, 2) }) : undefined}
+        error={maskOk ? undefined : t('creditCodeMaskInvalid')}
+      >
+        <Input
+          value={mask}
+          onChange={(e) => setForm({ ...form, creditCodeMask: e.target.value.replace(/\s/g, '') })}
+          disabled={!editable}
+          maxLength={30}
+          placeholder="CR-######"
+        />
+      </Field>
+      <p className="-mt-3 text-k-xs text-k-text-2">{t('creditCodeMaskHelp')}</p>
       </Section>
 
 
       {editable && !managed && (
         <div className="flex justify-end">
           <span className="w-full sm:w-56">
-            <Button type="submit" loading={saving} disabled={!dirty}>
+            <Button type="submit" loading={saving} disabled={!dirty || !maskOk}>
               {t('save')}
             </Button>
           </span>

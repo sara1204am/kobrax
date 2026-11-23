@@ -135,6 +135,7 @@ export function serializeCollateral(g: Collateral & { credits?: { creditId: stri
   return {
     id: g.id,
     type: g.type ?? undefined,
+    typeOther: g.typeOther ?? undefined,
     description: g.description,
     estimatedValue: g.estimatedValue != null ? Number(g.estimatedValue) : undefined,
     currency: g.currency ?? undefined,
