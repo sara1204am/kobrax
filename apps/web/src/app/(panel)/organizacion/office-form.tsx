@@ -6,13 +6,15 @@ import { Button, Field, Input, Select, ErrorBanner } from '@/components/ui';
 import { MapPicker } from '@/components/map-picker';
 import { SearchCombobox } from '@/components/user-combobox';
 import { InviteDialog } from '../equipo/invite-dialog';
+import { Checkbox } from '@/components/form-kit';
 import { Modal } from '@/components/modal';
 import { OfficeSelect } from '@/components/office-select';
 import { Icon } from '@/components/panel-shell';
 import { usePermissions } from '@/components/permissions';
+import { useToast } from '@/components/toast';
 import { sendJson } from '@/lib/client';
 import { memberLabel } from '@/lib/branches';
-import { activeOffices, officeOptions as officeOptionsOf, flattenTree, moveVerdict, willBranchRootWithPortfolio, type OfficeRow, type OfficeType } from '@/lib/offices';
+import { activeOffices, officeLabelOf, officeOptions as officeOptionsOf, flattenTree, moveVerdict, willBranchRootWithPortfolio, type OfficeRow, type OfficeType } from '@/lib/offices';
 import { buildOfficeTree } from '@kobrax/shared';
 import { OfficeTeam } from './office-team';
 import { useOfficeApi } from './use-office-api';
@@ -75,9 +77,12 @@ export function OfficeFormDialog({
 }) {
   const { busy, error, setError, run, t } = useOfficeApi();
   const { can } = usePermissions();
+  const toast = useToast();
   const activeTypes = types.filter((x) => x.isActive).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
   const [tab, setTab] = useState<Tab>(initialTab);
   const [inviting, setInviting] = useState(false);
+  // Ser responsable no mete a la persona en el equipo: se pide aparte porque asignar la MUEVE y cambia lo que ve.
+  const [assignToo, setAssignToo] = useState(false);
   const [draft, setDraft] = useState<Draft>(() => draftOf(office, defaultParentId, activeTypes[0]?.id ?? ''));
 
   // Cada vez que se abre, se parte de los datos vigentes.
@@ -85,6 +90,7 @@ export function OfficeFormDialog({
     if (open) {
       setDraft(draftOf(office, defaultParentId, activeTypes[0]?.id ?? ''));
       setTab(initialTab);
+      setAssignToo(false);
       setError(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -108,6 +114,10 @@ export function OfficeFormDialog({
     .map((m) => ({ id: m.userId, label: memberLabel(m), detail: m.email }))
     .sort((a, b) => a.label.localeCompare(b.label));
   const hasPoint = draft.latitude !== null && draft.longitude !== null;
+  const manager = members.find((m) => m.userId === draft.managerUserId);
+  const outsider = manager && (!editing || manager.branchId !== office.id) ? manager : null;
+  const outsiderFrom = outsider ? officeLabelOf(rows, outsider.branchId) : null;
+  const assignManager = (branchId: string) => sendJson(`/api/branches/${branchId}/members`, { userId: outsider?.userId }, 'POST');
 
   async function save() {
     const base = {
@@ -124,15 +134,23 @@ export function OfficeFormDialog({
     if (!editing) {
       // En el alta un dato vacío se omite: `null` no es un valor válido de creación.
       const body = Object.fromEntries(Object.entries({ ...base, parentId: draft.parentId }).filter(([, v]) => v !== null));
-      await run(() => sendJson('/api/branches', body, 'POST'), t('form.created'), onClose);
+      let createdId = '';
+      const created = await run(async () => {
+        const res = await sendJson<{ id: string }>('/api/branches', body, 'POST');
+        if (res.ok) createdId = res.data.id;
+        return res;
+      }, t('form.created'));
+      if (!created) return;
+      // La oficina ya existe: si asignar falla se avisa y se cierra igual (reintentar «Guardar» la crearía dos veces).
+      if (assignToo && outsider && !(await run(() => assignManager(createdId)))) toast(t('form.assignFailed'), 'danger');
+      onClose();
       return;
     }
-    const ok = await run(() => sendJson(`/api/branches/${office.id}`, base, 'PATCH'), draft.parentId === office.parentId || lockedParent ? t('form.saved') : undefined);
+    const moving = !lockedParent && draft.parentId !== office.parentId;
+    const ok = await run(() => sendJson(`/api/branches/${office.id}`, base, 'PATCH'), moving ? undefined : t('form.saved'));
     if (!ok) return;
-    if (!lockedParent && draft.parentId !== office.parentId) {
-      await run(() => sendJson(`/api/branches/${office.id}/move`, { parentId: draft.parentId }, 'POST'), t('form.saved'), onClose);
-      return;
-    }
+    if (moving && !(await run(() => sendJson(`/api/branches/${office.id}/move`, { parentId: draft.parentId }, 'POST'), t('form.saved')))) return;
+    if (assignToo && outsider && !(await run(() => assignManager(office.id)))) return;
     onClose();
   }
 
@@ -231,7 +249,10 @@ export function OfficeFormDialog({
                 label={t('form.fields.manager')}
                 options={eligibleManagers}
                 value={draft.managerUserId}
-                onChange={(id) => setDraft({ ...draft, managerUserId: id })}
+                onChange={(id) => {
+                  setDraft({ ...draft, managerUserId: id });
+                  setAssignToo(false);
+                }}
                 emptyLabel={t('form.fields.noManager')}
                 placeholder={t('form.fields.managerSearch')}
                 noResults={t('form.fields.managerNone')}
@@ -254,6 +275,13 @@ export function OfficeFormDialog({
                 }
               />
             </Field>
+            {outsider && (
+              <div role="note" className="space-y-2 rounded-xl bg-k-warning-bg px-3 py-2 text-k-sm text-k-warning-text">
+                <p>{t('form.managerOutside', { name: memberLabel(outsider) })}</p>
+                {outsiderFrom && <p>{t('form.managerWillMove', { name: memberLabel(outsider), from: outsiderFrom })}</p>}
+                <Checkbox label={t('form.assignManager')} checked={assignToo} onChange={(e) => setAssignToo(e.target.checked)} />
+              </div>
+            )}
           </div>
         )}
 
@@ -303,7 +331,10 @@ export function OfficeFormDialog({
       onClose={() => setInviting(false)}
       offices={officeOptionsOf(rows)}
       defaultOfficeId={office?.id ?? draft.parentId}
-      onInvited={(m) => setDraft((d) => ({ ...d, managerUserId: m.userId }))}
+      onInvited={(m) => {
+        setDraft((d) => ({ ...d, managerUserId: m.userId }));
+        setAssignToo(false);
+      }}
     />
     </>
   );

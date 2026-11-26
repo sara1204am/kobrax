@@ -412,6 +412,8 @@
           "fields": "Falta emparejar las columnas del archivo con tus datos."
         },
         "reportDate": "Corte del {date}",
+        "cutDateLabel": "Fecha de corte",
+        "cutDateHint": "El día al que corresponden los números. Si el archivo no la trae o está mal, ponla aquí.",
         "reportDateUnknown": "El reporte no dice su fecha de corte",
         "advisor": "Asesor {code}",
         "absent": "Ya no vienen en el reporte",
@@ -526,6 +528,7 @@
         "reading": "Leyendo el archivo…",
         "noSampleText": "Todavía no subiste ningún archivo.",
         "noLabels": "Se leyó el archivo pero no trae ninguna columna reconocible. Suele ser que está organizado de otra forma: probá con otra opción de acá arriba.",
+        "pickHeader": "El archivo se leyó bien. Falta indicar cuál es la fila de encabezados: elígela más abajo.",
         "seeDetected": "{n, plural, one {# columna detectada} other {# columnas detectadas}}",
         "status": "Estado de la configuración",
         "statusReadyCount": "{n, plural, one {# correcto} other {# correctos}}",
@@ -577,6 +580,7 @@
         "testTitle": "¿Querés verificar cómo se van a ver tus datos?",
         "testHint": "Se lee el archivo entero y se te muestra qué pasaría. No se guarda nada.",
         "testBlocked": "Subí un archivo y completá los datos obligatorios para poder probar.",
+        "testCutDate": "Ponla o cámbiala al importar",
         "testCta": "Probar sin importar",
         "testResult": "{created} nuevos · {updated} actualizados · {setCurrent} al día",
         "testIgnored": "{n, plural, one {# fila se ignora} other {# filas se ignoran}}: son totales o notas del archivo, no créditos.",
@@ -3111,6 +3115,10 @@
           "city": "Ciudad",
           "address": "Dirección"
         },
+        "managerOutside": "Ser responsable no agrega a {name} al equipo de esta oficina.",
+        "managerWillMove": "Hoy está en «{from}»: si asignas a {name}, pasará a esta oficina.",
+        "assignManager": "Asignar también a esta oficina",
+        "assignFailed": "La oficina se guardó, pero no se pudo asignar al responsable. Hazlo desde la pestaña «Equipo».",
         "branchingWarning": "Esta oficina tiene cartera. Al abrir su primera hija, la cartera se mueve a las oficinas nuevas: después de crearla te llevamos a «Mover cartera»."
       },
       "quick": {

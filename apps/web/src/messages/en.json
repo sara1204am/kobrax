@@ -412,6 +412,8 @@
           "fields": "The file columns are not mapped to your fields yet."
         },
         "reportDate": "Cut-off {date}",
+        "cutDateLabel": "Cut-off date",
+        "cutDateHint": "The day these figures refer to. If the file lacks it or it is wrong, set it here.",
         "reportDateUnknown": "The report does not state its cut-off date",
         "advisor": "Advisor {code}",
         "absent": "No longer in the report",
@@ -526,6 +528,7 @@
         "reading": "Reading the file…",
         "noSampleText": "No file uploaded yet.",
         "noLabels": "The file was read but carries no recognisable column. Usually it is organised in another shape: try another option above.",
+        "pickHeader": "The file was read. Now choose which row holds the column headers, further down.",
         "seeDetected": "{n, plural, one {# detected column} other {# detected columns}}",
         "status": "Setup status",
         "statusReadyCount": "{n, plural, one {# correct} other {# correct}}",
@@ -577,6 +580,7 @@
         "testTitle": "Want to check how your data will look?",
         "testHint": "The whole file is read and we show you what would happen. Nothing is saved.",
         "testBlocked": "Upload a file and fill in the required fields to be able to test.",
+        "testCutDate": "Set or change it when importing",
         "testCta": "Test without importing",
         "testResult": "{created} new · {updated} updated · {setCurrent} set current",
         "testIgnored": "{n, plural, one {# row is ignored} other {# rows are ignored}}: they are totals or notes in the file, not credits.",
@@ -3111,6 +3115,10 @@
           "city": "City",
           "address": "Address"
         },
+        "managerOutside": "Being the manager does not add {name} to this office team.",
+        "managerWillMove": "{name} is now in \"{from}\" and will move to this office if assigned.",
+        "assignManager": "Also assign to this office",
+        "assignFailed": "The office was saved, but the manager could not be assigned. Do it from the \"Team\" tab.",
         "branchingWarning": "This office holds a portfolio. When you open its first child, the portfolio moves to the new offices: after creating it we take you to \"Move portfolio\"."
       },
       "quick": {
