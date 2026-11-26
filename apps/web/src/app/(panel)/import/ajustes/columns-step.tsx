@@ -23,6 +23,13 @@ import { FieldRow } from './field-row';
 const NAME_ORDERS: NameOrder[] = ['full', 'surnames-first', 'split-columns'];
 
 /**
+ * Un renglón entero del archivo puede tener cientos de letras, y un selector nativo ensancha su lista hasta la opción más larga
+ * (se salía de la pantalla). El principio alcanza para reconocer la fila de encabezados.
+ */
+const PREVIEW_CHARS = 80;
+const shortPreview = (text: string): string => (text.length > PREVIEW_CHARS ? `${text.slice(0, PREVIEW_CHARS).trimEnd()}…` : text);
+
+/**
  * Emparejar columnas: qué dato de la cartera sale de qué columna del archivo.
  *
  * El orden es el del riesgo, no el del modelo de datos: primero los días de atraso —de esa columna
@@ -119,7 +126,7 @@ export function ColumnsStep({
               <option value="">{t('columns.notMapped')}</option>
               {(columns.headerCandidates ?? []).map((c) => (
                 <option key={c.anchor} value={c.anchor}>
-                  {c.preview}
+                  {shortPreview(c.preview)}
                 </option>
               ))}
             </Select>

@@ -53,6 +53,12 @@ const COLUMN_BAND = 20;
  */
 const STACKED_BAND = 4;
 
+/** Separación horizontal hasta la que dos items del mismo renglón son pedazos de un mismo texto (px). */
+const GLUE_GAP = 0.8;
+
+/** Una fecha o un importe: señal de que un renglón es un dato y no parte del encabezado ni una continuación. */
+const DATA_VALUE = /\d{1,2}\/\d{1,2}\/\d{2,4}|\d[.,]\d{2}(?!\d)/;
+
 /** Cuántas filas se le ofrecen al usuario para que señale la de encabezados. */
 const HEADER_CANDIDATES = 12;
 
@@ -98,13 +104,111 @@ export function visualRows(items: TextItem[]): TextItem[][] {
   return rows.map((r) => [...r].sort((a, b) => a.x - b.x || b.y - a.y));
 }
 
+/**
+ * Arregla textos que el PDF entrega en pedazos, antes de armar filas y columnas:
+ *  · en el mismo renglón, pegados uno al otro ("706" "-" "1" "-" "46682") → un solo valor;
+ *  · una fecha cortada porque no entraba en la celda ("20/04/202" arriba de "6") → la fecha entera.
+ * Sin esto cada pedazo abría su propia columna.
+ */
+export function joinFragments(items: TextItem[]): TextItem[] {
+  const out: TextItem[] = [];
+  for (const it of [...items].sort((a, b) => a.page - b.page || b.y - a.y || a.x - b.x)) {
+    const prev = out[out.length - 1];
+    if (prev?.width !== undefined && prev.page === it.page && prev.y === it.y) {
+      const gap = it.x - (prev.x + prev.width);
+      // El piso evita unir dos textos DIBUJADOS uno encima del otro, que no son una palabra partida.
+      if (gap <= GLUE_GAP && gap >= -2) {
+        out[out.length - 1] = { ...prev, str: prev.str + it.str, width: it.x + (it.width ?? 0) - prev.x };
+        continue;
+      }
+    }
+    out.push(it);
+  }
+
+  const used = new Set<TextItem>();
+  const dated = out.map((it) => {
+    const year = /^\d{1,2}\/\d{1,2}\/(\d{1,3})$/.exec(it.str)?.[1];
+    if (year === undefined) return it;
+    const rest = out.find(
+      (o) => !used.has(o) && o.page === it.page && it.y > o.y && it.y - o.y <= ROW_BAND && Math.abs(o.x - it.x) <= COLUMN_BAND && /^\d+$/.test(o.str) && year.length + o.str.length === 4,
+    );
+    if (!rest) return it;
+    used.add(rest);
+    return { ...it, str: it.str + rest.str };
+  });
+  return dated.filter((_, i) => !used.has(out[i]!));
+}
+
+const isLabelRow = (row: TextItem[]) => row.every((i) => !DATA_VALUE.test(i.str));
+const topOf = (row: TextItem[]) => Math.max(...row.map((i) => i.y));
+const bottomOf = (row: TextItem[]) => Math.min(...row.map((i) => i.y));
+const touches = (upper: TextItem[], lower: TextItem[]) => upper[0]!.page === lower[0]!.page && bottomOf(upper) - topOf(lower) <= ROW_BAND;
+
+/**
+ * El encabezado completo alrededor de la fila señalada. Un título de columna puede ocupar tres o cuatro renglones: se suman los
+ * pegados, arriba y abajo, mientras no traigan fechas ni importes.
+ */
+function headerRange(rows: TextItem[][], at: number): { from: number; to: number } {
+  let from = at;
+  let to = at;
+  while (from > 0 && isLabelRow(rows[from - 1]!) && touches(rows[from - 1]!, rows[from]!)) from--;
+  while (to + 1 < rows.length && isLabelRow(rows[to + 1]!) && touches(rows[to]!, rows[to + 1]!)) to++;
+  return { from, to };
+}
+
+/**
+ * Une a su registro los renglones que sólo continúan celdas largas (el resto de un nombre o de una dirección): son pocos, sin
+ * fechas ni importes y pegados al de arriba. Sin esto cada uno aparecía como un registro rechazado.
+ */
+function mergeContinuations(rows: TextItem[][]): TextItem[][] {
+  if (rows.length === 0) return rows;
+  const typical = median(rows.map((r) => r.length).sort((a, b) => a - b));
+  const out: TextItem[][] = [];
+  for (const row of rows) {
+    const prev = out[out.length - 1];
+    if (prev && row.length < typical / 2 && isLabelRow(row) && touches(prev, row)) prev.push(...row);
+    else out.push([...row]);
+  }
+  // En orden de lectura dentro de cada columna: primero el renglón de arriba.
+  return out.map((r) => r.sort((a, b) => b.y - a.y || a.x - b.x));
+}
+
+/** «número [código] Nombre»: el número con al menos 5 dígitos, un segundo código opcional (a veces con un «?») y un texto sin cifras. */
+const CODE_AND_NAME = /^((?:[^\s\d]*\d){5}\S*)\s+(?:(\d{4,}\??)\s+)?(\p{L}[\p{L}\s.,'’-]*)$/u;
+
+/** Qué parte de las filas con dato tienen que cumplir la forma para dar la columna por «número + nombre». */
+const SPLIT_SHARE = 0.8;
+
+/**
+ * Hay reportes que ponen el número de operación y el nombre en UNA columna. Se agregan columnas derivadas
+ * («X (número)», «X (código)», «X (nombre)») para poder emparejarlas por separado. La original queda intacta, así que
+ * ningún emparejado ya guardado cambia; una columna que no tenga esa forma casi siempre no genera nada.
+ */
+export function splitCodeAndName(table: Record<string, string>[]): Record<string, string>[] {
+  const out = table.map((r) => ({ ...r }));
+  for (const header of Object.keys(table[0] ?? {})) {
+    const filled = table.filter((r) => r[header]);
+    const parts = table.map((r) => CODE_AND_NAME.exec(r[header] ?? ''));
+    const matched = parts.filter(Boolean).length;
+    if (matched === 0 || matched < filled.length * SPLIT_SHARE) continue;
+    const hasSecond = parts.some((p) => p?.[2]);
+    out.forEach((r, i) => {
+      const p = parts[i];
+      r[`${header} (número)`] = p?.[1] ?? '';
+      if (hasSecond) r[`${header} (código)`] = p?.[2] ?? '';
+      r[`${header} (nombre)`] = p?.[3]?.trim() ?? '';
+    });
+  }
+  return out;
+}
+
 function readTable(
   items: TextItem[],
   profile: PdfRowsProfile,
   fields: FieldMap,
   opts: { labelField?: string } = {},
 ): PdfRowsResult {
-  const rows = visualRows(items);
+  const rows = visualRows(joinFragments(items));
   const headerCandidates = rows.slice(0, HEADER_CANDIDATES).map((r) => ({
     anchor: r[0]!.str,
     preview: r.map((i) => i.str).join(' · '),
@@ -119,8 +223,14 @@ function readTable(
     return { records: [], labels: [], columnCandidates: [], samples: {}, headerCandidates };
   }
 
-  const dataRows = rows.slice(headerIndex + 1).filter((r) => r.length >= MIN_CELLS);
-  const columns = columnRanges(dataRows, rows[headerIndex]!);
+  const { from, to } = headerRange(rows, headerIndex);
+  // Los rótulos se leen de arriba hacia abajo. Algunos generadores dejan escrito el salto de línea («Nombre del\ncliente»).
+  const header = rows
+    .slice(from, to + 1)
+    .flat()
+    .sort((a, b) => b.y - a.y || a.x - b.x);
+  const dataRows = mergeContinuations(rows.slice(to + 1)).filter((r) => r.length >= MIN_CELLS);
+  const columns = columnRanges(dataRows, header);
   const table = dataRows.map((row) => {
     const record: Record<string, string> = {};
     for (const col of columns) record[col.header] = '';
@@ -134,7 +244,7 @@ function readTable(
     return record;
   });
 
-  return { ...readRows(table, fields, opts), headerCandidates };
+  return { ...readRows(splitCodeAndName(table), fields, opts), headerCandidates };
 }
 
 interface Column {
@@ -201,7 +311,11 @@ function columnRanges(dataRows: TextItem[][], headerRow: TextItem[]): Column[] {
     const label = headerRow
       .filter((h) => h.x >= from && h.x < to)
       .map((h) => h.str)
-      .join(' ');
+      .join(' ')
+      // Algunos generadores dejan escrito el salto de línea, a veces en dos pedazos («\» y «ncliente»): se quita del rótulo ya unido.
+      .replace(/\\\s*n?/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
     // Una columna sin rótulo igual existe y puede traer el dato que al usuario le interesa; se la
     // nombra por su posición para que pueda emparejarla.
     let header = label || `Columna ${i + 1}`;

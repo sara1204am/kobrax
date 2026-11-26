@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { resultKind, setupStep, type Assignee, type ImportConfig, type PortfolioSummary, type ScopeMember } from '@kobrax/shared';
-import { Button, ErrorBanner } from '@/components/ui';
+import { Button, ErrorBanner, Field, Input } from '@/components/ui';
 import { DataTable, type Column } from '@/components/data-table';
 import { EmptyState } from '@/components/panel-ui';
 import {
@@ -28,6 +28,10 @@ import { errorText, type Translator } from '@/lib/api-error';
 import { money } from '@/lib/format';
 import { useToast } from '@/components/toast';
 import { ValueChange } from './value-change';
+import { SituationValue } from './situation-value';
+
+/** Hoy en el calendario de quien mira (YYYY-MM-DD). */
+const todayIso = (): string => new Date().toLocaleDateString('en-CA');
 
 /**
  * El import del día, en tres estados sobre el mismo `File` en memoria.
@@ -62,6 +66,8 @@ export function ImportRunner({
   /** Quién queda responsable de cada crédito, por nº de operación. Nace de la vista previa. */
   const [plan, setPlan] = useState<AssignState | null>(null);
   const [askReassign, setAskReassign] = useState(false);
+  /** Fecha de corte puesta a mano (YYYY-MM-DD). Vacía = la que diga el archivo. */
+  const [cutDate, setCutDate] = useState('');
 
   const ta = useTranslations('panel.import.assign');
   const nameOf: NameOf = (userId) => {
@@ -71,7 +77,7 @@ export function ImportRunner({
     return members.find((m) => m.id === userId)?.name ?? ta('unknownUser');
   };
 
-  async function run(chosen: File, dryRun: boolean) {
+  async function run(chosen: File, dryRun: boolean, reportDate = cutDate) {
     setError(null);
     setAskReassign(false);
     setBusy(true);
@@ -79,7 +85,7 @@ export function ImportRunner({
     // servidor ya sabe que lo nuevo es suyo.
     const assignments =
       !dryRun && summary?.assignment?.mode === 'CHOOSE' && plan ? buildAssignmentsPayload(plan, summary) : undefined;
-    const result = await postImportFile<PortfolioSummary>(chosen, { dryRun, assignments });
+    const result = await postImportFile<PortfolioSummary>(chosen, { dryRun, assignments, reportDate: reportDate || undefined });
     setBusy(false);
     if (!result.ok || !result.data) {
       setError(errorText(result.error, t, locale));
@@ -106,13 +112,15 @@ export function ImportRunner({
   function choose(chosen: File) {
     setFile(chosen);
     setSummary(null);
-    void run(chosen, true);
+    setCutDate('');
+    void run(chosen, true, '');
   }
 
   function reset() {
     setFile(null);
     setSummary(null);
     setPlan(null);
+    setCutDate('');
     setError(null);
   }
 
@@ -188,6 +196,23 @@ export function ImportRunner({
               {summary.report.advisorCode && <> · {t('run.advisor', { code: summary.report.advisorCode })}</>}
             </p>
           )}
+          <div className="mt-3 max-w-xs">
+            <Field label={t('run.cutDateLabel')} hint={t('run.cutDateHint')}>
+              <Input
+                type="date"
+                max={todayIso()}
+                disabled={busy}
+                defaultValue={cutDate || summary.report?.reportDate || ''}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  // Mientras se teclea el año llegan fechas como 0002-…: se espera a una completa.
+                  if (value < '2000-01-01' || value > todayIso() || value === summary.report?.reportDate) return;
+                  setCutDate(value);
+                  void run(file, true, value);
+                }}
+              />
+            </Field>
+          </div>
           <Counts summary={summary} t={t} />
 
           {/*
@@ -447,8 +472,10 @@ function Buckets({
     key: 'status',
     header: t('run.colStatus'),
     sortable: false,
-    // El estado como lo escribe el banco («Vencida», «Ejecución») dice más que el nuestro.
-    render: (row) => <span className="text-k-sm text-k-text-2">{get(row)?.reportedStatus ?? '—'}</span>,
+    render: (row) => {
+      const v = get(row);
+      return <SituationValue status={v?.status} reported={v?.reportedStatus} daysPastDue={v?.daysPastDue} />;
+    },
   });
   type Preview = PortfolioSummary['preview'];
   type CreateRow = Preview['toCreate'][number];

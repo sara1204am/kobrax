@@ -187,7 +187,7 @@ export function ImportSetup({ screen, officeScope = true }: { screen: ConfigScre
                 />
                 {columns && columns.labels.length === 0 && (
                   <p className="mt-4 rounded-xl bg-k-warning-bg px-4 py-3 text-k-sm text-k-warning-text">
-                    {t('columns.noLabels')}
+                    {t(config.profile?.kind === 'pdf-rows' && !config.profile.tableAnchor ? 'columns.pickHeader' : 'columns.noLabels')}
                   </p>
                 )}
               </Step>
@@ -342,6 +342,18 @@ export function DryRunPreview({ summary }: { summary: PortfolioSummary }) {
           {kind === 'ok' ? t('columns.testOk') : t('columns.testWarned', { n: counts.invalid })}
         </Badge>
       </div>
+
+      {/* La fecha de corte se ve acá; se pone o se corrige al importar, que es donde se guarda. */}
+      {summary.report && (
+        <p className="mt-3 text-k-sm text-k-text">
+          {summary.report.reportDate
+            ? t('run.reportDate', { date: summary.report.reportDate.split('-').reverse().join('/') })
+            : t('run.reportDateUnknown')}{' '}
+          <Link href="/import" className="font-semibold text-k-purple hover:underline">
+            {t('columns.testCutDate')}
+          </Link>
+        </p>
+      )}
 
       {(counts.ignored ?? 0) > 0 && (
         <p className="mt-3 text-k-xs text-k-text-2">{t('columns.testIgnored', { n: counts.ignored ?? 0 })}</p>

@@ -100,11 +100,13 @@ export async function patchConfig(
  */
 export async function postImportFile<T>(
   file: File,
-  options: { columnsOnly?: boolean; dryRun?: boolean; assignments?: ImportAssignments } = {},
+  options: { columnsOnly?: boolean; dryRun?: boolean; assignments?: ImportAssignments; reportDate?: string } = {},
 ): Promise<{ ok: boolean; data?: T; error?: ApiError }> {
   const form = new FormData();
   form.append('file', withDeducedType(file));
   if (options.dryRun !== undefined) form.append('dryRun', String(options.dryRun));
+  // Fecha de corte escrita a mano: manda sobre la que traiga el archivo.
+  if (options.reportDate) form.append('reportDate', options.reportDate);
   // Campo del multipart, como `dryRun`: el BFF reenvía el FormData tal cual.
   if (options.assignments) form.append('assignments', JSON.stringify(options.assignments));
 
