@@ -29,6 +29,13 @@ const NAME_ORDERS: NameOrder[] = ['full', 'surnames-first', 'split-columns'];
 const PREVIEW_CHARS = 80;
 const shortPreview = (text: string): string => (text.length > PREVIEW_CHARS ? `${text.slice(0, PREVIEW_CHARS).trimEnd()}…` : text);
 
+/** Qué lista está en uso: la elegida o, si hay una sola, esa (el servidor la toma sin preguntar). */
+function recordsIndex(columns: ColumnsPayload, path: string | undefined): number {
+  const list = columns.recordsCandidates ?? [];
+  if (path === undefined) return list.length === 1 ? 0 : -1;
+  return list.findIndex((c) => c.path === path);
+}
+
 /**
  * Emparejar columnas: qué dato de la cartera sale de qué columna del archivo.
  *
@@ -127,6 +134,29 @@ export function ColumnsStep({
               {(columns.headerCandidates ?? []).map((c) => (
                 <option key={c.anchor} value={c.anchor}>
                   {shortPreview(c.preview)}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+      )}
+
+      {/* El valor es la posición y no la ruta: la ruta de un documento que ES la lista es '', igual que «sin elegir». */}
+      {config.profile.kind === 'json' && (columns.recordsCandidates ?? []).length > 0 && (
+        <div className="max-w-xl">
+          <Field label={t('columns.recordsPath')} hint={t('columns.recordsPathHint')}>
+            <Select
+              value={String(recordsIndex(columns, config.profile.recordsPath))}
+              disabled={busy}
+              onChange={(e) => {
+                const picked = columns.recordsCandidates?.[Number(e.target.value)];
+                if (picked) onSaveAnchor({ profile: { ...config.profile, recordsPath: picked.path } });
+              }}
+            >
+              <option value="-1">{t('columns.notMapped')}</option>
+              {(columns.recordsCandidates ?? []).map((c, i) => (
+                <option key={c.path} value={i}>
+                  {c.path || t('columns.recordsRoot')} — {t('columns.recordStartCount', { n: c.count })}
                 </option>
               ))}
             </Select>

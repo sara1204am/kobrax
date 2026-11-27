@@ -279,3 +279,17 @@ describe('ImportRunner — filas ignoradas', () => {
     expect(screen.queryByText('Ignoradas')).not.toBeInTheDocument();
   });
 });
+
+describe('ImportRunner — con la API configurada', () => {
+  it('ofrece traer los datos y no pide un archivo; subirlo es una opción aparte', async () => {
+    render(
+      <ToastProvider>
+        <ImportRunner config={{ ...CONFIG, profile: { kind: 'json' } }} currency="BOB" assignees={[]} members={[]} apiSource />
+      </ToastProvider>,
+    );
+    expect(screen.getByText('Traer datos')).toBeInTheDocument();
+    expect(document.querySelector('input[type="file"]')).toBeNull();
+    await userEvent.click(screen.getByText('Subir un archivo JSON'));
+    expect(document.querySelector('input[type="file"]')).not.toBeNull();
+  });
+});

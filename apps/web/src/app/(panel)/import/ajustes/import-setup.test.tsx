@@ -462,3 +462,35 @@ describe('ImportSetup — los datos del reporte (saldo, estados, antigüedad)', 
     await waitFor(() => expect(sent).toEqual([{ statusMap: { ANULADO: 'CANCELLED' } }]));
   });
 });
+
+describe('ImportSetup — la cartera por API', () => {
+  it('con JSON se elige llamar a la API; guarda la petición y trae los datos', async () => {
+    const sent: unknown[] = [];
+    server.use(
+      http.put('http://localhost/api/imports/api', async ({ request }) => {
+        sent.push(await request.json());
+        return HttpResponse.json({ api: { method: 'GET', url: 'https://banco.example.com/x', headerNames: [], hasBody: false } });
+      }),
+      http.post('http://localhost/api/imports/api/fetch', () => HttpResponse.json({ documentId: 'abc', name: 'api-abc.json', size: 2 })),
+      http.post('http://localhost/api/imports/run', () => HttpResponse.json({ labels: ['saldo'], columnCandidates: [] })),
+    );
+    const base = screenOf({});
+    render(
+      <ImportSetup
+        screen={{
+          ...base,
+          config: { ...base.config, profile: { kind: 'json' } },
+          viewer: { userId: 'u', canAssign: true, canConfigure: true },
+        }}
+      />,
+    );
+    await userEvent.click(screen.getByText('Llamar a la API'));
+    await userEvent.type(
+      screen.getByPlaceholderText('https://api.banco.com/cartera'),
+      'https://banco.example.com/x',
+    );
+    await userEvent.click(screen.getByText('Guardar y traer datos'));
+    await waitFor(() => expect(screen.getAllByText(/api-abc\.json/).length).toBeGreaterThan(0));
+    expect(sent).toEqual([{ method: 'GET', url: 'https://banco.example.com/x', headers: [] }]);
+  });
+});

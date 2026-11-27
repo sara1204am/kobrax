@@ -139,9 +139,9 @@ export function parseCsvRows(
 export function readRows(
   rows: Record<string, string>[],
   fields: FieldMap,
-  opts: { labelField?: string } = {},
+  opts: { labelField?: string; labels?: string[] } = {},
 ): RowsResult {
-  const labels = rows.length > 0 ? Object.keys(rows[0]!) : [];
+  const labels = opts.labels ?? (rows.length > 0 ? Object.keys(rows[0]!) : []);
   const records = rows.map((row) => {
     const record: Record<string, string | null> = {};
     for (const [canonical, src] of Object.entries(fields)) {

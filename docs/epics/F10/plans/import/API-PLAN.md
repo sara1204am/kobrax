@@ -1,6 +1,6 @@
 # Importación de cartera por API — plan de implementación
 
-> **ESTADO: PENDIENTE — sin código.** Anotado el 2026-11-26 para retomar. Las preguntas abiertas se responden antes de la etapa 2.
+> **ESTADO: etapas 1 y 2 HECHAS el 2026-11-26 (sin commit; falta prueba en pantalla). Etapa 3 pendiente.** Sin paginación ni OAuth: la API tiene que responder la cartera completa en una llamada; la clave va en cabeceras o cuerpo (cifrados). En desarrollo, `IMPORT_API_ALLOW_LOCAL=true` permite llamar a direcciones locales.
 
 ## Decisión base
 
@@ -65,3 +65,12 @@ responsable (hoy bloquean la confirmación).
 3. ¿Pagina? ¿Cómo?
 4. ¿Se pide la cartera completa o sólo los cambios? La regla de ausentes **exige la completa**.
 5. ¿La fecha de corte viene en el JSON?
+
+## Notas de la etapa 1
+
+- 1.3: las listas dentro de un registro se unen en la misma columna con ` - ` (provisional hasta ver un ejemplo real).
+- 1.4: un valor numérico del JSON se toma exacto; un texto se lee como en un reporte. Fechas `aaaa-mm-dd` (con o sin hora) ahora se leen en todas las formas.
+- 1.5: 15 MB, 50.000 registros, 500 columnas, 8 niveles. Un entero que excede la precisión se rechaza.
+- La fecha de corte no se lee del JSON (pregunta 5): se indica al importar.
+- Una lista que está dentro de otra lista (créditos agrupados por oficina) no se ofrece.
+- Móvil: sólo reconoce el nombre de la forma; se configura desde la web.

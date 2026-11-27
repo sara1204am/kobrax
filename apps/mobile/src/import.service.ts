@@ -293,6 +293,12 @@ export function scopeRefName(
  * rechaza a propósito y con el arreglo adentro del mensaje, así que no se nombra acá.
  */
 export const PROFILE_META: Record<ProfileKind, { label: string; hint: string; format: string }> = {
+  // Se configura desde el panel web; acá sólo hace falta nombrarlo si la cuenta ya lo usa.
+  json: {
+    label: 'Datos en JSON',
+    hint: 'Un archivo que entrega un sistema o una API. Se configura desde el panel web.',
+    format: 'Archivo JSON · hasta 15 MB',
+  },
   rows: {
     label: 'Una fila por crédito (CSV o Excel)',
     hint: 'Una planilla o un archivo de texto separado por comas.',

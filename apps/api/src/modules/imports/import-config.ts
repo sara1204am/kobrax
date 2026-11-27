@@ -12,11 +12,12 @@ import { FIELD_CATALOG, type NameOrder } from './field-catalog';
 import type { FieldMap, PdfBlocksProfile } from './parsers/pdf-blocks.parser';
 import type { PdfRowsProfile } from './parsers/pdf-rows.parser';
 import type { RowsProfile } from './parsers/rows.parser';
+import type { JsonRowsProfile } from './parsers/json-rows.parser';
 
-/** Las tres FORMAS de archivo (§4.1). No son formatos ni bancos: es cómo está dispuesto el dato. */
-export type ProfileKind = 'pdf-blocks' | 'pdf-rows' | 'rows';
+/** Las FORMAS de archivo (§4.1). No son formatos ni bancos: es cómo está dispuesto el dato. */
+export type ProfileKind = 'pdf-blocks' | 'pdf-rows' | 'rows' | 'json';
 
-export const PROFILE_KINDS: ProfileKind[] = ['rows', 'pdf-rows', 'pdf-blocks'];
+export const PROFILE_KINDS: ProfileKind[] = ['rows', 'pdf-rows', 'pdf-blocks', 'json'];
 /** Los estados de `CreditStatus` (sin importar Prisma: este módulo es puro). */
 const CREDIT_STATUSES = ['ACTIVE', 'PAID', 'DEFAULTED', 'RESTRUCTURED', 'WRITTEN_OFF', 'CANCELLED'];
 export type AbsentRule = 'set-current' | 'no-touch' | 'ask';
@@ -36,11 +37,11 @@ export interface FieldRule {
 
 export interface ImportConfig {
   source: 'manual' | 'file';
-  // Las tres formas comparten un solo objeto: cada motor lee las claves que le sirven y las
+  // Las formas comparten un solo objeto: cada motor lee las claves que le sirven y las
   // demás quedan sin efecto. `tableAnchor` hace doble trabajo a propósito — en `pdf-blocks` ancla
   // el cuadro de movimientos y en `pdf-rows` la fila de encabezados; en ambos casos es "dónde
   // empieza la tabla", y separarlo en dos claves era el mismo dato con dos nombres.
-  profile: { kind: ProfileKind } & PdfBlocksProfile & PdfRowsProfile & RowsProfile;
+  profile: { kind: ProfileKind } & PdfBlocksProfile & PdfRowsProfile & RowsProfile & JsonRowsProfile;
   fields: Record<string, FieldRule>;
   nameOrder: NameOrder;
   scope: { kind: ScopeKind; ref: string | null };
@@ -144,6 +145,11 @@ export function validateImportConfig(next: ImportConfig, prev?: ImportConfig): v
   }
   if (!PROFILE_KINDS.includes(next.profile.kind)) {
     throw new ImportConfigError('INVALID_PROFILE_KIND', `Forma de archivo inválida: ${next.profile.kind}`);
+  }
+
+  const { recordsPath } = next.profile;
+  if (recordsPath !== undefined && (typeof recordsPath !== 'string' || recordsPath.length > 200)) {
+    throw new ImportConfigError('INVALID_PROFILE_KIND', 'La lista de registros no es válida');
   }
 
   // 6. El alcance 'account' cubre toda la cuenta y no lleva ref; los otros dos la exigen.
@@ -262,7 +268,7 @@ export function requiredFields(fields: Record<string, FieldRule>): string[] {
  * `text` = sin firma binaria; es lo que se ve en un CSV, y también en cualquier cosa que no
  * reconozcamos → se confía en lo configurado.
  */
-export type FileShape = 'pdf' | 'zip' | 'ole2' | 'text';
+export type FileShape = 'pdf' | 'zip' | 'ole2' | 'json' | 'text';
 
 export function detectFileShape(file: Buffer | Uint8Array): FileShape {
   const head = Buffer.from(file.subarray(0, 8)).toString('latin1');
@@ -271,6 +277,10 @@ export function detectFileShape(file: Buffer | Uint8Array): FileShape {
   // `.xls` anterior a 2007 (OLE2/CFB). NO es un zip, así que sin esta rama caería en `text` y el
   // parser de planillas leería los bytes crudos como si fueran columnas.
   if (head.startsWith('\xd0\xcf\x11\xe0')) return 'ole2';
+  // Un JSON abre con `{"` o con `[` seguido de un valor estructurado. Se piden dos signos para no
+  // confundirlo con un CSV cuyo primer encabezado es "[ID]".
+  const start = Buffer.from(file.subarray(0, 200)).toString('utf8').replace(/^﻿/, '');
+  if (/^\s*(\{\s*["}]|\[\s*[[{\]"])/.test(start)) return 'json';
   return 'text';
 }
 

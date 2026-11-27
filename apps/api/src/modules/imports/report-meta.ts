@@ -62,9 +62,9 @@ export function readReportMeta(lines: readonly string[]): ReportMeta {
   return out;
 }
 
-/** Los renglones del principio del documento. Una planilla no trae encabezado de documento: []. */
+/** Los renglones del principio del documento. Una planilla o un JSON no traen encabezado de documento: []. */
 export async function documentLines(file: Buffer, kind: ProfileKind): Promise<string[]> {
-  if (kind === 'rows') return [];
+  if (kind === 'rows' || kind === 'json') return [];
   const items: TextItem[] = await loadItems(new Uint8Array(file));
   return visualRows(items)
     .slice(0, HEADER_LINES)

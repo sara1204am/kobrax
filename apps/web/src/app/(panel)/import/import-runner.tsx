@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { resultKind, setupStep, type Assignee, type ImportConfig, type PortfolioSummary, type ScopeMember } from '@kobrax/shared';
-import { Button, ErrorBanner, Field, Input } from '@/components/ui';
+import { Button, ErrorBanner, Field, Input, TextButton } from '@/components/ui';
 import { DataTable, type Column } from '@/components/data-table';
 import { EmptyState } from '@/components/panel-ui';
 import {
@@ -13,6 +13,8 @@ import {
   assignCodes,
   assignmentStats,
   buildAssignmentsPayload,
+  fetchApiDocument,
+  type ImportSource,
   groupWarnings,
   initialAssignState,
   pendingReassignments,
@@ -44,6 +46,7 @@ export function ImportRunner({
   currency,
   assignees,
   members,
+  apiSource = false,
 }: {
   config: ImportConfig;
   currency: string;
@@ -51,6 +54,8 @@ export function ImportRunner({
   assignees: Assignee[];
   /** Todo el equipo, para poner nombre al responsable actual aunque no sea asignable. */
   members: ScopeMember[];
+  /** Hay una API configurada y quien mira puede traer los datos. */
+  apiSource?: boolean;
 }) {
   const t = useTranslations('panel.import');
   const locale = useLocale();
@@ -58,7 +63,7 @@ export function ImportRunner({
   const toast = useToast();
   const filePicker = useRef<HTMLInputElement>(null);
 
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFile] = useState<ImportSource | null>(null);
   const [summary, setSummary] = useState<PortfolioSummary | null>(null);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -68,6 +73,8 @@ export function ImportRunner({
   const [askReassign, setAskReassign] = useState(false);
   /** Fecha de corte puesta a mano (YYYY-MM-DD). Vacía = la que diga el archivo. */
   const [cutDate, setCutDate] = useState('');
+  /** Con la API configurada, subir un archivo es la excepción: se pide aparte. */
+  const [byHand, setByHand] = useState(false);
 
   const ta = useTranslations('panel.import.assign');
   const nameOf: NameOf = (userId) => {
@@ -77,7 +84,7 @@ export function ImportRunner({
     return members.find((m) => m.id === userId)?.name ?? ta('unknownUser');
   };
 
-  async function run(chosen: File, dryRun: boolean, reportDate = cutDate) {
+  async function run(chosen: ImportSource, dryRun: boolean, reportDate = cutDate) {
     setError(null);
     setAskReassign(false);
     setBusy(true);
@@ -109,7 +116,19 @@ export function ImportRunner({
     else toast(t('run.toastOk', { created: counts.created, updated: counts.updated }));
   }
 
-  function choose(chosen: File) {
+  async function bring() {
+    setError(null);
+    setBusy(true);
+    const result = await fetchApiDocument();
+    setBusy(false);
+    if (!result.ok || !result.document) {
+      setError(errorText(result.error, t, locale));
+      return;
+    }
+    choose(result.document);
+  }
+
+  function choose(chosen: ImportSource) {
     setFile(chosen);
     setSummary(null);
     setCutDate('');
@@ -297,9 +316,51 @@ export function ImportRunner({
   }
 
   // ── Elegir archivo ─────────────────────────────────────────────────────────
+  const fromApi = apiSource && config.profile.kind === 'json';
+  if (fromApi && !byHand) {
+    return (
+      <div className="space-y-6">
+        <ErrorBanner message={error} />
+        <div className="rounded-2xl border border-k-border bg-white px-6 py-14 text-center">
+          <p className="text-k-lg font-medium text-k-text">{busy ? t('api.calling') : t('api.runTitle')}</p>
+          <p className="mt-1 text-k-sm text-k-text-2">{t('api.runHint')}</p>
+          <div className="mt-5 flex justify-center">
+            <span className="w-full sm:w-56">
+              <Button loading={busy} onClick={() => void bring()}>
+                {t('api.fetch')}
+              </Button>
+            </span>
+          </div>
+          <p className="mt-4">
+            <TextButton
+              disabled={busy}
+              onClick={() => {
+                setError(null);
+                setByHand(true);
+              }}
+            >
+              {t('api.useFile')}
+            </TextButton>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <ErrorBanner message={error} />
+      {fromApi && (
+        <TextButton
+          disabled={busy}
+          onClick={() => {
+            setError(null);
+            setByHand(false);
+          }}
+        >
+          {t('api.useApi')}
+        </TextButton>
+      )}
       <div
         onDragOver={(e) => {
           e.preventDefault();
