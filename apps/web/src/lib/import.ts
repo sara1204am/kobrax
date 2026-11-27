@@ -12,6 +12,9 @@ import {
   type ImportRunItemAction,
   type ScopeBranch,
   type ScopeMember,
+  type ImportApiConnection,
+  type ImportApiConnectionInput,
+  type ImportApiDocument,
 } from '@kobrax/shared';
 import { sendJson } from './client';
 import { PAGE_SIZES } from './table-prefs';
@@ -91,6 +94,21 @@ export async function patchConfig(
   return ok && data.config ? { ok: true, config: data.config } : { ok: false, error: data.error };
 }
 
+/** De dónde sale lo que se lee: un archivo del disco o lo que ya se trajo de la API. */
+export type ImportSource = File | ImportApiDocument;
+
+export async function saveApiConnection(
+  input: ImportApiConnectionInput,
+): Promise<{ ok: boolean; api?: ImportApiConnection; error?: ApiError }> {
+  const { ok, data } = await sendJson<{ api: ImportApiConnection }>('/api/imports/api', input, 'PUT');
+  return ok && data.api ? { ok: true, api: data.api } : { ok: false, error: data.error };
+}
+
+export async function fetchApiDocument(): Promise<{ ok: boolean; document?: ImportApiDocument; error?: ApiError }> {
+  const { ok, data } = await sendJson<ImportApiDocument>('/api/imports/api/fetch', {}, 'POST');
+  return ok && data.documentId ? { ok: true, document: data } : { ok: false, error: data.error };
+}
+
 /**
  * Sube el archivo al import.
  *
@@ -99,12 +117,15 @@ export async function patchConfig(
  * previsualiza.
  */
 export async function postImportFile<T>(
-  file: File,
-  options: { columnsOnly?: boolean; dryRun?: boolean; assignments?: ImportAssignments } = {},
+  file: ImportSource,
+  options: { columnsOnly?: boolean; dryRun?: boolean; assignments?: ImportAssignments; reportDate?: string } = {},
 ): Promise<{ ok: boolean; data?: T; error?: ApiError }> {
   const form = new FormData();
-  form.append('file', withDeducedType(file));
+  if (file instanceof File) form.append('file', withDeducedType(file));
+  else form.append('apiDocument', file.documentId);
   if (options.dryRun !== undefined) form.append('dryRun', String(options.dryRun));
+  // Fecha de corte escrita a mano: manda sobre la que traiga el archivo.
+  if (options.reportDate) form.append('reportDate', options.reportDate);
   // Campo del multipart, como `dryRun`: el BFF reenvía el FormData tal cual.
   if (options.assignments) form.append('assignments', JSON.stringify(options.assignments));
 
@@ -162,6 +183,7 @@ export function confirmDaysPastDue(rule: FieldRule | undefined): ImportConfigPat
  */
 const MIME_BY_EXT: Record<string, string> = {
   csv: 'text/csv',
+  json: 'application/json',
   txt: 'text/plain',
   pdf: 'application/pdf',
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

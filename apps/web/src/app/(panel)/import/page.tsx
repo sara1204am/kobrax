@@ -35,7 +35,7 @@ export default async function ImportPage({ searchParams }: { searchParams: Recor
   if (screen.status !== 200 || !screen.body.data) {
     return <EmptyState title={t('title')} text={screen.body.error?.message} />;
   }
-  const { config, members } = screen.body.data;
+  const { config, members, api } = screen.body.data;
   const limit = Number(historyQuery(searchParams).get('limit')) || HISTORY_PAGE_SIZE;
 
   return (
@@ -58,6 +58,7 @@ export default async function ImportPage({ searchParams }: { searchParams: Recor
           currency={account.body.data?.currencyCode ?? 'BOB'}
           assignees={assignees.body.data ?? []}
           members={members}
+          apiSource={Boolean(api)}
         />
 
         <section className="space-y-2">

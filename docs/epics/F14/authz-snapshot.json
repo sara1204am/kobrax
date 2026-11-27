@@ -1811,6 +1811,15 @@
     "any": []
   },
   {
+    "route": "POST /imports/portfolio/api-fetch",
+    "handler": "PortfolioImportController.fetchFromApi",
+    "kind": "permissions",
+    "all": [
+      "client:import"
+    ],
+    "any": []
+  },
+  {
     "route": "POST /imports/portfolio",
     "handler": "PortfolioImportController.run",
     "kind": "permissions",
@@ -2167,6 +2176,15 @@
   {
     "route": "PUT /imports/portfolio/advisors/:code",
     "handler": "PortfolioImportController.linkAdvisor",
+    "kind": "permissions",
+    "all": [
+      "client:import"
+    ],
+    "any": []
+  },
+  {
+    "route": "PUT /imports/portfolio/api-connection",
+    "handler": "PortfolioImportController.saveApiConnection",
     "kind": "permissions",
     "all": [
       "client:import"

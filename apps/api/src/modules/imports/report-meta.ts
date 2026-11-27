@@ -23,7 +23,18 @@ const HEADER_LINES = 15;
 const fold = (s: string): string => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 const DATE_LABEL = /(fecha\s+de\s+corte|fecha\s+de\s+reporte|fecha\s+corte|fecha\s+reporte|corte\s+al)\s*:?\s*(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})/;
-const ADVISOR_LABEL = /(?:asesor|oficial)\s*:?\s*([a-z0-9]{2,12})\b/;
+/** «Al: 26/10/2026» o la fecha sola en su renglón, como la ponen bajo el título. Valen sólo si no hay una etiqueta explícita. */
+const SHORT_DATE = /^\s*(?:al\s*:?\s*)?(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})\s*$/;
+
+/** Una fecha que no existe (31/02) no es una fecha de corte: mejor no tener ninguna. */
+function isoDate(day: string, month: string, year: string): string | undefined {
+  const [d, mo, y] = [Number(day), Number(month), Number(year)];
+  const iso = `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  return mo >= 1 && mo <= 12 && d >= 1 && d <= 31 && new Date(`${iso}T00:00:00Z`).getUTCDate() === d ? iso : undefined;
+}
+
+// «OFICIAL DEL CRÉDITO: …» no es el asesor «DEL»: las preposiciones no son un código.
+const ADVISOR_LABEL = /(?:asesor|oficial)\s*:?\s*(?!(?:de|del)\b)([a-z0-9]{2,12})\b/;
 
 export function readReportMeta(lines: readonly string[]): ReportMeta {
   const out: ReportMeta = {};
@@ -31,24 +42,29 @@ export function readReportMeta(lines: readonly string[]): ReportMeta {
     const f = fold(line);
     if (!out.reportDate) {
       const m = DATE_LABEL.exec(f);
-      if (m) {
-        const [d, mo, y] = [Number(m[2]), Number(m[3]), Number(m[4])];
-        const iso = `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-        // Una fecha que no existe (31/02) no es una fecha de corte: mejor no tener ninguna.
-        if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31 && new Date(`${iso}T00:00:00Z`).getUTCDate() === d) out.reportDate = iso;
-      }
+      const iso = m ? isoDate(m[2]!, m[3]!, m[4]!) : undefined;
+      if (iso) out.reportDate = iso;
     }
     if (!out.advisorCode) {
       const m = ADVISOR_LABEL.exec(f);
       if (m) out.advisorCode = m[1]!.toUpperCase();
     }
   }
+  if (!out.reportDate) {
+    for (const line of lines.slice(0, HEADER_LINES)) {
+      const m = SHORT_DATE.exec(fold(line));
+      const iso = m ? isoDate(m[1]!, m[2]!, m[3]!) : undefined;
+      if (!iso) continue;
+      out.reportDate = iso;
+      break;
+    }
+  }
   return out;
 }
 
-/** Los renglones del principio del documento. Una planilla no trae encabezado de documento: []. */
+/** Los renglones del principio del documento. Una planilla o un JSON no traen encabezado de documento: []. */
 export async function documentLines(file: Buffer, kind: ProfileKind): Promise<string[]> {
-  if (kind === 'rows') return [];
+  if (kind === 'rows' || kind === 'json') return [];
   const items: TextItem[] = await loadItems(new Uint8Array(file));
   return visualRows(items)
     .slice(0, HEADER_LINES)

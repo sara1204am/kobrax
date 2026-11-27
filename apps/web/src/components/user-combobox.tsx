@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 
 export interface ComboOption {
   id: string;
@@ -11,6 +11,9 @@ export interface ComboOption {
 
 /** Sin tildes ni mayúsculas: «Sánchez» se encuentra escribiendo «sanchez». */
 const plain = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+/** Alto de la lista abierta con su pie: si abajo no entra y arriba hay más lugar, se abre hacia arriba. */
+const PANEL_HEIGHT = 300;
 
 /**
  * Selector con búsqueda (combobox): se escribe parte del nombre o del correo y la lista se acota. Es para listas largas
@@ -49,6 +52,27 @@ export function SearchCombobox({
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const selected = options.find((o) => o.id === value) ?? null;
+  const [place, setPlace] = useState<CSSProperties>({});
+
+  // La lista va `fixed`: dentro de un modal, una `absolute` estira el cuerpo con scroll y queda cortada.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const update = () => {
+      const r = input.current?.getBoundingClientRect();
+      if (!r) return;
+      const below = window.innerHeight - r.bottom;
+      const up = below < PANEL_HEIGHT && r.top > below;
+      setPlace({ left: r.left, width: r.width, ...(up ? { bottom: window.innerHeight - r.top + 4 } : { top: r.bottom + 4 }) });
+    };
+    update();
+    // `true`: también los scrolls de contenedores internos, que no burbujean.
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
+  }, [open]);
 
   const shown = useMemo(() => {
     const needle = plain(query.trim());
@@ -95,7 +119,16 @@ export function SearchCombobox({
   }
 
   return (
-    <div ref={root} className="relative">
+    <div
+      ref={root}
+      // Salir con Tab cierra la lista: si no, lo escrito queda a la vista como si fuera la persona elegida.
+      onBlur={(e) => {
+        if (e.relatedTarget && !e.currentTarget.contains(e.relatedTarget as Node)) {
+          setOpen(false);
+          setQuery('');
+        }
+      }}
+    >
       <input
         ref={input}
         role="combobox"
@@ -117,7 +150,7 @@ export function SearchCombobox({
         className="h-[52px] w-full rounded-xl border-[1.5px] border-k-light-bg bg-white px-3.5 text-k-md text-k-text outline-none transition-all placeholder:text-k-muted focus:border-k-periwinkle focus:shadow-k-focus disabled:opacity-60"
       />
       {open && (
-        <div className="absolute left-0 right-0 z-20 mt-1 overflow-hidden rounded-xl border border-k-border bg-white shadow-k-card">
+        <div style={place} className="fixed z-20 overflow-hidden rounded-xl border border-k-border bg-white shadow-k-card">
           <ul id={listId} role="listbox" aria-label={label} className="max-h-56 overflow-y-auto py-1">
             {shown.length === 0 ? (
               <li className="px-3.5 py-2.5 text-k-sm text-k-text-2">{noResults}</li>

@@ -28,6 +28,8 @@ const baseSchema = z.object({
   JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
   APP_URL: z.string().url().default('http://localhost:3000'),
   SOCKET_CORS_ORIGIN: z.string().url().default('http://localhost:3000'),
+  // Importación por API: `true` permite llamar a direcciones locales por http. Sólo desarrollo (en producción se ignora).
+  IMPORT_API_ALLOW_LOCAL: z.string().optional(),
   // Requerido cuando se implemente el cifrado AES-256 (MFA secret); opcional al boot.
   APP_ENCRYPTION_KEY: z.string().optional(),
   // Blind index (HMAC) para documentos cifrados (F4). El BlindIndexService valida 32 bytes al boot.

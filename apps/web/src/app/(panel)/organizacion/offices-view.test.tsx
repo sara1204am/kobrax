@@ -298,3 +298,41 @@ describe('SingleOffice — una sola oficina no ve jerarquía (RULES C2)', () => 
     expect(screen.queryByRole('button', { name: 'Editar' })).not.toBeInTheDocument();
   });
 });
+
+describe('Oficina — el responsable no queda en el equipo si no se pide', () => {
+  async function pickBeto() {
+    const calls: string[] = [];
+    server.use(
+      http.patch('*/api/branches/lp', () => {
+        calls.push('patch');
+        return HttpResponse.json({ id: 'lp' });
+      }),
+      http.post('*/api/branches/lp/members', async ({ request }) => {
+        calls.push(`assign ${((await request.json()) as { userId: string }).userId}`);
+        return HttpResponse.json({});
+      }),
+    );
+    renderIt(['office:read', 'office:write']);
+    await userEvent.click(screen.getByRole('button', { name: 'Acciones de La Paz' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Editar' }));
+    await userEvent.click(screen.getByRole('combobox', { name: 'Responsable' }));
+    await userEvent.click(screen.getByRole('option', { name: /Beto Sup/ }));
+    return calls;
+  }
+
+  it('avisa y, sin marcar la casilla, sólo guarda la oficina', async () => {
+    const calls = await pickBeto();
+    expect(screen.getByText('Ser responsable no agrega a Beto Sup al equipo de esta oficina.')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Asignar también a esta oficina' })).not.toBeChecked();
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalled());
+    expect(calls).toEqual(['patch']);
+  });
+
+  it('con la casilla marcada guarda y después asigna', async () => {
+    const calls = await pickBeto();
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Asignar también a esta oficina' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+    await vi.waitFor(() => expect(calls).toEqual(['patch', 'assign u2']));
+  });
+});

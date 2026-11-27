@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { parsePdfRows } from './pdf-rows.parser';
+import { joinFragments, parsePdfRows, splitCodeAndName } from './pdf-rows.parser';
 import { looksLikeOperationCode, normalizeRecord } from '../field-catalog';
 
 // Muestra real: "REPORTE DE SEGUIMIENTO DE MORA", 10 registros en una tabla dentro de un PDF.
@@ -140,5 +140,40 @@ describe('pdf-rows.parser — reportes diarios de un asesor', () => {
       assert.equal(ops.length, expected[i], pdf);
       assert.equal(new Set(ops).size, ops.length, `${pdf}: nº repetido`);
     }
+  });
+});
+
+describe('joinFragments — textos que el PDF entrega en pedazos', () => {
+  const item = (str: string, x: number, y: number, width: number) => ({ str, x, y, width, page: 1 });
+  const strings = (items: ReturnType<typeof item>[]) => joinFragments(items).map((i) => i.str);
+
+  it('une los pedazos pegados de un mismo renglón y deja separadas las columnas', () => {
+    assert.deepEqual(strings([item('706', 100, 697, 8), item('-', 108, 697, 2), item('1', 110, 697, 3), item('CALLE', 207, 697, 20)]), ['706-1', 'CALLE']);
+  });
+
+  it('completa una fecha cortada por el ancho de la celda', () => {
+    assert.deepEqual(strings([item('20/04/202', 482, 476, 25), item('6', 491, 471, 3)]), ['20/04/2026']);
+  });
+
+  it('no une dos textos dibujados uno encima del otro', () => {
+    assert.deepEqual(strings([item('NOMBRE LARGO', 100, 500, 80), item('CALLE', 140, 500, 20)]), ['NOMBRE LARGO', 'CALLE']);
+  });
+});
+
+describe('splitCodeAndName — número y nombre en una sola columna', () => {
+  it('agrega las partes y conserva la columna original', () => {
+    const [a, b] = splitCodeAndName([
+      { Cliente: '706-1-1-46682-3 567133 ORTIZ LUIS ALFREDO' },
+      { Cliente: '706-1-1-48441-4 10385088 UGARTE JHILMAR' },
+    ]);
+    assert.equal(a!.Cliente, '706-1-1-46682-3 567133 ORTIZ LUIS ALFREDO');
+    assert.equal(a!['Cliente (número)'], '706-1-1-46682-3');
+    assert.equal(a!['Cliente (código)'], '567133');
+    assert.equal(b!['Cliente (nombre)'], 'UGARTE JHILMAR');
+  });
+
+  it('no toca columnas de nombres, direcciones, importes o números solos', () => {
+    const table = [{ Nombre: 'María Elena Gutiérrez', Dir: 'Av. Siles N° 120', Monto: '5.280,74', Credito: '107425' }];
+    assert.deepEqual(splitCodeAndName(table), table);
   });
 });

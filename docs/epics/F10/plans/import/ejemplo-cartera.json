@@ -1,0 +1,34 @@
+{
+  "fechaCorte": "2026-11-26",
+  "data": {
+    "creditos": [
+      {
+        "operacion": "JSON-0001",
+        "cliente": { "nombre": "PRUEBA UNO ANA", "documento": "1000001", "telefonos": ["70000001", "70000002"] },
+        "saldo": 12500.5,
+        "cuota": 640,
+        "diasMora": 12,
+        "montoMora": 640,
+        "fechaDesembolso": "2025-06-27"
+      },
+      {
+        "operacion": "JSON-0002",
+        "cliente": { "nombre": "PRUEBA DOS LUIS", "documento": "1000002", "telefonos": [] },
+        "saldo": 800,
+        "cuota": 120.75,
+        "diasMora": 0,
+        "montoMora": 0,
+        "fechaDesembolso": "2026-01-15"
+      },
+      {
+        "operacion": "JSON-0003",
+        "cliente": { "nombre": "PRUEBA TRES ROSA", "documento": "1000003" },
+        "saldo": 4320.1,
+        "cuota": 310,
+        "diasMora": 45,
+        "montoMora": 930,
+        "fechaDesembolso": "2024-11-02"
+      }
+    ]
+  }
+}

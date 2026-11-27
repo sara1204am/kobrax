@@ -63,11 +63,12 @@ const DOCUMENTS: Record<string, string> = {
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
   'application/vnd.ms-excel': 'xls',
   'text/csv': 'csv',
+  'application/json': 'json',
   'text/plain': 'txt',
 };
 
 /** `<carpeta>/<sha256>.<ext>`. Validar contra esto es lo que impide pedir una ruta de afuera. */
-const DOCUMENT_KEY = /^imports\/[0-9a-f]{64}\.(pdf|xlsx|xls|csv|txt)$/;
+const DOCUMENT_KEY = /^imports\/[0-9a-f]{64}\.(pdf|xlsx|xls|csv|json|txt)$/;
 
 export interface StoredDocument {
   /** Dónde quedó, relativo a la carpeta de la cuenta: `imports/<sha256>.pdf`. */

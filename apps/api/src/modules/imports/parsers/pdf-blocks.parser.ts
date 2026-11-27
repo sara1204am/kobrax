@@ -65,6 +65,8 @@ export interface TextItem {
   x: number;
   y: number;
   page: number;
+  /** Ancho del texto, si el PDF lo informa: sirve para unir los pedazos de una misma palabra. */
+  width?: number;
 }
 
 // pdfjs v6 es ESM-only; el runtime de la API es CommonJS (tsc→require).
@@ -74,7 +76,7 @@ type PdfjsModule = {
   getDocument(src: { data: Uint8Array; useSystemFonts?: boolean }): { promise: Promise<PdfDoc> };
 };
 type PdfDoc = { numPages: number; getPage(n: number): Promise<PdfPage> };
-type PdfPage = { getTextContent(): Promise<{ items: Array<{ str?: string; transform?: number[] }> }> };
+type PdfPage = { getTextContent(): Promise<{ items: Array<{ str?: string; transform?: number[]; width?: number }> }> };
 const importEsm = new Function('s', 'return import(s)') as (s: string) => Promise<PdfjsModule>;
 
 // Topes anti-DoS: un PDF de terceros (aun ≤15 MB) puede expandir a miles de páginas/items y
@@ -99,7 +101,7 @@ export async function loadItems(data: Uint8Array): Promise<TextItem[]> {
     for (const it of content.items) {
       const str = (it.str ?? '').trim();
       if (str === '' || !it.transform) continue;
-      items.push({ str, x: Math.round(it.transform[4]!), y: Math.round(it.transform[5]!), page: p });
+      items.push({ str, x: Math.round(it.transform[4]!), y: Math.round(it.transform[5]!), page: p, width: it.width });
       if (items.length > MAX_ITEMS) throw new Error('PDF_TOO_MANY_ITEMS');
     }
   }
