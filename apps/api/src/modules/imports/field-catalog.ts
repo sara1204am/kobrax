@@ -92,7 +92,12 @@ export interface NormalizedRecord {
  * cartera en cero. La excepción deliberada es una columna que EXISTE y está en blanco (`''`):
  * eso sí es un cero leído, porque el formato no imprime nada cuando el valor es cero.
  */
-export function normalizeRecord(raw: Record<string, string | null>, nameOrder: NameOrder = 'full'): NormalizedRecord {
+export function normalizeRecord(
+  raw: Record<string, string | null>,
+  nameOrder: NameOrder = 'full',
+  /** Campos que ya llegaron como número (JSON): no se les aplica la lectura de separadores. */
+  exactNumbers?: ReadonlySet<string>,
+): NormalizedRecord {
   const text = (k: string): string | null => {
     const v = raw[k];
     return v == null || v.trim() === '' ? null : v.trim();
@@ -101,7 +106,7 @@ export function normalizeRecord(raw: Record<string, string | null>, nameOrder: N
     const v = raw[k];
     if (v == null) return null;
     if (v.trim() === '') return 0; // columna presente y en blanco = cero leído
-    return num(v);
+    return exactNumbers?.has(k) ? Number(v) : num(v);
   };
 
   const { lastName, firstName } = splitName(text('clientName'), nameOrder, {
@@ -236,9 +241,20 @@ export function num(s: string | null): number | null {
   return neg ? -n : n;
 }
 
-/** "27/06/2024" (dd/mm/yyyy) → "2024-06-27". Sin `Date` (evita corrimientos de TZ). */
+/**
+ * "27/06/2024" (dd/mm/yyyy) → "2024-06-27". También ISO ("2024-06-27", con o sin hora), que es lo
+ * que traen una celda de fecha de Excel y una API. La hora se descarta sin convertirla: no hay
+ * corrimientos de TZ.
+ */
 export function toIso(s: string | null): string | null {
   if (!s) return null;
-  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(s.trim());
-  return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
+  const t = s.trim();
+  const local = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(t);
+  if (local) return `${local[3]}-${local[2]}-${local[1]}`;
+  const iso = /^(\d{4})-(\d{2})-(\d{2})(?:[T ]\d{2}:\d{2}.*)?$/.exec(t);
+  if (!iso) return null;
+  const day = `${iso[1]}-${iso[2]}-${iso[3]}`;
+  // Un 31/02 o el "0000-00-00" de algunas bases no son fechas.
+  const date = new Date(`${day}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().startsWith(day) ? day : null;
 }

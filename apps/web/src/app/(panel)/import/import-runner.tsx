@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { resultKind, setupStep, type Assignee, type ImportConfig, type PortfolioSummary, type ScopeMember } from '@kobrax/shared';
-import { Button, ErrorBanner } from '@/components/ui';
+import { Button, ErrorBanner, Field, Input, TextButton } from '@/components/ui';
 import { DataTable, type Column } from '@/components/data-table';
 import { EmptyState } from '@/components/panel-ui';
 import {
@@ -13,6 +13,8 @@ import {
   assignCodes,
   assignmentStats,
   buildAssignmentsPayload,
+  fetchApiDocument,
+  type ImportSource,
   groupWarnings,
   initialAssignState,
   pendingReassignments,
@@ -28,6 +30,10 @@ import { errorText, type Translator } from '@/lib/api-error';
 import { money } from '@/lib/format';
 import { useToast } from '@/components/toast';
 import { ValueChange } from './value-change';
+import { SituationValue } from './situation-value';
+
+/** Hoy en el calendario de quien mira (YYYY-MM-DD). */
+const todayIso = (): string => new Date().toLocaleDateString('en-CA');
 
 /**
  * El import del día, en tres estados sobre el mismo `File` en memoria.
@@ -40,6 +46,7 @@ export function ImportRunner({
   currency,
   assignees,
   members,
+  apiSource = false,
 }: {
   config: ImportConfig;
   currency: string;
@@ -47,6 +54,8 @@ export function ImportRunner({
   assignees: Assignee[];
   /** Todo el equipo, para poner nombre al responsable actual aunque no sea asignable. */
   members: ScopeMember[];
+  /** Hay una API configurada y quien mira puede traer los datos. */
+  apiSource?: boolean;
 }) {
   const t = useTranslations('panel.import');
   const locale = useLocale();
@@ -54,7 +63,7 @@ export function ImportRunner({
   const toast = useToast();
   const filePicker = useRef<HTMLInputElement>(null);
 
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFile] = useState<ImportSource | null>(null);
   const [summary, setSummary] = useState<PortfolioSummary | null>(null);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -62,6 +71,10 @@ export function ImportRunner({
   /** Quién queda responsable de cada crédito, por nº de operación. Nace de la vista previa. */
   const [plan, setPlan] = useState<AssignState | null>(null);
   const [askReassign, setAskReassign] = useState(false);
+  /** Fecha de corte puesta a mano (YYYY-MM-DD). Vacía = la que diga el archivo. */
+  const [cutDate, setCutDate] = useState('');
+  /** Con la API configurada, subir un archivo es la excepción: se pide aparte. */
+  const [byHand, setByHand] = useState(false);
 
   const ta = useTranslations('panel.import.assign');
   const nameOf: NameOf = (userId) => {
@@ -71,7 +84,7 @@ export function ImportRunner({
     return members.find((m) => m.id === userId)?.name ?? ta('unknownUser');
   };
 
-  async function run(chosen: File, dryRun: boolean) {
+  async function run(chosen: ImportSource, dryRun: boolean, reportDate = cutDate) {
     setError(null);
     setAskReassign(false);
     setBusy(true);
@@ -79,7 +92,7 @@ export function ImportRunner({
     // servidor ya sabe que lo nuevo es suyo.
     const assignments =
       !dryRun && summary?.assignment?.mode === 'CHOOSE' && plan ? buildAssignmentsPayload(plan, summary) : undefined;
-    const result = await postImportFile<PortfolioSummary>(chosen, { dryRun, assignments });
+    const result = await postImportFile<PortfolioSummary>(chosen, { dryRun, assignments, reportDate: reportDate || undefined });
     setBusy(false);
     if (!result.ok || !result.data) {
       setError(errorText(result.error, t, locale));
@@ -103,16 +116,30 @@ export function ImportRunner({
     else toast(t('run.toastOk', { created: counts.created, updated: counts.updated }));
   }
 
-  function choose(chosen: File) {
+  async function bring() {
+    setError(null);
+    setBusy(true);
+    const result = await fetchApiDocument();
+    setBusy(false);
+    if (!result.ok || !result.document) {
+      setError(errorText(result.error, t, locale));
+      return;
+    }
+    choose(result.document);
+  }
+
+  function choose(chosen: ImportSource) {
     setFile(chosen);
     setSummary(null);
-    void run(chosen, true);
+    setCutDate('');
+    void run(chosen, true, '');
   }
 
   function reset() {
     setFile(null);
     setSummary(null);
     setPlan(null);
+    setCutDate('');
     setError(null);
   }
 
@@ -188,6 +215,23 @@ export function ImportRunner({
               {summary.report.advisorCode && <> · {t('run.advisor', { code: summary.report.advisorCode })}</>}
             </p>
           )}
+          <div className="mt-3 max-w-xs">
+            <Field label={t('run.cutDateLabel')} hint={t('run.cutDateHint')}>
+              <Input
+                type="date"
+                max={todayIso()}
+                disabled={busy}
+                defaultValue={cutDate || summary.report?.reportDate || ''}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  // Mientras se teclea el año llegan fechas como 0002-…: se espera a una completa.
+                  if (value < '2000-01-01' || value > todayIso() || value === summary.report?.reportDate) return;
+                  setCutDate(value);
+                  void run(file, true, value);
+                }}
+              />
+            </Field>
+          </div>
           <Counts summary={summary} t={t} />
 
           {/*
@@ -272,9 +316,51 @@ export function ImportRunner({
   }
 
   // ── Elegir archivo ─────────────────────────────────────────────────────────
+  const fromApi = apiSource && config.profile.kind === 'json';
+  if (fromApi && !byHand) {
+    return (
+      <div className="space-y-6">
+        <ErrorBanner message={error} />
+        <div className="rounded-2xl border border-k-border bg-white px-6 py-14 text-center">
+          <p className="text-k-lg font-medium text-k-text">{busy ? t('api.calling') : t('api.runTitle')}</p>
+          <p className="mt-1 text-k-sm text-k-text-2">{t('api.runHint')}</p>
+          <div className="mt-5 flex justify-center">
+            <span className="w-full sm:w-56">
+              <Button loading={busy} onClick={() => void bring()}>
+                {t('api.fetch')}
+              </Button>
+            </span>
+          </div>
+          <p className="mt-4">
+            <TextButton
+              disabled={busy}
+              onClick={() => {
+                setError(null);
+                setByHand(true);
+              }}
+            >
+              {t('api.useFile')}
+            </TextButton>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <ErrorBanner message={error} />
+      {fromApi && (
+        <TextButton
+          disabled={busy}
+          onClick={() => {
+            setError(null);
+            setByHand(false);
+          }}
+        >
+          {t('api.useApi')}
+        </TextButton>
+      )}
       <div
         onDragOver={(e) => {
           e.preventDefault();
@@ -447,8 +533,10 @@ function Buckets({
     key: 'status',
     header: t('run.colStatus'),
     sortable: false,
-    // El estado como lo escribe el banco («Vencida», «Ejecución») dice más que el nuestro.
-    render: (row) => <span className="text-k-sm text-k-text-2">{get(row)?.reportedStatus ?? '—'}</span>,
+    render: (row) => {
+      const v = get(row);
+      return <SituationValue status={v?.status} reported={v?.reportedStatus} daysPastDue={v?.daysPastDue} />;
+    },
   });
   type Preview = PortfolioSummary['preview'];
   type CreateRow = Preview['toCreate'][number];

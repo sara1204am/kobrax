@@ -168,3 +168,11 @@ describe('import-config — lectura y derivados', () => {
     assert.equal(scopeLabel({ kind: 'branch', ref: 'b1' }), 'branch:b1');
   });
 });
+
+describe('detectFileShape — JSON', () => {
+  it('reconoce un objeto o una lista, y no confunde un CSV con corchetes', () => {
+    assert.equal(detectFileShape(Buffer.from('{"data":[]}')), 'json');
+    assert.equal(detectFileShape(Buffer.from('\n [ {"a":1} ]')), 'json');
+    assert.equal(detectFileShape(Buffer.from('[ID],NOMBRE\n1,PEREZ')), 'text');
+  });
+});

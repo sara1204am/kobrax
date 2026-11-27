@@ -109,7 +109,8 @@ function RowMenu({ row, ctx }: { row: OfficeRow; ctx: TreeCtx }) {
 const INDENT = 44;
 const MAX_INDENT_LEVELS = 6;
 
-function TreeNode({ item, ctx, level }: { item: OfficeTreeItem<OfficeRow>; ctx: TreeCtx; level: number }) {
+/** `first` / `last`: la fila toca el borde de arriba o de abajo de la tarjeta y redondea esas esquinas. */
+function TreeNode({ item, ctx, level, first, last }: { item: OfficeTreeItem<OfficeRow>; ctx: TreeCtx; level: number; first?: boolean; last?: boolean }) {
   const t = useTranslations('account.offices');
   const { node } = item;
   const [shown, setShown] = useState(CHILDREN_PAGE);
@@ -151,7 +152,7 @@ function TreeNode({ item, ctx, level }: { item: OfficeTreeItem<OfficeRow>; ctx: 
         }}
         className={`group flex items-center gap-3 border-b border-k-border py-3 pr-3 ${
           isOver ? 'bg-k-highlight' : level === 1 ? 'bg-k-info-bg' : 'bg-white hover:bg-k-bg'
-        } ${dragging ? 'opacity-40' : ''}`}
+        } ${dragging ? 'opacity-40' : ''} ${first ? 'rounded-t-[15px]' : ''} ${last && !open ? 'rounded-b-[15px]' : ''}`}
         style={{ paddingLeft: 12 + depth * INDENT }}
       >
         {hasKids ? (
@@ -219,8 +220,8 @@ function TreeNode({ item, ctx, level }: { item: OfficeTreeItem<OfficeRow>; ctx: 
 
       {open && (
         <ul role="group">
-          {kids.slice(0, shown).map((c) => (
-            <TreeNode key={c.node.id} item={c} ctx={ctx} level={level + 1} />
+          {kids.slice(0, shown).map((c, i) => (
+            <TreeNode key={c.node.id} item={c} ctx={ctx} level={level + 1} last={last && i === kids.length - 1} />
           ))}
           {kids.length > shown && (
             <li className="border-b border-k-border py-2" style={{ paddingLeft: 12 + Math.min(level, MAX_INDENT_LEVELS) * INDENT }}>
@@ -241,11 +242,12 @@ function TreeNode({ item, ctx, level }: { item: OfficeTreeItem<OfficeRow>; ctx: 
 
 export function OfficeTree({ items, ctx, label }: { items: OfficeTreeItem<OfficeRow>[]; ctx: TreeCtx; label: string }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-k-border bg-white">
+    <div className="rounded-2xl border border-k-border bg-white">
+      {/* Sin `overflow-hidden`: recortaba el menú ⋮ de las últimas filas. Por eso las filas de los extremos redondean sus esquinas. */}
       {/* `-mb-px`: la última fila trae su propia línea de abajo y el borde de la tarjeta ya la pone. */}
       <ul role="tree" aria-label={label} className="-mb-px">
-      {items.map((i) => (
-        <TreeNode key={i.node.id} item={i} ctx={ctx} level={1} />
+      {items.map((i, n) => (
+        <TreeNode key={i.node.id} item={i} ctx={ctx} level={1} first={n === 0} last={n === items.length - 1} />
       ))}
     </ul>
     </div>

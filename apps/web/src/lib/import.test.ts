@@ -149,7 +149,7 @@ describe('groupWarnings', () => {
 
 describe('ACCEPTED_FILES', () => {
   it('nombra las extensiones que la API acepta, para filtrar antes de subir 15 MB', () => {
-    expect(ACCEPTED_FILES.split(',')).toEqual(['.csv', '.txt', '.pdf', '.xlsx', '.xls']);
+    expect(ACCEPTED_FILES.split(',')).toEqual(['.csv', '.json', '.txt', '.pdf', '.xlsx', '.xls']);
   });
 });
 

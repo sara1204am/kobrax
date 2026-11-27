@@ -9,8 +9,8 @@
  * Ver `docs/epics/F10/plans/import/FIELD-RULES.md` §3 y §6.
  */
 
-/** Las tres FORMAS de archivo. No son formatos ni bancos: es cómo está dispuesto el dato (C12). */
-export type ProfileKind = 'pdf-blocks' | 'pdf-rows' | 'rows';
+/** Las FORMAS de archivo. No son formatos ni bancos: es cómo está dispuesto el dato (C12). */
+export type ProfileKind = 'pdf-blocks' | 'pdf-rows' | 'rows' | 'json';
 
 /** Qué hacer con los créditos que ya tenés y que el archivo NO trae. */
 export type AbsentRule = 'set-current' | 'no-touch' | 'ask';
@@ -41,6 +41,8 @@ export interface ImportConfig {
     recordStart?: string;
     tableAnchor?: string;
     headerRow?: number;
+    /** Sólo `json`: dónde está la lista (`data.creditos`). `''` = el documento es la lista. */
+    recordsPath?: string;
   };
   fields: Record<string, FieldRule>;
   nameOrder: NameOrder;
@@ -99,6 +101,33 @@ export interface ScopeBranch {
   name: string;
 }
 
+/**
+ * La conexión con la API de la que sale la cartera, **como la ve la pantalla**: las cabeceras y el
+ * cuerpo suelen llevar la clave, así que se guardan cifrados y no vuelven. Sólo se dice si los hay.
+ */
+export interface ImportApiConnection {
+  method: 'GET' | 'POST';
+  url: string;
+  headerNames: string[];
+  hasBody: boolean;
+}
+
+/** Para guardarla. Un valor que no viaja se conserva, y sólo si la dirección sigue en el mismo servidor. */
+export interface ImportApiConnectionInput {
+  method: 'GET' | 'POST';
+  url: string;
+  headers: { name: string; value?: string }[];
+  /** Ausente = se conserva. `''` = sin cuerpo. */
+  body?: string;
+}
+
+/** Lo que se trajo de la API, ya guardado del lado del servidor: se usa para leer, previsualizar y confirmar. */
+export interface ImportApiDocument {
+  documentId: string;
+  name: string;
+  size: number;
+}
+
 /** Todo lo que la pantalla de Ajustes necesita para dibujarse, en una sola llamada. */
 /**
  * Qué puede hacer en la importación quien la está mirando. Lo decide el servidor —las pantallas no
@@ -119,6 +148,8 @@ export interface ConfigScreen {
   members: ScopeMember[];
   branches: ScopeBranch[];
   viewer: ImportViewer;
+  /** `null` = sin configurar. Ausente en respuestas viejas. */
+  api?: ImportApiConnection | null;
 }
 
 /** Una columna que podría ser "días de atraso", con valores reales para calibrar. */
@@ -153,6 +184,8 @@ export interface ColumnsPayload {
    * regla general distingue eso de una fila de encabezados.
    */
   headerCandidates?: { anchor: string; preview: string }[];
+  /** Sólo en JSON: las listas que trae el documento, para elegir cuál es la de créditos. */
+  recordsCandidates?: { path: string; count: number }[];
 }
 
 /**

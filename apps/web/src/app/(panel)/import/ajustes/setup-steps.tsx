@@ -12,11 +12,11 @@ import {
   type ScopeKind,
 } from '@kobrax/shared';
 import { Button, Field, Select } from '@/components/ui';
-import { Badge, Card } from '@/components/panel-ui';
+import { Badge, Card, Segmented } from '@/components/panel-ui';
 import { Modal } from '@/components/modal';
 import { ACCEPTED_FILES, scopeRefName } from '@/lib/import';
 
-const PROFILE_KINDS: ProfileKind[] = ['rows', 'pdf-rows', 'pdf-blocks'];
+const PROFILE_KINDS: ProfileKind[] = ['rows', 'pdf-rows', 'pdf-blocks', 'json'];
 const SCOPE_KINDS: ScopeKind[] = ['account', 'official', 'branch'];
 const ABSENT_RULES: AbsentRule[] = ['set-current', 'no-touch', 'ask'];
 
@@ -84,15 +84,18 @@ export function OptionCards<T extends string>({
   options,
   onChange,
   disabled,
+  columns = 'sm:grid-cols-3',
 }: {
   label: string;
   value: T;
   options: { value: T; title: string; hint: string }[];
   onChange: (value: T) => void;
   disabled?: boolean;
+  /** Cuántas por fila: con cuatro opciones, tres dejan una colgando. */
+  columns?: string;
 }) {
   return (
-    <div role="radiogroup" aria-label={label} className="grid gap-3 sm:grid-cols-3">
+    <div role="radiogroup" aria-label={label} className={`grid gap-3 ${columns}`}>
       {options.map((option) => {
         const active = option.value === value;
         return (
@@ -177,6 +180,9 @@ export function SampleStep({
   reading,
   onPick,
   onProfile,
+  viaApi = false,
+  onVia,
+  apiPanel,
 }: {
   config: ImportConfig;
   fileName: string | null;
@@ -185,6 +191,11 @@ export function SampleStep({
   reading: boolean;
   onPick: (file: File) => void;
   onProfile: (patch: ImportConfigPatch) => void;
+  /** Sólo con JSON: la muestra sale de llamar a la API en vez de subir un archivo. */
+  viaApi?: boolean;
+  onVia?: (viaApi: boolean) => void;
+  /** El formulario de la conexión. Ausente = quien mira no la puede configurar. */
+  apiPanel?: ReactNode;
 }) {
   const t = useTranslations('panel.import');
   const picker = useRef<HTMLInputElement>(null);
@@ -201,9 +212,37 @@ export function SampleStep({
     else onProfile({ profile: { kind } });
   }
 
+  const apiOffered = config.profile.kind === 'json' && apiPanel !== undefined;
+  const showApi = apiOffered && viaApi;
+
   return (
     <>
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      {apiOffered && (
+        <div className="mb-4">
+          <Segmented
+            label={t('api.how')}
+            value={viaApi ? 'api' : 'file'}
+            onChange={(v) => onVia?.(v === 'api')}
+            options={[
+              { value: 'file', label: t('api.byFile') },
+              { value: 'api', label: t('api.byApi') },
+            ]}
+          />
+        </div>
+      )}
+      {showApi && (
+        <div className="space-y-3">
+          {apiPanel}
+          <p className="text-k-xs text-k-muted">
+            {reading
+              ? t('api.calling')
+              : fileName
+                ? `${fileName}${columnCount !== null ? ` · ${t('columns.seeDetected', { n: columnCount })}` : ''}`
+                : null}
+          </p>
+        </div>
+      )}
+      <div className={showApi ? 'hidden' : 'flex flex-wrap items-start justify-between gap-4'}>
         <div className="min-w-0">
           <p className="text-k-sm font-medium text-k-text">{t('columns.sample')}</p>
           <p className="mt-1 truncate text-k-base text-k-text-2">
@@ -241,6 +280,7 @@ export function SampleStep({
         <div className="mt-4">
           <OptionCards
             label={t('setup.shapeQuestion')}
+            columns="sm:grid-cols-2"
             value={config.profile.kind}
             disabled={busy}
             onChange={pickProfile}

@@ -10,6 +10,9 @@ import {
   ResponseDto,
   type ApiResponse,
   type ImportAssignments,
+  type ImportApiConnection,
+  type ImportApiConnectionInput,
+  type ImportApiDocument,
   type ImportItemValues,
   type ImportViewer,
   type ImportRunItem,
@@ -33,7 +36,10 @@ import { CryptoService } from '../../common/crypto/crypto.service';
 import { BlindIndexService } from '../../common/crypto/blind-index.service';
 import { parsePdfBlocks, type ColumnCandidate, type FieldMap } from './parsers/pdf-blocks.parser';
 import { parsePdfRows } from './parsers/pdf-rows.parser';
+import { parseJsonRows } from './parsers/json-rows.parser';
 import { parseRowsFile } from './parsers/rows.parser';
+import { ApiSourceError, callApi } from './api-source';
+import { apiConnectionView, buildApiConnection, readApiConnection, toApiRequest, type StoredApiConnection } from './api-connection';
 import { FIELD_CATALOG, normalizeRecord, splitPhones, type NormalizedRecord } from './field-catalog';
 import {
   DEFAULT_IMPORT_CONFIG,
@@ -256,8 +262,8 @@ export class PortfolioImportService {
     let meta: ReportMeta;
     try {
       const { profile, fieldMap } = config;
-      const raw = await readWithProfile(file, profile, fieldMap);
-      blocks = raw.map((r) => normalizeRecord(r, config.nameOrder));
+      const { records, exactNumbers } = await readWithProfile(file, profile, fieldMap);
+      blocks = records.map((r, i) => normalizeRecord(r, config.nameOrder, exactNumbers?.[i]));
       meta = readReportMeta(await documentLines(file, profile.kind));
     } catch (e) {
       const message = e instanceof Error ? e.message : 'No se pudo leer el archivo';
@@ -1088,6 +1094,7 @@ export class PortfolioImportService {
     members: ScopeMember[];
     branches: ScopeBranch[];
     viewer: ImportViewer;
+    api: ImportApiConnection | null;
   }> {
     const accountId = this.tenant.accountId;
     const canConfigure = await this.canConfigure();
@@ -1146,7 +1153,83 @@ export class PortfolioImportService {
         .map((b) => ({ id: b.id, name: officeLabel(branches, b.id) || b.name }))
         .sort((a, b) => a.name.localeCompare(b.name)),
       viewer: { userId: this.tenant.userId ?? '', canAssign: this.authz.can(Permission.ASSIGNMENT_WRITE), canConfigure },
+      // La dirección sólo la ve quien la puede cambiar.
+      api: canConfigure ? apiConnectionView(readApiConnection(account?.configuration)) : null,
     };
+  }
+
+  // ── La cartera por API ─────────────────────────────────────────────────────
+
+  async saveApiConnection(input: ImportApiConnectionInput): Promise<{ api: ImportApiConnection }> {
+    await this.assertCanConfigure();
+    const accountId = this.tenant.accountId;
+    const account = await this.tx((tx) => tx.account.findUnique({ where: { id: accountId } }));
+    const configuration = (account?.configuration ?? {}) as Record<string, unknown>;
+    let next: StoredApiConnection;
+    try {
+      next = buildApiConnection(input, readApiConnection(configuration), this.crypto, allowLocalApi());
+    } catch (e) {
+      throw apiBadRequest(e);
+    }
+    await this.tx((tx) =>
+      tx.account.update({
+        where: { id: accountId },
+        data: { configuration: { ...configuration, importApi: next } as unknown as Prisma.InputJsonValue },
+      }),
+    );
+    // En la auditoría va a dónde se llama, nunca con qué: sin cabeceras, cuerpo ni parámetros.
+    await this.audit.record({
+      entity: 'import_api',
+      entityId: accountId,
+      action: 'UPDATE',
+      after: { method: next.method, address: addressOf(next.url), headerNames: next.headerNames },
+    });
+    return { api: apiConnectionView(next)! };
+  }
+
+  /**
+   * Llama a la API configurada y **guarda la respuesta**: la vista previa y la confirmación leen ese
+   * mismo documento, no una segunda llamada que podría traer otra cosa. El documento no pasa por el
+   * navegador (trae la cartera entera sin enmascarar).
+   */
+  async fetchFromApi(): Promise<ImportApiDocument> {
+    // La API entrega la cartera completa: la pide quien puede configurarla, igual que el reparto.
+    await this.assertCanConfigure();
+    const accountId = this.tenant.accountId;
+    const account = await this.tx((tx) => tx.account.findUnique({ where: { id: accountId } }));
+    const config = readImportConfig((account?.configuration as { importConfig?: unknown })?.importConfig);
+    const connection = readApiConnection(account?.configuration);
+    if (!connection || config.source !== 'file' || config.profile.kind !== 'json') {
+      throw new BadRequestException({ code: 'IMPORT_API_NOT_CONFIGURED', message: 'Falta configurar la conexión con la API' });
+    }
+    let body: Buffer;
+    try {
+      body = await callApi(toApiRequest(connection, this.crypto), { allowLocal: allowLocalApi() });
+    } catch (e) {
+      throw apiBadRequest(e);
+    }
+    try {
+      JSON.parse(body.toString('utf8').replace(/^\uFEFF/, ''));
+    } catch {
+      throw new BadRequestException({ code: 'IMPORT_API_NOT_JSON', message: 'La API no respondió un JSON' });
+    }
+    const stored = await this.uploads.storeDocument(body, 'application/json', 'imports');
+    await this.audit.record({
+      entity: 'import_api',
+      entityId: accountId,
+      action: 'FETCH',
+      after: { address: addressOf(connection.url), size: stored.size, hash: stored.hash },
+    });
+    return { documentId: stored.hash, name: apiDocumentName(stored.hash), size: stored.size };
+  }
+
+  /** El documento que dejó `fetchFromApi`, para correr el import sobre él. */
+  async apiDocument(documentId: string): Promise<{ buffer: Buffer; name: string }> {
+    await this.assertCanConfigure();
+    const chunks: Buffer[] = [];
+    // `documentStream` valida la forma de la llave y que exista en la carpeta de ESTA cuenta.
+    for await (const chunk of this.uploads.documentStream(`imports/${documentId}.json`)) chunks.push(chunk as Buffer);
+    return { buffer: Buffer.concat(chunks), name: apiDocumentName(documentId) };
   }
 
   /**
@@ -1217,10 +1300,13 @@ export class PortfolioImportService {
       throw e;
     }
 
+    // Reiniciar también olvida la conexión con la API y su clave.
+    const { importApi, ...others } = configuration;
+    const kept = patch.reset || importApi === undefined ? others : { ...others, importApi };
     await this.tx((tx) =>
       tx.account.update({
         where: { id: accountId },
-        data: { configuration: { ...configuration, importConfig: next } as unknown as Prisma.InputJsonValue },
+        data: { configuration: { ...kept, importConfig: next } as unknown as Prisma.InputJsonValue },
       }),
     );
     await this.audit.record({ entity: 'import_config', entityId: accountId, action: 'UPDATE', after: next });
@@ -1238,14 +1324,23 @@ export class PortfolioImportService {
     samples: Record<string, string[]>;
     recordStartCandidates: { text: string; count: number }[];
     headerCandidates: { anchor: string; preview: string }[];
+    recordsCandidates?: { path: string; count: number }[];
   }> {
     const config = await this.importConfig();
     assertFileShape(file, config.profile.kind);
-    // Las tres formas devuelven la misma respuesta; lo que cambia es qué pregunta le falta
+    // Todas las formas devuelven la misma respuesta; lo que cambia es qué pregunta le falta
     // contestar al usuario, y cada forma trae sólo la suya. Una planilla no tiene ninguna: cada
     // fila ya es un registro y la primera son los encabezados.
     const empty = { recordStartCandidates: [], headerCandidates: [] };
     try {
+      if (config.profile.kind === 'json') {
+        const { labels, columnCandidates, samples, recordsCandidates } = parseJsonRows(
+          file.toString('utf8'),
+          config.profile,
+          config.fieldMap,
+        );
+        return { labels, columnCandidates, samples, recordsCandidates, ...empty };
+      }
       if (config.profile.kind === 'rows') {
         const { labels, columnCandidates, samples } = await parseRowsFile(file, config.profile, config.fieldMap);
         return { labels, columnCandidates, samples, ...empty };
@@ -1285,19 +1380,31 @@ export class PortfolioImportService {
 }
 
 /** Cómo se muestra el cliente en la Vista Previa. */
-/**
- * El motor que le toca a esta forma de archivo. Un solo lugar donde están las tres, para que
- * sumar una cuarta no obligue a acordarse de los dos sitios que las elegían.
- */
-function readWithProfile(
+/** El motor que le toca a esta forma de archivo para aplicarlo (la lectura de muestra está en `readColumns`). */
+async function readWithProfile(
   file: Buffer,
   profile: RunConfig['profile'],
   fieldMap: FieldMap,
-): Promise<Record<string, string | null>[]> {
-  if (profile.kind === 'rows') return parseRowsFile(file, profile, fieldMap).then((r) => r.records);
-  if (profile.kind === 'pdf-rows') return parsePdfRows(new Uint8Array(file), profile, fieldMap).then((r) => r.records);
-  return parsePdfBlocks(new Uint8Array(file), profile, fieldMap).then((r) => r.records);
+): Promise<{ records: Record<string, string | null>[]; exactNumbers?: Set<string>[] }> {
+  if (profile.kind === 'json') return parseJsonRows(file.toString('utf8'), profile, fieldMap);
+  if (profile.kind === 'rows') return parseRowsFile(file, profile, fieldMap);
+  if (profile.kind === 'pdf-rows') return parsePdfRows(new Uint8Array(file), profile, fieldMap);
+  return parsePdfBlocks(new Uint8Array(file), profile, fieldMap);
 }
+
+/** Probar contra una API en la propia máquina. En producción no existe, diga lo que diga la variable. */
+const allowLocalApi = (): boolean => process.env.IMPORT_API_ALLOW_LOCAL === 'true' && process.env.NODE_ENV !== 'production';
+
+const apiDocumentName = (hash: string): string => `api-${hash.slice(0, 8)}.json`;
+
+/** Sin la consulta: ahí a veces viaja un token. */
+const addressOf = (url: string): string => {
+  const u = new URL(url);
+  return `${u.origin}${u.pathname}`;
+};
+
+const apiBadRequest = (e: unknown): unknown =>
+  e instanceof ApiSourceError ? new BadRequestException({ code: e.code, message: e.message }) : e;
 
 /** Teléfono y dirección que el archivo trae para un cliente ya identificado. */
 interface ContactGap {
@@ -1421,6 +1528,12 @@ function assertRunnable(config: RunConfig): void {
 function assertFileShape(file: Buffer, kind: ImportConfig['profile']['kind']): void {
   const shape = detectFileShape(file);
   const isPdfProfile = kind === 'pdf-blocks' || kind === 'pdf-rows';
+  if ((kind === 'json') !== (shape === 'json')) {
+    throw new BadRequestException({
+      code: 'FILE_SHAPE_MISMATCH',
+      message: 'El archivo y la forma configurada no coinciden (uno es JSON y el otro no). Cambiá "Forma del archivo" en Ajustes › Importación.',
+    });
+  }
   if (shape === 'pdf' && !isPdfProfile) {
     throw new BadRequestException({
       code: 'FILE_SHAPE_MISMATCH',

@@ -8,6 +8,7 @@ import {
   setupStep,
   type ColumnsPayload,
   type ConfigScreen,
+  type ImportApiConnectionInput,
   type ImportConfig,
   type ImportConfigPatch,
   type PortfolioSummary,
@@ -17,6 +18,9 @@ import { Badge, Card } from '@/components/panel-ui';
 import { Modal } from '@/components/modal';
 import {
   configProgress,
+  fetchApiDocument,
+  saveApiConnection,
+  type ImportSource,
   groupWarnings,
   patchConfig,
   postImportFile,
@@ -27,6 +31,7 @@ import {
 import { errorText } from '@/lib/api-error';
 import { SaveIndicator, StatusCard, Stepper, Summary, type SaveState } from './config-status';
 import { ColumnsStep } from './columns-step';
+import { ApiConnectionForm } from './api-connection-form';
 import { RulesStep, SampleStep, ScopeStep, SourceCard, Step } from './setup-steps';
 import { ReportStep } from './report-step';
 
@@ -52,7 +57,10 @@ export function ImportSetup({ screen, officeScope = true }: { screen: ConfigScre
   const [columns, setColumns] = useState<ColumnsPayload | null>(null);
   // Se guarda el `File`, no su nombre: al fijar el ancla del PDF —o al cambiar la forma— hay que
   // volver a leerlo, y pedirle a la persona que lo busque de nuevo en el disco la deja trabada.
-  const [sample, setSample] = useState<File | null>(null);
+  const [sample, setSample] = useState<ImportSource | null>(null);
+  const [api, setApi] = useState(screen.api ?? null);
+  // De dónde sale el JSON. Con una conexión ya guardada, la pantalla abre en la API.
+  const [viaApi, setViaApi] = useState(Boolean(screen.api));
   const [test, setTest] = useState<PortfolioSummary | null>(null);
   const [busy, setBusy] = useState(false);
   const [reading, setReading] = useState(false);
@@ -84,7 +92,7 @@ export function ImportSetup({ screen, officeScope = true }: { screen: ConfigScre
     return result.config;
   }
 
-  async function readSample(file: File): Promise<boolean> {
+  async function readSample(file: ImportSource): Promise<boolean> {
     setError(null);
     setReading(true);
     const result = await postImportFile<ColumnsPayload>(file, { columnsOnly: true });
@@ -97,6 +105,21 @@ export function ImportSetup({ screen, officeScope = true }: { screen: ConfigScre
     setSample(file);
     setTest(null);
     return true;
+  }
+
+  /** Guarda la conexión, llama a la API y usa la respuesta como muestra. */
+  async function callConnection(input: ImportApiConnectionInput): Promise<boolean> {
+    setError(null);
+    setReading(true);
+    const saved = await saveApiConnection(input);
+    const fetched = saved.ok ? await fetchApiDocument() : null;
+    setReading(false);
+    if (saved.api) setApi(saved.api);
+    if (!fetched?.document) {
+      setError(errorText(fetched ? fetched.error : saved.error, t, locale));
+      return false;
+    }
+    return readSample(fetched.document);
   }
 
   /**
@@ -184,10 +207,23 @@ export function ImportSetup({ screen, officeScope = true }: { screen: ConfigScre
                   // el archivo: hay que releer la muestra o los «Sale de» quedan con las etiquetas
                   // de la forma anterior.
                   onProfile={saveAndReread}
+                  viaApi={viaApi}
+                  onVia={setViaApi}
+                  apiPanel={
+                    screen.viewer?.canConfigure ? (
+                      <ApiConnectionForm saved={api} busy={busy || reading} onCall={callConnection} />
+                    ) : undefined
+                  }
                 />
                 {columns && columns.labels.length === 0 && (
                   <p className="mt-4 rounded-xl bg-k-warning-bg px-4 py-3 text-k-sm text-k-warning-text">
-                    {t('columns.noLabels')}
+                    {t(
+                      config.profile?.kind === 'pdf-rows' && !config.profile.tableAnchor
+                        ? 'columns.pickHeader'
+                        : config.profile?.kind === 'json' && columns.recordsCandidates?.length
+                          ? 'columns.pickRecords'
+                          : 'columns.noLabels',
+                    )}
                   </p>
                 )}
               </Step>
@@ -342,6 +378,18 @@ export function DryRunPreview({ summary }: { summary: PortfolioSummary }) {
           {kind === 'ok' ? t('columns.testOk') : t('columns.testWarned', { n: counts.invalid })}
         </Badge>
       </div>
+
+      {/* La fecha de corte se ve acá; se pone o se corrige al importar, que es donde se guarda. */}
+      {summary.report && (
+        <p className="mt-3 text-k-sm text-k-text">
+          {summary.report.reportDate
+            ? t('run.reportDate', { date: summary.report.reportDate.split('-').reverse().join('/') })
+            : t('run.reportDateUnknown')}{' '}
+          <Link href="/import" className="font-semibold text-k-purple hover:underline">
+            {t('columns.testCutDate')}
+          </Link>
+        </p>
+      )}
 
       {(counts.ignored ?? 0) > 0 && (
         <p className="mt-3 text-k-xs text-k-text-2">{t('columns.testIgnored', { n: counts.ignored ?? 0 })}</p>

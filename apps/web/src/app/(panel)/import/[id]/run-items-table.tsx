@@ -8,6 +8,7 @@ import { Badge, EmptyState } from '@/components/panel-ui';
 import { money } from '@/lib/format';
 import { rejectText } from '@/lib/import';
 import { ValueChange } from '../value-change';
+import { SituationValue } from '../situation-value';
 
 const ACTION_TONE: Record<ImportRunItemAction, 'neutral' | 'success' | 'warning' | 'danger'> = {
   CREATED: 'success',
@@ -40,7 +41,6 @@ export function RunItemsTable({
   userId?: string;
 }) {
   const t = useTranslations('panel.import');
-  const tp = useTranslations('portfolio');
 
   const columns: Column<ImportRunItem>[] = [
     {
@@ -102,13 +102,13 @@ export function RunItemsTable({
       key: 'status',
       header: t('detail.columns.status'),
       sortable: false,
-      render: (r) => {
-        // El estado tal como lo escribió el banco («Vencida») dice más que el nuestro; si no vino, el del crédito.
-        const reported = r.after?.reportedStatus;
-        const status = r.after?.status ?? r.before?.status;
-        if (reported) return <span className="text-k-sm text-k-text-2">{reported}</span>;
-        return status ? <span className="text-k-sm text-k-text-2">{tp(`creditStatus.${status}`)}</span> : '—';
-      },
+      render: (r) => (
+        <SituationValue
+          status={r.after?.status ?? r.before?.status}
+          reported={r.after?.reportedStatus}
+          daysPastDue={r.after ? r.after.daysPastDue : r.before?.daysPastDue}
+        />
+      ),
     },
     {
       key: 'note',

@@ -24,3 +24,19 @@ describe('readReportMeta — fecha de corte y asesor del encabezado (D8, D9)', (
     assert.deepEqual(readReportMeta(['Nº Operación Cliente Saldo']), {});
   });
 });
+
+describe('readReportMeta — fecha sin etiqueta', () => {
+  it('«Al: 26/10/2026» y la fecha sola en su renglón', () => {
+    assert.equal(readReportMeta(['REPORTE DE CRÉDITOS EN MORA', 'Al: 26/10/2026']).reportDate, '2026-10-26');
+    assert.equal(readReportMeta(['RUTEO DE MORA', '28/10/2026']).reportDate, '2026-10-28');
+  });
+
+  it('la etiqueta explícita manda y la fecha de impresión no cuenta', () => {
+    assert.equal(readReportMeta(['01/01/2026', 'Fecha de corte: 28/09/2026']).reportDate, '2026-09-28');
+    assert.deepEqual(readReportMeta(['Fecha de impresión: 28/10/2026 15:58']), {});
+  });
+
+  it('«OFICIAL DEL CRÉDITO» no deja el asesor «DEL»', () => {
+    assert.equal(readReportMeta(['OFICIAL DEL CRÉDITO: Montalvo Teima']).advisorCode, undefined);
+  });
+});

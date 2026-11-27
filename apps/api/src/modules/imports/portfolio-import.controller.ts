@@ -20,6 +20,7 @@ import { UploadConcurrencyInterceptor } from '../../common/interceptors/upload-c
 import { Roles } from '../auth/decorators/roles.decorator';
 import { PortfolioImportService } from './portfolio-import.service';
 import type { ImportConfigPatch } from './import-config';
+import type { ImportApiConnectionInput } from '@kobrax/shared';
 import { ListImportRunItemsQueryDto, ListImportRunsQueryDto } from './dto/import-runs.dto';
 import { ImportAssignmentError, parseImportAssignments } from './import-assignment';
 
@@ -47,6 +48,7 @@ const ACCEPTED_MIME = new Set([
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'application/vnd.ms-excel',
   'text/csv',
+  'application/json',
   'text/plain',
 ]);
 
@@ -73,6 +75,20 @@ export class PortfolioImportController {
     return this.portfolio.patchConfig(body);
   }
 
+  /** La conexión con la API de la que sale la cartera (método, dirección, cabeceras y cuerpo). */
+  @Put('api-connection')
+  @Roles(Permission.CLIENT_IMPORT)
+  saveApiConnection(@Body() body: ImportApiConnectionInput) {
+    return this.portfolio.saveApiConnection(body);
+  }
+
+  /** Llama a esa API y guarda la respuesta; devuelve su id para leerla e importarla como un archivo. */
+  @Post('api-fetch')
+  @Roles(Permission.CLIENT_IMPORT)
+  fetchFromApi() {
+    return this.portfolio.fetchFromApi();
+  }
+
   /**
    * N1: sube el archivo (multipart) → lectura + reconcile. `dryRun=true` = solo Vista Previa.
    * `columnsOnly=true` = sólo devuelve qué etiquetas/columnas trae el archivo, para emparejar
@@ -89,7 +105,7 @@ export class PortfolioImportController {
         cb(null, ACCEPTED_MIME.has(file?.mimetype ?? '')),
     }),
   )
-  run(
+  async run(
     @UploadedFile() file: UploadedPortfolioFile | undefined,
     @Body('dryRun') dryRun?: string,
     @Query('columnsOnly') columnsOnly?: string,
@@ -98,7 +114,13 @@ export class PortfolioImportController {
     // Al confirmar: quién queda responsable de los nuevos y qué existentes se reasignan (JSON, por
     // nº de operación). Ver `ImportAssignments` en shared.
     @Body('assignments') assignments?: string,
+    // En lugar del archivo: lo que ya se trajo de la API (`api-fetch`).
+    @Body('apiDocument') apiDocument?: string,
   ) {
+    if (!file && apiDocument) {
+      const stored = await this.portfolio.apiDocument(apiDocument);
+      file = { buffer: stored.buffer, originalname: stored.name, mimetype: 'application/json' };
+    }
     if (!file?.buffer) {
       throw new BadRequestException({ code: 'FILE_REQUIRED', message: 'Falta el archivo (campo file)' });
     }
